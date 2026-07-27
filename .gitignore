@@ -15,3 +15,6 @@ data/frozen/
 runs/
 artifacts/local/
 logs/
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
