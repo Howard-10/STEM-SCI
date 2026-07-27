@@ -1,0 +1,1134 @@
+# Research GraphRAG + 分层记忆上下文模块 完整版落地方案
+
+> 文档定位：底层底座模块完整技术方案，供负责人产出需求文档、团队进入开发使用。
+> 交付标准：揭榜挂帅终稿（不做简易版，直接按完整版实现）。
+
+---
+
+## 一、模块定位与技术选型
+
+### 1.1 模块职责
+
+| 序号 | 职责 | 说明 |
+|------|------|------|
+| 1 | 双层科研知识库 | 全局公共知识库（SSCI论文/理论/量表）+ 用户项目私有知识库（长期记忆载体） |
+| 2 | 全局上下文定义 | `ResearchState` 承载方案规定的三本账本（任务/进度/证据） |
+| 3 | 分层记忆体系 | 三层保留策略的短期会话记忆 + 跨窗口复用的长期项目记忆 |
+| 4 | 统一API封装 | RAG检索、Memory读写、状态持久化的公共接口，供6个Agent调用 |
+| 5 | LangGraph流程调度 | 状态机流转、人工闸门、返工/阻塞控制、断点续跑 |
+| 6 | 论文同步机制 | 个人论文持续修改 → 分块哈希增量同步向量库 |
+| 7 | 全局约束管控 | 数据格式、溯源元数据、读写权限，避免多Agent冲突与上下文漂移 |
+
+### 1.2 技术栈与选型理由
+
+| 组件 | 选型 | 版本 | 选型理由 |
+|------|------|------|---------|
+| 编程语言 | Python | 3.11+ | LangGraph/LangChain 生态最成熟 |
+| 流程调度 | LangGraph | ≥0.2.0 | 原生状态图、Checkpoint持久化、人工中断(Interrupt) |
+| 向量数据库 | Chroma | ≥0.5.0 | 轻量级、嵌入式、无需独立服务、支持metadata过滤 |
+| 图数据库 | Neo4j Community | 5.x | 科研知识图谱三元组存储、Cypher查询灵活 |
+| 关系型存储 | PostgreSQL | 15+ | LangGraph Checkpoint官方推荐、状态持久化 |
+| LLM框架 | LangChain | ≥0.3.0 | 与LangGraph同生态、OpenAI兼容 |
+| 嵌入模型(中文) | bge-large-zh-v1.5 | — | 本地部署免费、C-MTEB中文榜单Top3、1024维 |
+| 嵌入模型(英文) | text-embedding-3-small | — | OpenAI托管、$0.02/1M tokens、1536维、中英均可用 |
+| 文档解析 | pdfplumber + nougat | — | pdfplumber处理文本PDF，nougat处理含公式PDF |
+| 数据校验 | Pydantic | v2 | 运行时类型校验、序列化/反序列化 |
+| 全文检索辅助 | Elasticsearch | 8.x | 关键词BM25检索与向量检索互补（可选，前期可skip） |
+
+### 1.3 整体架构分层
+
+```
+┌─────────────────────────────────────────────────────┐
+│            顶层：LangGraph 确定性流程控制器            │
+│    (本人开发：状态机 / 阶段流转 / 人工闸门 / 返工阻塞)   │
+├─────────────────────────────────────────────────────┤
+│  6大业务Agent节点（其他成员开发，仅调用底层公共接口）     │
+│  导师规划 / 证据综述 / 研究设计 / 数据分析 / 写作 / 审稿  │
+├─────────────────────────────────────────────────────┤
+│              底层公共底座（本人开发）                   │
+│  ┌──────────────┐  ┌──────────────┐                 │
+│  │ GraphRAG      │  │ 分层Memory   │                 │
+│  │ · 公共知识库   │  │ · 短期三层保留 │                 │
+│  │ · 私有知识库   │  │ · 长期项目记忆 │                 │
+│  │ · 论文同步管理 │  │ · 自动摘要压缩 │                 │
+│  │ · 统一检索API  │  │ · 跨窗口复用   │                 │
+│  └──────────────┘  └──────────────┘                 │
+│  ┌──────────────────────────────────┐               │
+│  │  统一公共API + 全局类型约束       │               │
+│  └──────────────────────────────────┘               │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## 二、全局强制统一数据结构体
+
+### 2.1 项目隔离基础元数据（所有接口必传）
+
+使用 Pydantic 做运行时校验，同时保留 TypedDict 兼容 LangGraph State：
+
+```python
+from pydantic import BaseModel, Field
+from typing import TypedDict
+
+# === 运行时校验用 Pydantic ===
+class ProjectMeta(BaseModel):
+    user_id: str = Field(..., description="用户唯一ID，区分不同用户")
+    project_id: str = Field(..., description="论文项目唯一ID，私有知识库/长期记忆隔离核心标识")
+    run_id: str = Field(..., description="单次会话窗口ID，区分短期会话记忆")
+
+# === LangGraph State 兼容用 TypedDict ===
+class ProjectMetaDict(TypedDict):
+    user_id: str
+    project_id: str
+    run_id: str
+```
+
+**校验规则：**
+- `user_id`：非空字符串，长度 1-64
+- `project_id`：非空字符串，格式 `proj_{uuid}` 或等价唯一标识
+- `run_id`：每次新会话窗口生成新的 UUID
+
+### 2.2 统一证据标准结构（全系统复用）
+
+```python
+class EvidenceItem(TypedDict):
+    evidence_id: str                              # 全局唯一证据ID
+    content: str                                  # 证据原文片段
+    source_type: Literal[
+        "public_paper",       # 公开论文
+        "user_draft",         # 用户论文草稿
+        "agent_output",       # Agent产出
+        "teaching_design",    # 教学设计文档
+        "scale"               # 量表/测量工具
+    ]
+    source_id: str                                # 来源唯一ID（论文DOI/文档ID）
+    page_ref: str                                 # 原文位置（页码/段落号）
+    section_title: str                            # 所在章节标题
+    theory_tags: List[str]                        # 理论标签
+    construct_tags: List[str]                     # 构念标签
+    method_tags: List[str]                        # 方法标签（新增：研究方法检索）
+    verify_status: Literal[
+        "unverified",         # 未核验
+        "source_verified",    # 已与原文核对
+        "human_verified"      # 已经研究者人工确认
+    ]
+    conflict_flag: bool                          # 是否与其他证据冲突
+    chunk_hash: str                              # 分片SHA256哈希（用于同步检测）
+    created_at: str                              # ISO时间戳
+    updated_at: str                              # ISO时间戳
+```
+
+### 2.3 短期记忆分层结构体
+
+```python
+class PinnedDecision(TypedDict):
+    """关键决策——永不过期，原文保留"""
+    decision_id: str
+    stage: str                                   # 做出决策的阶段
+    content: str                                 # 决策原文
+    made_by: str                                 # agent / human
+    created_at: str
+
+class CoreEvidenceRef(TypedDict):
+    """核心证据引用——压缩为摘要但保留evidence_id指针"""
+    evidence_id: str
+    summary: str                                 # 一句话摘要
+    importance_score: float                      # 0-1 重要性评分
+
+class ShortMemorySummary(TypedDict):
+    """短期记忆摘要结构"""
+    round_range: List[int]                       # 压缩覆盖的轮次范围
+    pinned_decisions: List[PinnedDecision]       # 永久保留的关键决策
+    core_evidence_summary: List[CoreEvidenceRef] # 核心证据摘要+指针
+    process_summary: str                         # 过程对话摘要（非关键推理）
+    create_time: str
+```
+
+### 2.4 全局唯一上下文 ResearchState
+
+```python
+class ResearchState(TypedDict):
+    # ===== 1. 项目隔离元数据 =====
+    project_meta: ProjectMetaDict
+    current_stage: str                           # 主阶段
+    task_status: str                             # 单任务状态
+    stage_history: List[Dict]                    # 阶段变更日志（新增：审计追溯）
+
+    # ===== 2. 三本账本（方案强制）=====
+    task_ledger: Dict                            # 任务账本
+    progress_ledger: Dict                        # 进度账本
+    evidence_ledger: List[EvidenceItem]          # 证据账本
+
+    # ===== 3. GraphRAG检索缓存 =====
+    theories: List[Dict]
+    constructs: List[Dict]
+    literature_evidence: List[EvidenceItem]
+    retrieval_metadata: Dict                     # 新增：检索耗时、命中数、重排序信息
+
+    # ===== 4. 六大Agent独立产出分区 =====
+    output_tutor: Dict
+    output_evidence: Dict
+    output_design: Dict
+    output_stat: Dict
+    output_writer: Dict
+    output_reviewer: Dict
+
+    # ===== 5. Memory专属字段（仅控制器可修改）=====
+    recent_rounds: List[Dict]
+    short_memory_summary: Optional[ShortMemorySummary]
+    long_memory_refs: List[str]
+    memory_stats: Dict                           # 新增：记忆统计（压缩次数、总轮次等）
+
+    # ===== 6. 全局风险与质量标记 =====
+    risk_flags: List[str]
+    human_approval_needed: bool
+    quality_metrics: Dict                        # 新增：当前阶段质量指标
+    error_log: List[Dict]                        # 新增：错误日志
+```
+
+### 2.5 论文同步元数据结构（新增）
+
+```python
+class PaperVersionMeta(TypedDict):
+    """论文版本元数据"""
+    paper_id: str                                # 论文唯一ID
+    version: int                                 # 版本号（递增）
+    total_chunks: int                            # 总分片数
+    new_chunks: int                              # 新增分片数
+    modified_chunks: int                         # 修改分片数
+    deleted_chunks: int                          # 删除分片数
+    unchanged_chunks: int                        # 未变化分片数
+    sync_time: str                               # 同步时间
+    embedding_model: str                         # 使用的嵌入模型
+    chunk_strategy: str                          # 切片策略标识
+
+class PaperChunk(TypedDict):
+    """论文分片"""
+    chunk_id: str                                # 分片唯一ID
+    paper_id: str                                # 所属论文ID
+    version: int                                 # 版本号
+    section_title: str                           # 章节标题
+    chunk_index: int                             # 分片序号
+    text: str                                    # 原文
+    chunk_hash: str                              # SHA256哈希
+    token_count: int                             # token数
+    embedding: Optional[List[float]]             # 向量（可延迟加载）
+    status: Literal["active", "stale", "deleted"]# 分片状态
+    created_at: str
+```
+
+---
+
+## 三、嵌入模型选型与切片策略
+
+### 3.1 嵌入模型方案
+
+| 场景 | 模型 | 维度 | 部署方式 | 成本 | 适用 |
+|------|------|------|---------|------|------|
+| 中文论文/教育文献 | bge-large-zh-v1.5 | 1024 | 本地GPU/CPU | 免费 | 主要场景 |
+| 英文SSCI论文 | text-embedding-3-small | 1536 | OpenAI API | $0.02/1M tokens | 辅助场景 |
+| 轻量fallback | bge-small-zh-v1.5 | 512 | 本地CPU | 免费 | 低资源环境 |
+
+**推荐方案：** 主用 `bge-large-zh-v1.5` 本地部署，英文论文统一用 `text-embedding-3-small` API。两套嵌入模型的结果存储在同一Chroma中，通过 `embedding_model` 字段标记来源。
+
+**GPU需求：** bge-large-zh-v1.5 模型约1.3GB显存，消费级GPU（RTX 3060 12GB+）即可运行。无GPU时CPU推理约慢5-10倍但仍可用。
+
+### 3.2 科研论文切片策略
+
+```
+┌──────────────────────────────────────────────────┐
+│                 论文切片层级策略                    │
+├──────────────────────────────────────────────────┤
+│ Level 1: 文档级  →  title + abstract + keywords   │
+│          保留完整摘要用于首轮匹配                   │
+│                                                    │
+│ Level 2: 章节级  →  Introduction / Method /        │
+│          Result / Discussion / Conclusion          │
+│          每章一片，保留章节标题作为元数据            │
+│                                                    │
+│ Level 3: 段落级  →  每个自然段落 + 前文context      │
+│          (512 tokens, overlap 128 tokens)          │
+│          段落级是最细粒度检索单元                    │
+│                                                    │
+│ Level 4: 句子级  →  关键主张句 + 证据句             │
+│          仅用于 claim-evidence 精确匹配             │
+└──────────────────────────────────────────────────┘
+```
+
+**实现参数：**
+```python
+CHUNK_CONFIG = {
+    "chunk_size": 512,          # tokens per chunk
+    "chunk_overlap": 128,       # overlap tokens
+    "separators": ["\n\n", "\n", "。", ".", " "],  # 优先按段落切分
+    "keep_section_title": True, # 分片保留父章节标题
+    "min_chunk_size": 64,       # 最小分片（过短合并到前一片）
+    "max_chunks_per_paper": 200 # 单篇论文分片上限
+}
+```
+
+### 3.3 公式与表格处理
+
+| 内容类型 | 解析工具 | 存储方式 | 检索方式 |
+|---------|---------|---------|---------|
+| 普通文本 | pdfplumber | Chunk文本 + 向量 | 语义检索 |
+| LaTeX公式 | nougat / Mathpix | LaTeX源码 + 渲染图 | 公式语义embedding + 符号匹配 |
+| 数值表格 | camelot / pdfplumber | JSON结构化 | 字段名+数值范围精确匹配 |
+| 图片/图表 | pdfplumber提取 | 图片路径 + 图注文本 | 仅图注文本参与检索 |
+
+公式和表格不作为向量检索的主要对象，但作为 `EvidenceItem` 的附件保留，检索命中时一并返回。
+
+---
+
+## 四、底层公共统一接口（详细实现版）
+
+### 4.1 RAG统一检索接口
+
+```python
+def global_retrieve(
+    project_meta: ProjectMeta,
+    query: str,
+    top_k: int = 5,
+    search_type: Literal["semantic", "hybrid", "keyword"] = "hybrid",
+    filter_theory: Optional[List[str]] = None,
+    filter_method: Optional[List[str]] = None,
+    include_stale: bool = False
+) -> Dict:
+    """
+    统一检索接口，所有Agent查询文献必须调用此接口。
+
+    检索流程：
+    1. 并行检索私有库 + 公共库
+    2. 按 source_id 去重（私有库结果优先保留）
+    3. MMR 最大边际相关性重排序（λ=0.7，平衡相关性与多样性）
+    4. 过滤 verify_status 不足的结果
+    5. 附加公式/表格附件
+
+    参数：
+    - search_type: semantic(纯向量) / hybrid(向量+BM25混合) / keyword(纯关键词)
+    - filter_theory: 按理论标签过滤（可选）
+    - filter_method: 按方法标签过滤（可选）
+    - include_stale: 是否包含过期版本分片（默认False）
+
+    返回：
+    {
+        "results": List[EvidenceItem],     # 检索结果
+        "metadata": {
+            "total_hits": int,             # 总命中数
+            "private_hits": int,           # 私有库命中数
+            "public_hits": int,            # 公共库命中数
+            "retrieval_time_ms": int,      # 检索耗时
+            "rerank_applied": bool,        # 是否应用重排序
+            "query_rewrite": str           # 查询改写后的文本（如有）
+        }
+    }
+    """
+```
+
+### 4.2 检索重排序策略（MMR）
+
+```python
+def mmr_rerank(
+    query_embedding: List[float],
+    candidate_embeddings: List[List[float]],
+    candidate_items: List[EvidenceItem],
+    lambda_param: float = 0.7,   # 0=最大多样性, 1=最大相关性
+    top_k: int = 5
+) -> List[EvidenceItem]:
+    """
+    MMR最大边际相关性重排序。
+
+    公式: MMR = λ·sim(q, d_i) - (1-λ)·max(sim(d_i, d_j))
+    其中 d_j 是已选入结果集的文档。
+
+    目的：避免返回5条内容几乎相同的证据，保证检索结果的多样性。
+    """
+```
+
+### 4.3 长期记忆（私有项目知识库）接口
+
+```python
+def load_long_term_memory(
+    project_meta: ProjectMeta
+) -> Dict:
+    """
+    加载项目历史长期记忆。
+
+    执行时机：项目初始化时由LangGraph调度器自动调用。
+    读取范围：user_id + project_id 分区下所有 status='active' 的 EvidenceItem。
+
+    返回：
+    {
+        "evidence_items": List[EvidenceItem],
+        "project_versions": List[PaperVersionMeta],  # 所有论文版本元数据
+        "last_session_summary": Optional[str],        # 上次会话摘要
+        "memory_stats": {
+            "total_evidence": int,
+            "total_papers": int,
+            "last_sync_time": str,
+            "total_tokens_stored": int
+        }
+    }
+    """
+
+def save_evidence_to_long_memory(
+    project_meta: ProjectMeta,
+    evidence_list: List[EvidenceItem],
+    auto_commit: bool = True
+) -> Dict:
+    """
+    新增证据持久存入长期私有记忆。
+
+    内部流程：
+    1. 对每个 EvidenceItem 计算 chunk_hash
+    2. 去重检查：相同 hash 已存在则跳过
+    3. 自动切片 → 嵌入向量 → 存入私有 Chroma collection
+    4. 抽取三元组 → 写入 Neo4j 子图
+    5. 更新 evidence_ledger 索引
+
+    调用方权限：仅证据综述Agent可调用，其余Agent生成证据仅写入state，不持久化。
+
+    返回：
+    {
+        "saved_count": int,
+        "skipped_duplicates": int,
+        "triples_extracted": int,
+        "embedding_cost": float    # API费用（如使用OpenAI embedding）
+    }
+    """
+```
+
+### 4.4 分层短期记忆压缩接口
+
+```python
+def compress_short_memory(
+    state: ResearchState,
+    trigger_config: Dict = None
+) -> ShortMemorySummary:
+    """
+    分层压缩短期记忆。仅顶层调度器调用，Agent无权限。
+
+    触发条件（满足任一即触发）：
+    1. recent_rounds 超过 max_keep_rounds（默认8轮）
+    2. 总token数超过 max_context_tokens（默认8000）
+    3. 阶段切换时强制触发
+
+    三层保留策略：
+    Layer 1 - 关键决策（Pinned）：
+        - 人工审批通过/拒绝节点
+        - 阶段确认（current_stage变更）
+        - 冲突结论（contradiction_map中的结论）
+        → 永不过期，原文保留，不压缩
+
+    Layer 2 - 核心证据引用（Core）：
+        - 被 evidence_ledger 引用的对话片段
+        - 证据综述Agent产出的核心结论
+        → 压缩为一句话摘要 + 保留 evidence_id 指针
+
+    Layer 3 - 过程对话（Process）：
+        - Agent推理过程、工具调用日志、非关键交互
+        → LLM摘要压缩，保留关键步骤，丢弃冗余细节
+
+    压缩流程：
+    1. 扫描 recent_rounds，分类到三个Layer
+    2. Layer1直接保留，Layer2提取摘要+指针，Layer3调用LLM摘要
+    3. 合并为 ShortMemorySummary，替换旧摘要
+    4. 清空已压缩的 recent_rounds，仅保留最新未压缩轮次
+    """
+    default_config = {
+        "max_keep_rounds": 8,
+        "max_context_tokens": 8000,
+        "compress_model": "gpt-4o-mini",  # 轻量模型做摘要
+        "force_on_stage_change": True
+    }
+```
+
+### 4.5 状态持久化接口
+
+```python
+def persist_state(state: ResearchState) -> None:
+    """
+    完整持久化 ResearchState 到 PostgreSQL。
+
+    执行时机：每轮Agent执行完成后，调度器自动触发。
+    存储方式：LangGraph PostgresSaver checkpoint + 完整state JSON备份。
+
+    容错：持久化失败时自动重试3次，仍失败则写入本地JSON兜底。
+    """
+
+def resume_state(project_meta: ProjectMeta) -> Optional[ResearchState]:
+    """
+    断点续跑：从PostgreSQL恢复最近一次持久化的完整State。
+
+    返回None表示无历史状态（全新项目）。
+    """
+```
+
+---
+
+## 五、个人知识库与论文同步方案【核心新增】
+
+### 5.1 整体思路
+
+用户论文在撰写过程中持续修改，向量库需要保持同步。核心策略是 **分块哈希版本控制 + 增量更新**：
+
+- 每次同步时计算各分片的 SHA256 哈希
+- 与上一版本对比，仅重新嵌入变化的分片
+- 保留历史版本，支持版本回溯
+- 检索时默认走最新版本，也可指定历史版本
+
+### 5.2 分块哈希增量同步流程
+
+```
+用户上传/修改论文草稿
+        │
+        ▼
+┌──────────────────────────┐
+│ Step 1: 文档解析          │
+│ pdfplumber/nougat解析     │
+│ 提取章节结构+正文          │
+└──────────┬───────────────┘
+           │
+           ▼
+┌──────────────────────────┐
+│ Step 2: 按章节分片         │
+│ 每片512 tokens + 128 overlap │
+│ 保留section_title作为元数据 │
+└──────────┬───────────────┘
+           │
+           ▼
+┌──────────────────────────┐
+│ Step 3: 计算分片哈希       │
+│ SHA256(文本内容) → chunk_hash│
+└──────────┬───────────────┘
+           │
+           ▼
+┌──────────────────────────┐
+│ Step 4: 哈希对比           │
+│ 新版哈希 vs 旧版哈希        │
+│ ┌──────────────────────┐ │
+│ │ 相同hash → 复用旧向量  │ │
+│ │ 不同hash → 重新嵌入    │ │
+│ │ 新增hash → 新嵌入入库  │ │
+│ │ 旧版独有hash → 标stale │ │
+│ └──────────────────────┘ │
+└──────────┬───────────────┘
+           │
+           ▼
+┌──────────────────────────┐
+│ Step 5: 执行增量更新       │
+│ · 变化分片 → 调用embedding │
+│ · 写入Chroma（新collection │
+│   或同collection带version）│
+│ · 更新Neo4j分片索引        │
+│ · 记录PaperVersionMeta    │
+└──────────┬───────────────┘
+           │
+           ▼
+┌──────────────────────────┐
+│ Step 6: 返回同步报告       │
+│ {new/modi/del/unch}      │
+│ + 嵌入API调用费用统计       │
+└──────────────────────────┘
+```
+
+### 5.3 核心接口：论文同步
+
+```python
+def sync_user_paper_to_kb(
+    project_meta: ProjectMeta,
+    paper_content: Union[str, bytes],   # 文本内容或PDF二进制
+    paper_id: str,                       # 论文唯一ID（新论文自动生成）
+    paper_title: str,
+    content_type: Literal["text", "pdf"] = "text",
+    force_full_reindex: bool = False     # True则全量重建（跳过哈希对比）
+) -> Dict:
+    """
+    同步用户论文到私有知识库。自动执行增量更新。
+
+    返回：
+    {
+        "paper_id": str,
+        "version": int,                  # 新版本号
+        "sync_report": {
+            "total_chunks": int,
+            "new_chunks": int,
+            "modified_chunks": int,
+            "deleted_chunks": int,
+            "unchanged_chunks": int,     # 复用旧向量的分片数
+            "embedding_api_calls": int,  # 实际调用嵌入API次数
+            "estimated_cost_usd": float  # 预估API费用
+        },
+        "sync_time_seconds": float,
+        "status": "success" | "partial" | "failed"
+    }
+    """
+
+def get_paper_versions(
+    project_meta: ProjectMeta,
+    paper_id: str
+) -> List[PaperVersionMeta]:
+    """获取论文所有版本的元数据"""
+
+def rollback_paper_version(
+    project_meta: ProjectMeta,
+    paper_id: str,
+    target_version: int
+) -> Dict:
+    """
+    回滚到指定版本。
+    将 target_version 的分片全部标记为 active，其余版本标记为 stale。
+    """
+```
+
+### 5.4 成本估算
+
+以一篇8000字的中文教育论文为例：
+
+| 步骤 | 数量 | 成本 |
+|------|------|------|
+| 分片数 | ~20-30 chunks | — |
+| 嵌入API调用(OpenAI) | 20-30次 | ~$0.0005（可忽略） |
+| 嵌入本地(bge-large) | 20-30次 | 免费，耗时~2-5秒 |
+| 修改10%内容后增量同步 | 2-3次嵌入调用 | 近乎免费 |
+| Neo4j三元组抽取 | ~50-100个三元组 | LLM API调用，约$0.01-0.05/篇 |
+
+**结论：个人知识库的增量同步成本极低。** 一篇论文全量索引入库成本约$0.05-0.10（使用OpenAI API），增量修改几乎免费。本地部署bge模型则完全免费。
+
+### 5.5 私有库隔离与生命周期
+
+```
+数据隔离规则：
+  Chroma: 每个 (user_id, project_id) → 独立 Collection
+          Collection命名: "kb_{user_id}_{project_id}"
+
+  Neo4j:  每个 (user_id, project_id) → 独立子图
+          子图标签: ProjectGraph {user_id, project_id}
+          所有节点带 project_id 属性用于过滤
+
+  PostgreSQL: user_id + project_id 联合索引
+
+生命周期管理：
+  · 项目活跃期：全量在线
+  · 项目结题：  一键导出归档包（JSON+向量dump）
+  · 项目删除：  物理删除Collection + Neo4j子图 + PG记录
+  · 项目归档：  导出后保留PG元数据，清理Chroma/Neo4j
+```
+
+---
+
+## 六、分层记忆体系
+
+### 6.1 三层保留策略（核心设计）
+
+```
+┌─────────────────────────────────────────────┐
+│             短期记忆三层保留策略               │
+├─────────────────────────────────────────────┤
+│                                             │
+│  ┌─────────────────────────────────────┐    │
+│  │ Layer 1: 决策层 (Pinned)             │    │
+│  │ · 人工审批通过/拒绝节点               │    │
+│  │ · 阶段确认（current_stage变更）       │    │
+│  │ · 冲突结论                           │    │
+│  │ · 用户明确指令                       │    │
+│  │ → 永不过期，原文保留，不参与压缩       │    │
+│  └─────────────────────────────────────┘    │
+│                  ↑ 优先级最高                │
+│  ┌─────────────────────────────────────┐    │
+│  │ Layer 2: 证据层 (Core Evidence)      │    │
+│  │ · 被 evidence_ledger 引用的对话       │    │
+│  │ · 证据综述Agent核心结论              │    │
+│  │ · 审稿Agent关键质疑                  │    │
+│  │ → 压缩为一句话摘要 + evidence_id指针  │    │
+│  └─────────────────────────────────────┘    │
+│                  ↑ 优先级中等                │
+│  ┌─────────────────────────────────────┐    │
+│  │ Layer 3: 过程层 (Process)            │    │
+│  │ · Agent推理过程                      │    │
+│  │ · 工具调用日志                       │    │
+│  │ · 非关键对话                         │    │
+│  │ → LLM摘要压缩，合并同类步骤           │    │
+│  └─────────────────────────────────────┘    │
+│                  ↑ 优先级最低                │
+└─────────────────────────────────────────────┘
+```
+
+### 6.2 长期记忆流转
+
+```
+项目启动
+  │
+  ├── load_long_term_memory()
+  │   读取私有库所有 EvidenceItem
+  │   + 最近 N 条 PinnedDecision
+  │   预填充到 state
+  │
+  ▼
+会话进行中
+  │
+  ├── Agent产出新证据
+  │   → 证据综述Agent调用 save_evidence_to_long_memory()
+  │   → 其余Agent仅写入 state["output_xxx"]
+  │
+  ├── 每轮结束
+  │   → 触发 compress_short_memory()
+  │   → 触发 persist_state()
+  │
+  ▼
+会话结束
+  │
+  └── 最终持久化
+      完整 state → PostgreSQL
+      所有 EvidenceItem（status=active）→ 私有知识库
+```
+
+---
+
+## 七、六大Agent节点统一接口规范
+
+### 7.1 通用约束
+
+```python
+# 所有Agent节点统一签名
+def xxx_agent_node(state: ResearchState) -> ResearchState:
+    """
+    通用约束：
+    1. 入参/出参：ResearchState（LangGraph节点标准签名）
+    2. 可读权限：全部公共字段、记忆摘要、证据账本、其他Agent产出（只读）
+    3. 可写权限：仅允许写入自身专属 output_xxx 字段
+    4. 禁止操作：
+       - 禁止修改 current_stage、task_status
+       - 禁止修改记忆字段（recent_rounds, short_memory_summary, long_memory_refs）
+       - 禁止修改其他Agent的 output_xxx
+       - 禁止直连 Neo4j / Chroma / PostgreSQL
+       - 禁止调用 compress_short_memory / persist_state
+    5. 如需检索文献：只能调用 global_retrieve()
+    6. 如需持久证据：只能调用 save_evidence_to_long_memory()（仅证据综述Agent有权限）
+    7. 需要人工审批：设置 state["human_approval_needed"] = True
+    8. 发现风险/错误：追加 state["risk_flags"] / state["error_log"]
+    """
+```
+
+### 7.2 各Agent读写权限矩阵
+
+| Agent | 读权限 | 写权限 | 特殊权限 |
+|-------|--------|--------|---------|
+| 导师规划 | meta, evidence_ledger, 记忆摘要, literature_evidence | output_tutor | 无 |
+| 证据综述 | meta, output_tutor, 记忆摘要, literature_evidence | output_evidence, evidence_ledger | **可调用 save_evidence_to_long_memory** |
+| 研究设计 | meta, output_tutor, output_evidence, evidence_ledger, 记忆 | output_design | 无 |
+| 数据分析 | meta, output_design, 上传数据, evidence_ledger, 记忆 | output_stat | 可读取冻结数据文件 |
+| 论文写作 | meta, 全部Agent产出, evidence_ledger, 记忆 | output_writer | 无 |
+| 独立审稿 | meta, 全部Agent产出, evidence_ledger, stat结果, 记忆 | output_reviewer, risk_flags | 可追加 error_log |
+
+---
+
+## 八、LangGraph顶层调度器
+
+### 8.1 完整状态机流转
+
+```
+                    ┌─────────┐
+                    │ INTAKE   │
+                    └────┬─────┘
+                         │ human_approval
+                    ┌────▼─────┐
+                    │ SCOPED   │
+                    └────┬─────┘
+                         │
+              ┌──────────▼──────────┐
+              │ SEARCH_PROTOCOL     │
+              │ _APPROVED            │
+              └──────────┬──────────┘
+                         │
+              ┌──────────▼──────────┐
+              │ EVIDENCE_READY      │
+              └──────────┬──────────┘
+                         │
+              ┌──────────▼──────────┐
+              │ RESEARCH_QUESTION   │
+              │ _APPROVED           │
+              └──────────┬──────────┘
+                         │
+              ┌──────────▼──────────┐
+              │ STUDY_PROTOCOL      │
+              │ _APPROVED           │
+              └──────────┬──────────┘
+                         │
+              ┌──────────▼──────────┐
+              │ DATA_READY          │
+              └──────────┬──────────┘
+                         │
+              ┌──────────▼──────────┐
+              │ ANALYZED            │
+              └──────────┬──────────┘
+                         │
+              ┌──────────▼──────────┐
+              │ DRAFTED             │
+              └──────────┬──────────┘
+                         │
+              ┌──────────▼──────────┐
+              │ VERIFIED            │
+              └──────────┬──────────┘
+                         │
+              ┌──────────▼──────────┐
+              │ RELEASED            │
+              └─────────────────────┘
+
+    任意阶段 ──→ REWORK ──→ 返回上一阶段
+    任意阶段 ──→ BLOCKED ──→ 等待人工解除
+    任意阶段 ──→ WAITING_HUMAN ──→ 等待审批
+    任意阶段 ──→ FAILED ──→ 终止
+```
+
+### 8.2 核心代码骨架
+
+```python
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.postgres import PostgresSaver
+
+def build_research_workflow() -> StateGraph:
+    """
+    构建完整科研工作流。
+
+    包含：
+    - 11个阶段节点
+    - 6个Agent执行节点
+    - 人工审批分支
+    - REWORK / BLOCKED / FAILED 异常分支
+    - PostgreSQL持久化
+    """
+
+    workflow = StateGraph(ResearchState)
+
+    # === 注册阶段节点 ===
+    workflow.add_node("intake", intake_node)
+    workflow.add_node("search_protocol", search_protocol_node)
+    workflow.add_node("evidence_extraction", evidence_extraction_node)
+    workflow.add_node("evidence_synthesis", evidence_synthesis_node)
+    workflow.add_node("research_design", research_design_node)
+    workflow.add_node("data_ingestion", data_ingestion_node)
+    workflow.add_node("analysis", analysis_node)
+    workflow.add_node("writing", writing_node)
+    workflow.add_node("review", review_node)
+
+    # === 注册Agent节点 ===
+    workflow.add_node("agent_tutor", tutor_planning_agent)
+    workflow.add_node("agent_evidence", evidence_review_agent)
+    workflow.add_node("agent_design", study_design_agent)
+    workflow.add_node("agent_stat", statistic_analysis_agent)
+    workflow.add_node("agent_writer", paper_writing_agent)
+    workflow.add_node("agent_reviewer", reviewer_agent)
+
+    # === 注册控制节点 ===
+    workflow.add_node("human_approval_gate", human_approval_node)
+    workflow.add_node("error_handler", error_handler_node)
+
+    # === 入口 ===
+    workflow.set_entry_point("intake")
+
+    # === 正常流转 ===
+    workflow.add_edge("intake", "agent_tutor")
+    workflow.add_conditional_edges("agent_tutor", stage_router, {
+        "continue": "search_protocol",
+        "rework": "error_handler",
+        "waiting_human": "human_approval_gate"
+    })
+    # ... 其余阶段类似
+
+    # === 异常分支 ===
+    workflow.add_edge("error_handler", "human_approval_gate")
+
+    return workflow
+
+
+def run_research_project(
+    project_meta: ProjectMeta,
+    user_input: str,
+    thread_id: str = None
+) -> ResearchState:
+    """
+    项目启动对外统一入口。
+
+    执行步骤：
+    1. 初始化空白 ResearchState
+    2. load_long_term_memory() 预加载项目长期记忆
+    3. 写入用户初始需求，进入 INTAKE 阶段
+    4. 绑定 PostgresSaver，创建 thread
+    5. 自动驱动完整流程执行（直到 WAITING_HUMAN 或 RELEASED）
+    6. 每轮执行后自动 compress_short_memory + persist_state
+    7. 返回最终状态与全部工件
+    """
+```
+
+### 8.3 停滞检测与自动返工
+
+```python
+def detect_stagnation(state: ResearchState) -> Optional[str]:
+    """
+    检测是否需要停止或返工。
+
+    触发条件（满足任一返回相应的action）：
+    1. 相同工具+参数重复执行 ≥2次 → "rework"
+    2. 连续3步无新有效工件产出 → "blocked"
+    3. 连续2次修改后质量指标无提升 → "rework"
+    4. 关键Agent结论持续冲突 → "blocked"
+    5. 缺失必需数据/论文全文 → "blocked"
+    6. 超过阶段预算(时间/调用/费用) → "rework"
+    7. Reviewer连续指出同一类错误 ≥2次 → "rework"
+    """
+```
+
+---
+
+## 九、检索质量保障
+
+### 9.1 混合检索策略
+
+```python
+# 默认采用混合检索：向量语义 + BM25关键词
+# 两路召回 → RRF(Reciprocal Rank Fusion) 融合 → MMR重排序
+
+def hybrid_retrieve(query, project_meta, top_k=5):
+    # 1. 向量检索
+    vector_results = chroma.similarity_search_with_score(query, k=top_k*2)
+
+    # 2. 关键词检索（可选Elasticsearch或Chroma metadata过滤）
+    keyword_results = keyword_search(query, k=top_k*2)
+
+    # 3. RRF融合
+    fused = reciprocal_rank_fusion(vector_results, keyword_results, k=60)
+
+    # 4. MMR重排序去冗余
+    final = mmr_rerank(query_embedding, fused, lambda_param=0.7, top_k=top_k)
+
+    return final
+```
+
+### 9.2 检索质量自评指标
+
+| 指标 | 计算方式 | 目标值 |
+|------|---------|--------|
+| 检索命中率 | 检索到了至少1条相关证据的查询比例 | >90% |
+| MRR (Mean Reciprocal Rank) | 第一个相关结果的排名倒数均值 | >0.7 |
+| 证据溯源定位率 | 能定位到原文位置的证据比例 | 100% |
+| 检索平均耗时 | 从query到返回结果的端到端时间 | <3秒 |
+
+---
+
+## 十、完整业务流程（全链路串联）
+
+### 10.1 项目启动流程
+
+```
+1. 用户打开项目 → 前端调用 run_research_project(project_meta, user_input)
+2. 调度器初始化 ResearchState
+3. 自动执行 load_long_term_memory()，预加载历史证据 + 决策记录到 state
+4. 进入 INTAKE 阶段
+5. 调度器驱动导师规划Agent进行需求分析
+6. 人工确认 ResearchContract → 进入 SEARCH_PROTOCOL_APPROVED
+7. 证据综述Agent调用 global_retrieve 检索文献
+8. 新证据通过 save_evidence_to_long_memory 持久化到私有知识库
+9. ... 后续阶段依次执行
+10. 每轮结束：compress_short_memory() + persist_state()
+11. 阶段验收失败 → REWORK 分支，读取历史记忆重新迭代
+12. 关键节点 human_approval_needed → 等待人工确认
+```
+
+### 10.2 论文修改同步流程
+
+```
+1. 用户在前端修改论文草稿
+2. 前端调用 sync_user_paper_to_kb(project_meta, new_content, paper_id)
+3. 后端执行分块哈希增量同步（详见第五章）
+4. 返回同步报告（变化分片数、API费用）
+5. 下次 global_retrieve 自动检索到最新版本的论文内容
+6. 用户可通过 get_paper_versions 查看所有历史版本
+7. 需要时可通过 rollback_paper_version 回滚到旧版本
+```
+
+### 10.3 跨会话记忆复用流程
+
+```
+会话1:
+  用户研究AI在STEM教学中的应用
+  → Agent产出证据 + 人工决策
+  → save_evidence_to_long_memory() 持久化
+  → persist_state() 保存完整上下文
+
+会话2 (几天后):
+  用户重新打开同一项目
+  → load_long_term_memory() 自动加载历史证据+决策
+  → state预填充历史记忆
+  → 用户："上次我们确定的检索策略还适用吗？"
+  → Agent读取 short_memory_summary.pinned_decisions
+  → 回复："上次您在阶段SEARCH_PROTOCOL_APPROVED确认了..."
+  → 实现真正的跨窗口记忆复用
+```
+
+---
+
+## 十一、模块目录结构
+
+```
+src/
+├── core/                          # 核心类型与配置
+│   ├── __init__.py
+│   ├── state.py                   # ResearchState + 所有TypedDict定义
+│   ├── models.py                  # Pydantic运行时校验模型
+│   ├── config.py                  # 全局配置（嵌入模型/切片参数/数据库连接）
+│   └── constants.py               # 枚举常量（阶段名/状态名/标签）
+│
+├── graph_rag/                     # GraphRAG知识库模块
+│   ├── __init__.py
+│   ├── parser.py                  # PDF/论文解析（pdfplumber + nougat）
+│   ├── chunker.py                 # 分层切片策略实现
+│   ├── embedder.py                # 嵌入模型统一封装（bge + OpenAI）
+│   ├── entity_extract.py          # LLM实体+三元组抽取
+│   ├── vector_store.py            # Chroma操作封装（CRUD + 分区隔离）
+│   ├── graph_store.py             # Neo4j操作封装（子图CRUD）
+│   ├── retriever.py               # 混合检索 + MMR重排序
+│   ├── sync_manager.py            # 论文分块哈希增量同步
+│   └── knowledge_base.py          # 知识库编排（解析→切片→嵌入→入库）
+│
+├── memory/                        # 分层记忆模块
+│   ├── __init__.py
+│   ├── short_memory.py            # 短期记忆三层压缩
+│   ├── long_memory.py             # 长期记忆读写（私有知识库交互）
+│   ├── memory_manager.py          # 记忆统一编排（加载/压缩/持久化调度）
+│   └── summary_llm.py             # LLM摘要提示词模板
+│
+├── controller/                    # LangGraph流程控制器
+│   ├── __init__.py
+│   ├── workflow.py                # StateGraph构建与注册
+│   ├── router.py                  # 阶段流转路由逻辑
+│   ├── gates.py                   # 人工审批闸门（Interrupt）
+│   ├── error_handler.py           # 停滞检测 + REWORK/BLOCKED/FAILED处理
+│   └── scheduler.py               # 顶层调度器（启动/驱动/暂停/恢复）
+│
+├── api/                           # 公共API层（供Agent和前端调用）
+│   ├── __init__.py
+│   ├── rag_api.py                 # RAG检索接口
+│   ├── memory_api.py              # 记忆读写接口
+│   ├── state_api.py               # 状态查询/持久化接口
+│   └── sync_api.py                # 论文同步接口
+│
+├── agents/                        # Agent接口规范（供其他成员参考）
+│   ├── __init__.py
+│   └── agent_specs.py             # 6个Agent签名/权限/约束定义
+│
+├── utils/                         # 工具函数
+│   ├── __init__.py
+│   ├── hash_utils.py              # SHA256分片哈希计算
+│   ├── validators.py              # 输入校验工具
+│   └── logger.py                  # 统一日志（阶段/Agent/错误日志格式化）
+│
+└── data/                          # 静态数据
+    ├── base_literature/           # 全局公共知识库源数据
+    │   ├── papers/                # SSCI论文PDF
+    │   ├── theories/              # 理论文档
+    │   └── scales/                # 量表文档
+    └── prompts/                   # LLM提示词模板
+        ├── entity_extract.txt     # 实体抽取提示词
+        ├── memory_summary.txt     # 记忆摘要提示词
+        └── evidence_synthesis.txt # 证据综合提示词
+```
+
+---
+
+## 十二、全局强制约束清单
+
+| # | 约束内容 | 违反后果 |
+|---|---------|---------|
+| 1 | 所有接口必须透传 `ProjectMeta`，禁止缺失 `user_id` / `project_id` | 数据隔离失效，用户数据交叉污染 |
+| 2 | 证据统一使用 `EvidenceItem` 结构，禁止自定义证据字段 | 证据账本格式不一致，无法统一检索 |
+| 3 | Agent仅读写自身 `output_xxx` 分区，禁止修改 `current_stage`、记忆字段 | 流程状态被意外篡改，上下文漂移 |
+| 4 | 检索/记忆/持久化统一调用公共API，禁止直连 Neo4j/Chroma/PG | 绕过权限控制，数据一致性破坏 |
+| 5 | 流程切换/记忆压缩/状态持久化仅由LangGraph调度器执行 | 多Agent竞争导致状态不一致 |
+| 6 | 长期记忆写入仅限证据综述Agent，其余Agent只读 | 非证据内容污染长期记忆 |
+| 7 | 所有记忆/知识库数据必须携带 `source_type` + `verify_status` 溯源标记 | 无法区分可信证据与生成内容 |
+| 8 | 论文同步必须通过 `sync_user_paper_to_kb`，禁止直接操作向量库 | 版本混乱，增量同步失效 |
+| 9 | 任何Agent产出不得标记为 `human_verified`，该标记仅由人工审批节点设置 | 虚假核验，科研诚信风险 |
+| 10 | 检索结果必须标注 `retrieval_metadata`（命中数/耗时/重排序信息） | 检索质量无法评估和优化 |
+
+---
+
+## 十三、工作量评估与排期
+
+### 13.1 模块分解与工时估算（单人开发）
+
+| 序号 | 模块 | 子任务 | 预估人天 | 难度 |
+|------|------|--------|---------|------|
+| 1 | **core 核心定义** | state.py + models.py + config.py + constants.py | 2天 | ★★ |
+| 2 | **LangGraph控制器** | workflow.py构建11阶段状态机 + router.py流转分支 | 3天 | ★★★★ |
+| 3 | **LangGraph控制器** | gates.py人工审批 + error_handler.py停滞检测与返工 | 2天 | ★★★★ |
+| 4 | **LangGraph控制器** | scheduler.py调度器 + PostgresSaver集成 | 1.5天 | ★★★ |
+| 5 | **GraphRAG - 文档解析** | parser.py (pdfplumber + nougat) + chunker.py分层切片 | 3天 | ★★★ |
+| 6 | **GraphRAG - 嵌入与存储** | embedder.py统一封装 + vector_store.py Chroma集成 | 2天 | ★★★ |
+| 7 | **GraphRAG - 图谱构建** | entity_extract.py三元组抽取 + graph_store.py Neo4j集成 | 3天 | ★★★★ |
+| 8 | **GraphRAG - 检索** | retriever.py混合检索 + MMR重排序 + RRF融合 | 2天 | ★★★ |
+| 9 | **论文同步** | sync_manager.py分块哈希增量同步 + 版本管理 | 3天 | ★★★★ |
+| 10 | **记忆系统** | short_memory.py三层压缩 + long_memory.py持久化 | 3天 | ★★★ |
+| 11 | **记忆系统** | memory_manager.py统一编排 + summary_llm.py提示词 | 1.5天 | ★★ |
+| 12 | **API层** | rag_api + memory_api + state_api + sync_api | 2天 | ★★ |
+| 13 | **Agent接口规范** | agent_specs.py约束定义 + 文档 | 1天 | ★ |
+| 14 | **工具函数** | hash_utils + validators + logger | 1天 | ★ |
+| 15 | **公共知识库构建** | 收集SSCI论文/理论/量表 → 解析入库 | 2天 | ★★ |
+| 16 | **集成测试** | 单模块单元测试 + 端到端集成测试 | 4天 | ★★★ |
+| 17 | **文档** | 接口文档 + 部署文档 + 团队对接说明 | 2天 | ★ |
+
+| | **总计** | | **38人天** | |
+
+### 13.2 人天按自然日换算
+
+| 投入程度 | 每天有效工时 | 预计自然日 | 完成日期（从7/23起算） |
+|---------|------------|-----------|---------------------|
+| 全职投入 | 8h/天 | **~19天** | **8月11日** |
+| 高强度课余 | 5h/天 | **~27天** | **8月19日** |
+| 正常课余 | 3h/天 | **~38天** | **8月30日** |
+
+### 13.3 关键路径与建议
+
+**关键路径（影响整体进度的串联任务）：**
+```
+core定义 → LangGraph控制器 → API层 → Agent接口规范
+         → GraphRAG文档解析 → 嵌入与存储 → 检索
+         → 记忆系统
+```
+
+**可并行开发的任务：**
+- 公共知识库数据收集（独立进行，不依赖代码）
+- 工具函数（独立开发）
+- 论文同步（图构建完成后可并行）
+
+**建议：**
+1. 7/23-7/26：完成 core 定义 + LangGraph控制器骨架（先跑通一个最小状态机）
+2. 7/27-8/2：完成 GraphRAG 文档解析 + 嵌入存储 + 检索（知识库核心链路跑通）
+3. 8/3-8/7：完成 记忆系统 + 论文同步（增量更新机制）
+4. 8/8-8/12：完成 API层 + Agent规范 + 集成测试
+5. 8/13-8/16：文档 + 优化 + 与团队联调
+
+**如果不做论文同步增量更新（退化为全量替换），可节省约3天。** 建议先保留完整方案，如时间紧张可临时降级为全量替换但保留接口不变。
+
+---
+
+## 十四、与负责人总体方案的对应关系
+
+| 负责人方案内容 | 本方案对应模块 | 状态 |
+|--------------|--------------|------|
+| 确定性流程控制器 | `src/controller/` — LangGraph工作流 + 状态机 | ✅ 已覆盖 |
+| 六类Agent按需调用 | `src/agents/agent_specs.py` — 接口规范 + 权限矩阵 | ✅ 已覆盖 |
+| 三本共享账本 | `ResearchState` 中 task_ledger / progress_ledger / evidence_ledger | ✅ 已覆盖 |
+| 工件级质量闸门 | `src/controller/gates.py` — 人工审批 + 程序化检查 | ✅ 已覆盖 |
+| 关键节点人工审批 | `human_approval_gate` 节点 + WAITING_HUMAN 状态 | ✅ 已覆盖 |
+| 停滞检测与返工 | `src/controller/error_handler.py` — detect_stagnation | ✅ 已覆盖 |
+| 证据可追溯 | `EvidenceItem` 中 source_type + verify_status + page_ref | ✅ 已覆盖 |
+| 数据来源标记 | `verify_status` 枚举 + source_type 枚举 | ✅ 已覆盖 |
+| 个人知识库/记忆 | 第五章论文同步 + 第六章分层记忆 | ✅ 新增覆盖 |
+
+---
+
+> 本方案为本人（Memory + 知识库构建板块）负责的完整版技术方案。与负责人总体方案完全对齐，可直接作为需求文档输入进入开发阶段。
+>
+> 最后更新：2026-07-23
