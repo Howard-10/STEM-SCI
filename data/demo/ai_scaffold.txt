@@ -1,0 +1,1 @@
+Demo seed only. A layered prompt asks a learner to explain the physics model before writing Python code. This is fictional teaching material, not evidence from a real study.

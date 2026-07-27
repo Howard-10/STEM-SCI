@@ -1,0 +1,887 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "STEM-SCI Context MVP",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Api V1 Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sources/import": {
+      "post": {
+        "summary": "Import Source",
+        "operationId": "import_source_api_v1_sources_import_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_source_api_v1_sources_import_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceDocument"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sources": {
+      "get": {
+        "summary": "Sources",
+        "operationId": "sources_api_v1_sources_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceDocument"
+                  },
+                  "type": "array",
+                  "title": "Response Sources Api V1 Sources Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sources/{source_id}": {
+      "get": {
+        "summary": "Source",
+        "operationId": "source_api_v1_sources__source_id__get",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceDocument"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sources/{source_id}/chunks": {
+      "get": {
+        "summary": "Chunks",
+        "operationId": "chunks_api_v1_sources__source_id__chunks_get",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SourceChunk"
+                  },
+                  "title": "Response Chunks Api V1 Sources  Source Id  Chunks Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evidence/search": {
+      "post": {
+        "summary": "Search",
+        "operationId": "search_api_v1_evidence_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvidenceSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvidenceSearchResult"
+                  },
+                  "type": "array",
+                  "title": "Response Search Api V1 Evidence Search Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evidence/{evidence_id}": {
+      "get": {
+        "summary": "Evidence",
+        "operationId": "evidence_api_v1_evidence__evidence_id__get",
+        "parameters": [
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Evidence Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/evidence/{evidence_id}/verify-source": {
+      "post": {
+        "summary": "Verify",
+        "operationId": "verify_api_v1_evidence__evidence_id__verify_source_post",
+        "parameters": [
+          {
+            "name": "evidence_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Evidence Id"
+            }
+          },
+          {
+            "name": "verified_by",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Verified By"
+            }
+          },
+          {
+            "name": "verification_note",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Verification Note"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceRef"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/context/build": {
+      "post": {
+        "summary": "Build",
+        "operationId": "build_api_v1_context_build_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContextBuildRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextBundle"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/context/{context_id}": {
+      "get": {
+        "summary": "Context",
+        "operationId": "context_api_v1_context__context_id__get",
+        "parameters": [
+          {
+            "name": "context_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Context Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextBundle"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_import_source_api_v1_sources_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_source_api_v1_sources_import_post"
+      },
+      "ContextBuildRequest": {
+        "properties": {
+          "task_ref": {
+            "type": "string",
+            "title": "Task Ref"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "required_context_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Context Types"
+          },
+          "token_budget": {
+            "type": "integer",
+            "maximum": 20000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Token Budget"
+          },
+          "allowed_verification_statuses": {
+            "items": {
+              "$ref": "#/components/schemas/VerificationStatus"
+            },
+            "type": "array",
+            "title": "Allowed Verification Statuses"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_ref",
+          "query",
+          "token_budget"
+        ],
+        "title": "ContextBuildRequest"
+      },
+      "ContextBundle": {
+        "properties": {
+          "context_id": {
+            "type": "string",
+            "title": "Context Id"
+          },
+          "task_ref": {
+            "type": "string",
+            "title": "Task Ref"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Refs"
+          },
+          "memory_refs": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryRef"
+            },
+            "type": "array",
+            "title": "Memory Refs"
+          },
+          "unresolved_questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unresolved Questions"
+          },
+          "risk_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Flags"
+          },
+          "verification_summary": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Verification Summary"
+          },
+          "token_budget": {
+            "type": "integer",
+            "title": "Token Budget"
+          },
+          "estimated_tokens": {
+            "type": "integer",
+            "title": "Estimated Tokens"
+          },
+          "context_hash": {
+            "type": "string",
+            "title": "Context Hash"
+          },
+          "generated_at": {
+            "type": "string",
+            "title": "Generated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "context_id",
+          "task_ref",
+          "query",
+          "evidence_refs",
+          "source_refs",
+          "verification_summary",
+          "token_budget",
+          "estimated_tokens",
+          "context_hash",
+          "generated_at"
+        ],
+        "title": "ContextBundle"
+      },
+      "EvidenceDetail": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id"
+          },
+          "excerpt": {
+            "type": "string",
+            "title": "Excerpt"
+          },
+          "location": {
+            "$ref": "#/components/schemas/SourceLocation"
+          },
+          "verification_status": {
+            "$ref": "#/components/schemas/VerificationStatus"
+          },
+          "relation": {
+            "$ref": "#/components/schemas/EvidenceRelation"
+          },
+          "verification_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verification Note"
+          },
+          "verified_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified By"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id",
+          "source_id",
+          "chunk_id",
+          "excerpt",
+          "location",
+          "verification_status",
+          "relation"
+        ],
+        "title": "EvidenceDetail"
+      },
+      "EvidenceRef": {
+        "properties": {
+          "evidence_id": {
+            "type": "string",
+            "title": "Evidence Id"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id"
+          },
+          "excerpt": {
+            "type": "string",
+            "title": "Excerpt"
+          },
+          "location": {
+            "$ref": "#/components/schemas/SourceLocation"
+          },
+          "verification_status": {
+            "$ref": "#/components/schemas/VerificationStatus"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence_id",
+          "source_id",
+          "chunk_id",
+          "excerpt",
+          "location",
+          "verification_status"
+        ],
+        "title": "EvidenceRef"
+      },
+      "EvidenceRelation": {
+        "type": "string",
+        "enum": [
+          "supporting",
+          "contrasting",
+          "mentioning"
+        ],
+        "title": "EvidenceRelation"
+      },
+      "EvidenceSearchRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Query"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 10
+          },
+          "allowed_verification_statuses": {
+            "items": {
+              "$ref": "#/components/schemas/VerificationStatus"
+            },
+            "type": "array",
+            "title": "Allowed Verification Statuses"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "EvidenceSearchRequest"
+      },
+      "EvidenceSearchResult": {
+        "properties": {
+          "evidence": {
+            "$ref": "#/components/schemas/EvidenceRef"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "evidence",
+          "score"
+        ],
+        "title": "EvidenceSearchResult"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MemoryRef": {
+        "properties": {
+          "memory_id": {
+            "type": "string",
+            "title": "Memory Id"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "source_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Refs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "memory_id",
+          "summary"
+        ],
+        "title": "MemoryRef"
+      },
+      "SourceChunk": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "location": {
+            "$ref": "#/components/schemas/SourceLocation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "source_id",
+          "text",
+          "location"
+        ],
+        "title": "SourceChunk"
+      },
+      "SourceDocument": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "media_type": {
+            "type": "string",
+            "enum": [
+              "text/markdown",
+              "text/plain",
+              "application/json"
+            ],
+            "title": "Media Type"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "imported_at": {
+            "type": "string",
+            "title": "Imported At"
+          },
+          "verification_status": {
+            "$ref": "#/components/schemas/VerificationStatus",
+            "default": "model_generated_unverified"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id",
+          "filename",
+          "media_type",
+          "sha256",
+          "imported_at"
+        ],
+        "title": "SourceDocument"
+      },
+      "SourceLocation": {
+        "properties": {
+          "chunk_index": {
+            "type": "integer",
+            "title": "Chunk Index"
+          },
+          "char_start": {
+            "type": "integer",
+            "title": "Char Start"
+          },
+          "char_end": {
+            "type": "integer",
+            "title": "Char End"
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chunk_index",
+          "char_start",
+          "char_end"
+        ],
+        "title": "SourceLocation"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VerificationStatus": {
+        "type": "string",
+        "enum": [
+          "demo_seed",
+          "model_generated_unverified",
+          "source_verified",
+          "human_verified"
+        ],
+        "title": "VerificationStatus"
+      }
+    }
+  }
+}

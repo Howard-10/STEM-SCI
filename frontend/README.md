@@ -1,5 +1,5 @@
 # STEM-SCI frontend
 
-This directory reserves the frontend boundary for the STEM-SCI workspace. It currently contains only the agreed source layout and no framework, package manager, UI, API client, or business implementation.
+This React/Vite workspace implements the Context MVP user flow: import Markdown/TXT/JSON, search evidence, mark source verification, and inspect a ContextBundle.
 
-Frontend dependencies and tooling require a later approved phase scope.
+Copy `.env.example` to `.env.local` and set `VITE_API_BASE_URL` when the backend is not running at `http://127.0.0.1:8000/api/v1`. Run `npm.cmd install`, `npm.cmd run dev`, `npm.cmd run typecheck`, and `npm.cmd run build` on Windows.
