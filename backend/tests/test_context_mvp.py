@@ -1,9 +1,12 @@
 """Executable acceptance tests for the project-scoped Context MVP."""
 
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from pypdf import PdfWriter
+from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 from stem_sci import api
 from stem_sci.context.models import ContextBuildRequest, EvidenceSearchRequest, VerificationStatus
@@ -12,6 +15,36 @@ from stem_sci.context.service import ContextService
 PROJECT_A = "project-alpha"
 PROJECT_B = "project-beta"
 DEMO_MARKDOWN = b"STEM_SCI_DEMO_SEED: true\n# Demo\nPython modelling evidence for STEM learning."
+
+
+def text_pdf(content: str) -> bytes:
+    """Build a small real PDF with extractable text for ingestion tests."""
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=200, height=200)
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        }
+    )
+    page[NameObject("/Resources")] = DictionaryObject(
+        {NameObject("/Font"): DictionaryObject({NameObject("/F1"): writer._add_object(font)})}
+    )
+    stream = DecodedStreamObject()
+    stream.set_data(f"BT /F1 12 Tf 20 100 Td ({content}) Tj ET".encode("ascii"))
+    page[NameObject("/Contents")] = writer._add_object(stream)
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
+def blank_pdf() -> bytes:
+    writer = PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
 
 
 @pytest.fixture
@@ -45,6 +78,16 @@ def test_demo_import_deduplication_and_source_traceability(tmp_path: Path) -> No
     )[0]
     source_chunks = service.chunks(PROJECT_A, source.source_id)
     assert result.evidence.chunk_id in {chunk.chunk_id for chunk in source_chunks}
+
+
+def test_text_pdf_import_is_chunked_and_searchable(tmp_path: Path) -> None:
+    service = ContextService(tmp_path)
+    pdf = text_pdf("STEM_SCI_DEMO_SEED: true PDF Python modelling evidence")
+    source = service.import_bytes(PROJECT_A, "evidence.pdf", pdf)
+    matches = service.search(EvidenceSearchRequest(project_id=PROJECT_A, query="Python"))
+    assert source.media_type == "application/pdf"
+    assert source.verification_status is VerificationStatus.DEMO_SEED
+    assert matches[0].evidence.source_id == source.source_id
 
 
 def test_bundle_prefers_verified_evidence_and_limits_source_chunks(tmp_path: Path) -> None:
@@ -84,11 +127,13 @@ def test_bundle_prefers_verified_evidence_and_limits_source_chunks(tmp_path: Pat
 @pytest.mark.parametrize(
     ("filename", "content", "expected_code"),
     [
-        pytest.param("bad.pdf", b"not supported", "unsupported_file_type", id="unsupported-extension"),
+        pytest.param("bad.doc", b"not supported", "unsupported_file_type", id="unsupported-extension"),
         pytest.param("empty.txt", b"", "empty_file", id="empty-file"),
         pytest.param("large.txt", b"x" * 2_000_001, "file_too_large", id="oversized-file"),
         pytest.param("invalid.txt", b"\xff\xfe", "invalid_utf8", id="invalid-utf8"),
         pytest.param("invalid.json", b"{not valid json", "invalid_json", id="invalid-json"),
+        pytest.param("invalid.pdf", b"not a PDF", "invalid_pdf", id="invalid-pdf"),
+        pytest.param("scanned.pdf", blank_pdf(), "pdf_without_extractable_text", id="pdf-without-text"),
     ],
 )
 def test_upload_rejects_invalid_content(

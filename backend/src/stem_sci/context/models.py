@@ -41,7 +41,7 @@ class SourceDocument(StrictModel):
     source_id: str
     project_id: ProjectId
     filename: str
-    media_type: Literal["text/markdown", "text/plain", "application/json"]
+    media_type: Literal["text/markdown", "text/plain", "application/json", "application/pdf"]
     sha256: str
     storage_path: str = Field(exclude=True)
     imported_at: str

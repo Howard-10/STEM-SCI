@@ -13,8 +13,8 @@ export function SourceLibrary({ chunks, onSelect, onUpload, selectedSource, sour
     <section>
       <h2>来源资料库</h2>
       <label>
-        导入 Markdown、TXT 或 JSON
-        <input accept=".md,.txt,.json" onChange={(event) => {
+        导入 Markdown、TXT、JSON 或可提取文本的 PDF
+        <input accept=".md,.txt,.json,.pdf,application/pdf" onChange={(event) => {
           const file = event.target.files?.[0];
           if (file) onUpload(file);
         }} type="file" />

@@ -6,9 +6,12 @@ import hashlib
 import json
 import sqlite3
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Literal, cast
 from uuid import uuid4
+
+from pypdf import PdfReader
 
 from .models import (
     ContextBuildRequest,
@@ -133,24 +136,35 @@ class ContextService:
 
     def import_bytes(self, project_id: str, filename: str, content: bytes) -> SourceDocument:
         suffix = Path(filename).suffix.lower()
-        media_by_suffix: dict[str, Literal["text/markdown", "text/plain", "application/json"]] = {
+        media_by_suffix: dict[
+            str,
+            Literal["text/markdown", "text/plain", "application/json", "application/pdf"],
+        ] = {
             ".md": "text/markdown",
             ".txt": "text/plain",
             ".json": "application/json",
+            ".pdf": "application/pdf",
         }
         media = media_by_suffix.get(suffix)
         if media is None:
-            raise ContextInputError("unsupported_file_type", "Only .md, .txt, and .json files are supported")
+            raise ContextInputError(
+                "unsupported_file_type",
+                "Only .md, .txt, .json, and text-extractable .pdf files are supported",
+            )
         if not content:
             raise ContextInputError("empty_file", "Uploaded file must not be empty")
         if len(content) > MAX_UPLOAD_BYTES:
             raise ContextInputError("file_too_large", "Uploaded file exceeds the 2 MB limit")
-        try:
-            decoded = content.decode("utf-8")
-        except UnicodeDecodeError as error:
-            raise ContextInputError("invalid_utf8", "Uploaded text must be valid UTF-8") from error
-        normalized_text = decoded
-        is_demo_seed = DEMO_MARKER in decoded
+        if suffix == ".pdf":
+            normalized_text = self._extract_pdf_text(content)
+            is_demo_seed = DEMO_MARKER in normalized_text
+        else:
+            try:
+                decoded = content.decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise ContextInputError("invalid_utf8", "Uploaded text must be valid UTF-8") from error
+            normalized_text = decoded
+            is_demo_seed = DEMO_MARKER in decoded
         if suffix == ".json":
             try:
                 payload = json.loads(decoded)
@@ -222,6 +236,26 @@ class ContextService:
             imported_at=imported_at,
             verification_status=status,
         )
+
+    def _extract_pdf_text(self, content: bytes) -> str:
+        try:
+            reader = PdfReader(BytesIO(content))
+            if reader.is_encrypted:
+                raise ContextInputError(
+                    "encrypted_pdf",
+                    "Encrypted PDFs cannot be imported without an approved decryption workflow",
+                )
+            text = "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+        except ContextInputError:
+            raise
+        except Exception as error:
+            raise ContextInputError("invalid_pdf", "Uploaded PDF could not be read") from error
+        if not text:
+            raise ContextInputError(
+                "pdf_without_extractable_text",
+                "PDF has no extractable text; OCR support is not available in this MVP",
+            )
+        return text
 
     def _source(self, row: sqlite3.Row) -> SourceDocument:
         return SourceDocument(
