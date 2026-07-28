@@ -1,1 +1,7 @@
-body{font-family:system-ui;margin:2rem;max-width:900px}section{border:1px solid #ddd;padding:1rem;margin:1rem 0}input,button{margin:.25rem;padding:.4rem}blockquote{margin:.5rem 0}pre{white-space:pre-wrap;background:#f6f6f6;padding:1rem}
+body { font-family: system-ui, sans-serif; margin: 2rem; max-width: 960px; }
+section { border: 1px solid #d0d7de; border-radius: .5rem; margin: 1rem 0; padding: 1rem; }
+input, button { margin: .25rem; padding: .45rem; }
+button { cursor: pointer; }
+blockquote { margin: .5rem 0; }
+pre { background: #f6f8fa; overflow-wrap: anywhere; padding: 1rem; white-space: pre-wrap; }
+small { color: #57606a; margin-left: .5rem; }

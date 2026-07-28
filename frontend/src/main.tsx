@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api } from "./api/client";
-import type { Bundle, SearchResult, Source } from "./types/context";
+
+import { ContextWorkspacePage } from "./pages/ContextWorkspacePage";
 import "./styles.css";
-function App() { const [sources,setSources]=useState<Source[]>([]); const [query,setQuery]=useState(""); const [results,setResults]=useState<SearchResult[]>([]); const [bundle,setBundle]=useState<Bundle|null>(null); const [error,setError]=useState(""); const refresh=():void=>{void api.listSources().then(setSources).catch(e=>setError(String(e)))}; useEffect(()=>{refresh()},[]); const upload=async(e:React.ChangeEvent<HTMLInputElement>)=>{const f=e.target.files?.[0];if(!f)return;try{await api.import(f);refresh()}catch(x){setError(String(x))}}; return <main><h1>STEM-SCI Context MVP</h1><p>本地、可追溯的资料导入、证据检索与 ContextBundle。</p><section><h2>来源资料库</h2><input type="file" accept=".md,.txt,.json" onChange={upload}/><ul>{sources.map(s=><li key={s.source_id}>{s.filename} · {s.sha256.slice(0,12)} · {s.verification_status}</li>)}</ul></section><section><h2>证据检索</h2><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="关键词"/><button onClick={()=>api.search(query).then(setResults).catch(e=>setError(String(e)))}>搜索</button><ul>{results.map(r=><li key={r.evidence.evidence_id}><blockquote>{r.evidence.excerpt}</blockquote><small>{r.evidence.source_id} / {r.evidence.chunk_id} / {r.evidence.verification_status} / score {r.score}</small><button onClick={()=>api.verify(r.evidence.evidence_id).then(()=>api.search(query)).then(setResults)}>标记 source_verified</button></li>)}</ul></section><section><h2>ContextBundle</h2><button onClick={()=>api.build(query,500).then(setBundle).catch(e=>setError(String(e)))}>构建（500 tokens）</button>{bundle&&<pre>{JSON.stringify(bundle,null,2)}</pre>}</section>{error&&<p role="alert">{error}</p>}</main> } createRoot(document.getElementById("root")!).render(<App/>);
+
+createRoot(document.getElementById("root")!).render(<ContextWorkspacePage />);

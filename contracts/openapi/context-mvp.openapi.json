@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "STEM-SCI Context MVP",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "paths": {
     "/api/v1/health": {
@@ -69,17 +69,41 @@
       "get": {
         "summary": "Sources",
         "operationId": "sources_api_v1_sources_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+              "title": "Project Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
+                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/SourceDocument"
                   },
-                  "type": "array",
                   "title": "Response Sources Api V1 Sources Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -99,6 +123,18 @@
             "schema": {
               "type": "string",
               "title": "Source Id"
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+              "title": "Project Id"
             }
           }
         ],
@@ -138,6 +174,18 @@
             "schema": {
               "type": "string",
               "title": "Source Id"
+            }
+          },
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+              "title": "Project Id"
             }
           }
         ],
@@ -224,6 +272,18 @@
               "type": "string",
               "title": "Evidence Id"
             }
+          },
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+              "title": "Project Id"
+            }
           }
         ],
         "responses": {
@@ -265,11 +325,24 @@
             }
           },
           {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+              "title": "Project Id"
+            }
+          },
+          {
             "name": "verified_by",
             "in": "query",
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
               "title": "Verified By"
             }
           },
@@ -279,6 +352,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "minLength": 1,
               "title": "Verification Note"
             }
           }
@@ -358,6 +432,18 @@
               "type": "string",
               "title": "Context Id"
             }
+          },
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+              "title": "Project Id"
+            }
           }
         ],
         "responses": {
@@ -389,6 +475,13 @@
     "schemas": {
       "Body_import_source_api_v1_sources_import_post": {
         "properties": {
+          "project_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+            "title": "Project Id"
+          },
           "file": {
             "type": "string",
             "contentMediaType": "application/octet-stream",
@@ -397,18 +490,28 @@
         },
         "type": "object",
         "required": [
+          "project_id",
           "file"
         ],
         "title": "Body_import_source_api_v1_sources_import_post"
       },
       "ContextBuildRequest": {
         "properties": {
+          "project_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+            "title": "Project Id"
+          },
           "task_ref": {
             "type": "string",
+            "minLength": 1,
             "title": "Task Ref"
           },
           "query": {
             "type": "string",
+            "minLength": 1,
             "title": "Query"
           },
           "required_context_types": {
@@ -424,6 +527,13 @@
             "exclusiveMinimum": 0.0,
             "title": "Token Budget"
           },
+          "max_chunks_per_source": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Chunks Per Source",
+            "default": 1
+          },
           "allowed_verification_statuses": {
             "items": {
               "$ref": "#/components/schemas/VerificationStatus"
@@ -432,8 +542,10 @@
             "title": "Allowed Verification Statuses"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
+          "project_id",
           "task_ref",
           "query",
           "token_budget"
@@ -445,6 +557,10 @@
           "context_id": {
             "type": "string",
             "title": "Context Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
           },
           "task_ref": {
             "type": "string",
@@ -513,9 +629,11 @@
             "title": "Generated At"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "context_id",
+          "project_id",
           "task_ref",
           "query",
           "evidence_refs",
@@ -533,6 +651,10 @@
           "evidence_id": {
             "type": "string",
             "title": "Evidence Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
           },
           "source_id": {
             "type": "string",
@@ -589,9 +711,11 @@
             "title": "Verified At"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "evidence_id",
+          "project_id",
           "source_id",
           "chunk_id",
           "excerpt",
@@ -606,6 +730,10 @@
           "evidence_id": {
             "type": "string",
             "title": "Evidence Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
           },
           "source_id": {
             "type": "string",
@@ -626,9 +754,11 @@
             "$ref": "#/components/schemas/VerificationStatus"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "evidence_id",
+          "project_id",
           "source_id",
           "chunk_id",
           "excerpt",
@@ -648,6 +778,13 @@
       },
       "EvidenceSearchRequest": {
         "properties": {
+          "project_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+            "title": "Project Id"
+          },
           "query": {
             "type": "string",
             "minLength": 1,
@@ -668,8 +805,10 @@
             "title": "Allowed Verification Statuses"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
+          "project_id",
           "query"
         ],
         "title": "EvidenceSearchRequest"
@@ -684,6 +823,7 @@
             "title": "Score"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "evidence",
@@ -710,6 +850,10 @@
             "type": "string",
             "title": "Memory Id"
           },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
           "summary": {
             "type": "string",
             "title": "Summary"
@@ -722,9 +866,11 @@
             "title": "Source Refs"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "memory_id",
+          "project_id",
           "summary"
         ],
         "title": "MemoryRef"
@@ -734,6 +880,10 @@
           "chunk_id": {
             "type": "string",
             "title": "Chunk Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
           },
           "source_id": {
             "type": "string",
@@ -747,9 +897,11 @@
             "$ref": "#/components/schemas/SourceLocation"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "chunk_id",
+          "project_id",
           "source_id",
           "text",
           "location"
@@ -761,6 +913,10 @@
           "source_id": {
             "type": "string",
             "title": "Source Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
           },
           "filename": {
             "type": "string",
@@ -788,9 +944,11 @@
             "default": "model_generated_unverified"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "source_id",
+          "project_id",
           "filename",
           "media_type",
           "sha256",
@@ -824,6 +982,7 @@
             "title": "Heading"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "chunk_index",

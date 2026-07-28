@@ -1,39 +1,47 @@
 # Context and Knowledge MVP Implementation Report
 
-## 1. Implemented scope
+## Implemented scope
 
-The MVP provides a local frontend-to-backend chain for Markdown, TXT, and JSON import; SHA256 de-duplication; SQLite persistence; deterministic chunking; traceable EvidenceItem search; source verification; and token-budgeted ContextBundle assembly. It uses no network retrieval, embeddings, LLM, GraphRAG, or external statistical service.
+The Context MVP is a local, project-scoped frontend/backend workflow for Markdown, TXT, and JSON import; SHA256 de-duplication within a project; SQLite persistence; deterministic chunking; traceable evidence search; source verification; SourceChunk trace-back; and token-budgeted ContextBundle construction. It uses no network retrieval, embeddings, LLM, GraphRAG, external statistical service, Controller workflow, or Agent workflow.
 
-## 2. Final directory structure
+## Project isolation and persistence
 
-The implementation adds `backend/src/stem_sci/context/`, `backend/src/stem_sci/api.py`, `backend/src/stem_sci/main.py`, `backend/scripts/export_openapi.py`, `backend/tests/test_context_mvp.py`, `contracts/openapi/context-mvp.openapi.json`, demo files under `data/demo/`, and the React/Vite workspace under `frontend/`.
+`SourceDocument`, `SourceChunk`, `EvidenceRef`, and `ContextBundle` each carry `project_id`. SQLite queries for lists, details, search, verification, Bundle construction, and Bundle retrieval all require the same project scope. A legacy local database without `project_id` is migrated to a `default` project on service startup; new sources use a `(project_id, sha256)` uniqueness constraint. The store remains local under configurable `STEM_SCI_STORAGE_DIR`, defaulting to `.stem_sci/`, which is ignored by Git.
 
-## 3. Data models, storage, search, and ContextBundle rules
+## API safety and verification boundary
 
-`backend/src/stem_sci/context/` owns the context models and `ContextService`. SQLite stores source documents, chunks, evidence items, verification records, and bundles. Original uploads reside under configurable `.stem_sci/uploads/`, which is ignored by Git. Bundles contain excerpt-level EvidenceRef objects and IDs, never source-file bodies.
+The FastAPI API uses stable `{ "error": { "code", "message" } }` error responses. Unsupported extensions, empty or oversized files, invalid UTF-8, and invalid JSON return deterministic 400 responses without filesystem paths. Invalid request schemas return 422; unexpected internal exceptions return a generic 500 response. Public uploads derive only `demo_seed` (from a machine-readable demo marker) or `model_generated_unverified`; they cannot request `human_verified`. The verification endpoint accepts only `project_id`, `verified_by`, and `verification_note`; an attempted `verification_status=human_verified` returns 400.
 
-## 4. API and frontend pages
+## CORS and frontend
 
-The FastAPI application serves health, source import/list/detail/chunks, evidence search/detail/source-verification, and context build/detail endpoints under `/api/v1`. `contracts/openapi/context-mvp.openapi.json` is generated from the application. The React/Vite workspace provides source upload, search, source verification, and bundle display with a configurable `VITE_API_BASE_URL`.
+The default CORS allowlist is limited to `http://localhost:5173` and `http://127.0.0.1:5173`, configurable through `STEM_SCI_CORS_ORIGINS`. Wildcard origins are not used. The React/Vite frontend uses `VITE_API_BASE_URL` and `VITE_PROJECT_ID`, with API calls centralized in `frontend/src/api/client.ts`. Its four functional views are Source Library, Evidence Search, Evidence Detail with SourceChunk trace-back, and ContextBundle construction/viewing; it contains no static data mock.
 
-## 5. Safety measures and unimplemented scope
+## Search and ContextBundle rules
 
-Only `source_verified` can be set through the verification endpoint; `human_verified` is not exposed. Unsupported files, oversized files, duplicate hashes, and missing verification metadata are rejected. Demo assets are explicitly fictional `demo_seed` material. No user uploads, databases, caches, secrets, or build output are committed.
+Search is deterministic Python keyword matching over project-scoped SQLite records, not GraphRAG or vector retrieval. Results sort by score descending, verification rank, source ID, then chunk index. ContextBundle construction prioritizes `human_verified`, then `source_verified`, then other allowed statuses; it accepts at most one chunk per source by default and skips candidates that exceed the token budget. Every selected evidence item preserves source ID, chunk ID, and source location.
 
-## 6. Validation results and demo steps
+## Demo data
 
-Automated tests cover duplicate SHA handling, rejected file types, source-to-chunk evidence traceability, source verification, budget-bound bundles, persistence, and API flow. Demo: start the backend, open the Vite frontend, import an item from `data/demo`, search a phrase, mark the evidence `source_verified`, build a ContextBundle, then inspect its source/chunk IDs and context hash.
+All three files under `data/demo/` carry a machine-readable demo marker: `STEM_SCI_DEMO_SEED: true` in TXT/Markdown or `"stem_sci_demo_seed": true` in JSON. They are fictional material only. Uploading them through the normal API produces `demo_seed`; ordinary files produce `model_generated_unverified`.
 
-Validation used Python 3.12.13: Ruff passed, Mypy passed for 60 source files, and Pytest reported 4 passed and 10 intentionally skipped. The FastAPI application started locally and its health endpoint returned `ok`. Frontend TypeScript checking and the Vite production build passed.
+## Validation performed
 
-## 7. Local commit and Git status
+Using the installed backend development environment, the following checks passed:
 
-The implementation commit is `866c19a feat(context): implement traceable context knowledge MVP`. At report time the branch is `feature/context-knowledge-mvp`; this work is local only and has not been pushed, merged, or opened as a pull request. `git status --short` was empty after the implementation commit.
+- `ruff check backend/src backend/tests`
+- `mypy backend/src` — 60 source files, no issues
+- `pytest backend/tests -q` — 15 passed, 10 intentionally skipped Phase 1 placeholder tests, one upstream TestClient deprecation warning
+- `python -m compileall backend/src`
+- package import of `stem_sci`
+- `npm run typecheck`
+- `npm run build`
 
-## 8. Known issues, skipped items, and next steps
+An actual temporary local run started FastAPI on port 8000 and Vite on port 5173. A CORS preflight from `http://127.0.0.1:5173` returned the expected allow-origin header. The flow imported a demo Markdown as `demo_seed`, searched Evidence, opened its detail, marked it `source_verified`, built a ContextBundle, and traced its evidence back to the original SourceChunk. Temporary SQLite and upload data were deleted after the check.
 
-The FastAPI TestClient emits an upstream deprecation warning about its HTTPX integration; the API test itself passes. The existing ten Phase 1 invariant tests remain intentionally skipped because their underlying models are outside the approved Context MVP scope. No PDF/OCR, vector search, Chroma, Neo4j, GraphRAG, online retrieval, LLM calls, full Controller/Agent workflows, user authentication, real research data, or human approval workflow was implemented or represented as validated.
+## OpenAPI contract
 
-## 9. Not implemented
+`contracts/openapi/context-mvp.openapi.json` is re-exported from the current FastAPI application and matches it exactly. It contains ten routes: health; source import/list/detail/chunks; evidence search/detail/verification; and context build/detail.
 
-PDF/OCR, vector search, Chroma, Neo4j, GraphRAG, online retrieval, LLM calls, full Controller/Agent workflows, user authentication, real research data, and human approval workflows remain outside this MVP.
+## Intentionally not implemented
+
+PDF/OCR, online literature retrieval, embeddings, Chroma, Neo4j, GraphRAG, long-term memory, formal Literature Operators, Controller/Agent integration, human-approval workflow, authentication, SPSS/Python analysis, real research data, and external-provider integration remain out of scope for this Context MVP.

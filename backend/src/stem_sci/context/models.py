@@ -5,7 +5,13 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class StrictModel(BaseModel):
+    """Reject undeclared request fields at the API boundary."""
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class VerificationStatus(StrEnum):
@@ -21,15 +27,19 @@ class EvidenceRelation(StrEnum):
     MENTIONING = "mentioning"
 
 
-class SourceLocation(BaseModel):
+ProjectId = str
+
+
+class SourceLocation(StrictModel):
     chunk_index: int
     char_start: int
     char_end: int
     heading: str | None = None
 
 
-class SourceDocument(BaseModel):
+class SourceDocument(StrictModel):
     source_id: str
+    project_id: ProjectId
     filename: str
     media_type: Literal["text/markdown", "text/plain", "application/json"]
     sha256: str
@@ -38,15 +48,17 @@ class SourceDocument(BaseModel):
     verification_status: VerificationStatus = VerificationStatus.MODEL_GENERATED_UNVERIFIED
 
 
-class SourceChunk(BaseModel):
+class SourceChunk(StrictModel):
     chunk_id: str
+    project_id: ProjectId
     source_id: str
     text: str
     location: SourceLocation
 
 
-class EvidenceItem(BaseModel):
+class EvidenceItem(StrictModel):
     evidence_id: str
+    project_id: ProjectId
     source_id: str
     chunk_id: str
     excerpt: str
@@ -54,8 +66,9 @@ class EvidenceItem(BaseModel):
     verification_status: VerificationStatus
 
 
-class EvidenceRef(BaseModel):
+class EvidenceRef(StrictModel):
     evidence_id: str
+    project_id: ProjectId
     source_id: str
     chunk_id: str
     excerpt: str
@@ -63,31 +76,36 @@ class EvidenceRef(BaseModel):
     verification_status: VerificationStatus
 
 
-class PaperCard(BaseModel):
+class PaperCard(StrictModel):
     paper_card_id: str
+    project_id: ProjectId
     source_id: str
     title: str
     evidence_refs: list[str] = Field(default_factory=list)
 
 
-class MemoryRef(BaseModel):
+class MemoryRef(StrictModel):
     memory_id: str
+    project_id: ProjectId
     summary: str
     source_refs: list[str] = Field(default_factory=list)
 
 
-class ContextBuildRequest(BaseModel):
-    task_ref: str
-    query: str
+class ContextBuildRequest(StrictModel):
+    project_id: ProjectId = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+    task_ref: str = Field(min_length=1)
+    query: str = Field(min_length=1)
     required_context_types: list[str] = Field(default_factory=lambda: ["evidence"])
     token_budget: int = Field(gt=0, le=20_000)
+    max_chunks_per_source: int = Field(default=1, ge=1, le=10)
     allowed_verification_statuses: list[VerificationStatus] = Field(
         default_factory=lambda: [VerificationStatus.SOURCE_VERIFIED, VerificationStatus.HUMAN_VERIFIED]
     )
 
 
-class ContextBundle(BaseModel):
+class ContextBundle(StrictModel):
     context_id: str
+    project_id: ProjectId
     task_ref: str
     query: str
     evidence_refs: list[EvidenceRef]
@@ -102,13 +120,14 @@ class ContextBundle(BaseModel):
     generated_at: str
 
 
-class EvidenceSearchRequest(BaseModel):
+class EvidenceSearchRequest(StrictModel):
+    project_id: ProjectId = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
     query: str = Field(min_length=1)
     limit: int = Field(default=10, ge=1, le=50)
     allowed_verification_statuses: list[VerificationStatus] = Field(default_factory=list)
 
 
-class EvidenceSearchResult(BaseModel):
+class EvidenceSearchResult(StrictModel):
     evidence: EvidenceRef
     score: float
 
@@ -118,3 +137,12 @@ class EvidenceDetail(EvidenceRef):
     verification_note: str | None = None
     verified_by: str | None = None
     verified_at: str | None = None
+
+
+class ApiError(StrictModel):
+    code: str
+    message: str
+
+
+class ApiErrorResponse(StrictModel):
+    error: ApiError

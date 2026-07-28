@@ -1,5 +1,5 @@
 # STEM-SCI frontend
 
-This React/Vite workspace implements the Context MVP user flow: import Markdown/TXT/JSON, search evidence, mark source verification, and inspect a ContextBundle.
+This React/Vite workspace implements the Context MVP user flow: project-scoped source import, evidence search and detail, source verification, SourceChunk trace-back, and ContextBundle inspection.
 
-Copy `.env.example` to `.env.local` and set `VITE_API_BASE_URL` when the backend is not running at `http://127.0.0.1:8000/api/v1`. Run `npm.cmd install`, `npm.cmd run dev`, `npm.cmd run typecheck`, and `npm.cmd run build` on Windows.
+Copy `.env.example` to `.env.local` and set `VITE_API_BASE_URL` and `VITE_PROJECT_ID` as needed. The backend must receive `STEM_SCI_CORS_ORIGINS` containing the frontend origin; its safe local default is `http://localhost:5173,http://127.0.0.1:5173`, never `*`. Run `npm.cmd install`, `npm.cmd run dev`, `npm.cmd run typecheck`, and `npm.cmd run build` on Windows.
