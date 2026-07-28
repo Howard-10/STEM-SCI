@@ -27,11 +27,23 @@ from .context.models import (
 from .context.service import ContextInputError, ContextNotFoundError, ContextService
 
 DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
+DEFAULT_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 
 def _cors_origins() -> list[str]:
     configured = os.getenv("STEM_SCI_CORS_ORIGINS", DEFAULT_CORS_ORIGINS)
     return [origin.strip() for origin in configured.split(",") if origin.strip()]
+
+
+def _max_upload_bytes() -> int:
+    configured = os.getenv("STEM_SCI_MAX_UPLOAD_BYTES")
+    if configured is None:
+        return DEFAULT_MAX_UPLOAD_BYTES
+    try:
+        value = int(configured)
+    except ValueError:
+        return DEFAULT_MAX_UPLOAD_BYTES
+    return value if value > 0 else DEFAULT_MAX_UPLOAD_BYTES
 
 
 def _error(status_code: int, code: str, message: str) -> JSONResponse:
@@ -49,7 +61,10 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
-service = ContextService(Path(os.getenv("STEM_SCI_STORAGE_DIR", ".stem_sci")))
+service = ContextService(
+    Path(os.getenv("STEM_SCI_STORAGE_DIR", ".stem_sci")),
+    max_upload_bytes=_max_upload_bytes(),
+)
 
 
 @app.exception_handler(ContextInputError)

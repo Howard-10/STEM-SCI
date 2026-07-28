@@ -14,7 +14,7 @@ The MVP uses `pypdf` to extract text from ordinary text-based PDFs. A valid PDF 
 
 ## API safety and verification boundary
 
-The FastAPI API uses stable `{ "error": { "code", "message" } }` error responses. Unsupported extensions, empty or oversized files, invalid UTF-8, invalid JSON, unreadable PDFs, encrypted PDFs, and PDFs without extractable text return deterministic 400 responses without filesystem paths. Invalid request schemas return 422; unexpected internal exceptions return a generic 500 response. Public uploads derive only `demo_seed` (from a machine-readable demo marker) or `model_generated_unverified`; they cannot request `human_verified`. The verification endpoint accepts only `project_id`, `verified_by`, and `verification_note`; an attempted `verification_status=human_verified` returns 400.
+The FastAPI API uses stable `{ "error": { "code", "message" } }` error responses. The default upload limit is 50 MB and can be configured with `STEM_SCI_MAX_UPLOAD_BYTES`. Unsupported extensions, empty or oversized files, invalid UTF-8, invalid JSON, unreadable PDFs, encrypted PDFs, and PDFs without extractable text return deterministic 400 responses without filesystem paths. Invalid request schemas return 422; unexpected internal exceptions return a generic 500 response. Public uploads derive only `demo_seed` (from a machine-readable demo marker) or `model_generated_unverified`; they cannot request `human_verified`. The verification endpoint accepts only `project_id`, `verified_by`, and `verification_note`; an attempted `verification_status=human_verified` returns 400.
 
 ## CORS and frontend
 

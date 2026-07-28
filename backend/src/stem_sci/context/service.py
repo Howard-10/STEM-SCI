@@ -26,7 +26,7 @@ from .models import (
     VerificationStatus,
 )
 
-MAX_UPLOAD_BYTES = 2_000_000
+DEFAULT_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 DEMO_MARKER = "STEM_SCI_DEMO_SEED: true"
 STATUS_ORDER = {
     VerificationStatus.HUMAN_VERIFIED.value: 0,
@@ -59,7 +59,12 @@ def _now() -> str:
 class ContextService:
     """SQLite-backed MVP service; no network, embeddings, or GraphRAG."""
 
-    def __init__(self, root: Path, chunk_size: int = 800) -> None:
+    def __init__(
+        self,
+        root: Path,
+        chunk_size: int = 800,
+        max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES,
+    ) -> None:
         self.root = root
         self.root.mkdir(parents=True, exist_ok=True)
         self.uploads = root / "uploads"
@@ -67,6 +72,7 @@ class ContextService:
         self.db = sqlite3.connect(root / "context.db", check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.chunk_size = chunk_size
+        self.max_upload_bytes = max_upload_bytes
         self._migrate()
 
     def _migrate(self) -> None:
@@ -153,8 +159,12 @@ class ContextService:
             )
         if not content:
             raise ContextInputError("empty_file", "Uploaded file must not be empty")
-        if len(content) > MAX_UPLOAD_BYTES:
-            raise ContextInputError("file_too_large", "Uploaded file exceeds the 2 MB limit")
+        if len(content) > self.max_upload_bytes:
+            limit_mb = self.max_upload_bytes / (1024 * 1024)
+            raise ContextInputError(
+                "file_too_large",
+                f"Uploaded file exceeds the {limit_mb:g} MB limit",
+            )
         if suffix == ".pdf":
             normalized_text = self._extract_pdf_text(content)
             is_demo_seed = DEMO_MARKER in normalized_text

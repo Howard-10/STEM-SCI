@@ -49,7 +49,11 @@ def blank_pdf() -> bytes:
 
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setattr(api, "service", ContextService(tmp_path, chunk_size=30))
+    monkeypatch.setattr(
+        api,
+        "service",
+        ContextService(tmp_path, chunk_size=30, max_upload_bytes=1024),
+    )
     return TestClient(api.app)
 
 
@@ -129,7 +133,7 @@ def test_bundle_prefers_verified_evidence_and_limits_source_chunks(tmp_path: Pat
     [
         pytest.param("bad.doc", b"not supported", "unsupported_file_type", id="unsupported-extension"),
         pytest.param("empty.txt", b"", "empty_file", id="empty-file"),
-        pytest.param("large.txt", b"x" * 2_000_001, "file_too_large", id="oversized-file"),
+        pytest.param("large.txt", b"x" * 1025, "file_too_large", id="oversized-file"),
         pytest.param("invalid.txt", b"\xff\xfe", "invalid_utf8", id="invalid-utf8"),
         pytest.param("invalid.json", b"{not valid json", "invalid_json", id="invalid-json"),
         pytest.param("invalid.pdf", b"not a PDF", "invalid_pdf", id="invalid-pdf"),

@@ -6,7 +6,7 @@ Current status: Phase 0 passed; Phase 1 includes a local, project-scoped Context
 
 ## Context MVP local development
 
-The Context MVP accepts Markdown, TXT, JSON, and text-extractable PDF files under a required `project_id`. Scanned or image-only PDFs require a later OCR capability and are rejected clearly in this MVP. Its default CORS allowlist is limited to `http://localhost:5173` and `http://127.0.0.1:5173`; configure `STEM_SCI_CORS_ORIGINS` as a comma-separated allowlist for another local frontend origin. Do not use a wildcard CORS origin. Copy the root `.env.example` for the available local settings.
+The Context MVP accepts Markdown, TXT, JSON, and text-extractable PDF files under a required `project_id`. Its default upload limit is 50 MB and can be changed with `STEM_SCI_MAX_UPLOAD_BYTES`. Scanned or image-only PDFs require a later OCR capability and are rejected clearly in this MVP. Its default CORS allowlist is limited to `http://localhost:5173` and `http://127.0.0.1:5173`; configure `STEM_SCI_CORS_ORIGINS` as a comma-separated allowlist for another local frontend origin. Do not use a wildcard CORS origin. Copy the root `.env.example` for the available local settings.
 
 ## Repository layout
 
