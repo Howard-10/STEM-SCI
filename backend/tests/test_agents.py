@@ -1,0 +1,153 @@
+"""Contract and permission tests for the six Phase 1 agent boundaries."""
+
+from datetime import datetime, timezone
+
+import pytest
+from pydantic import ValidationError
+
+from stem_sci.agents import (
+    AgentInput,
+    AgentResult,
+    DataAnalysisAgent,
+    EvidenceReviewAgent,
+    IndependentReviewAgent,
+    MentorPlanningAgent,
+    PaperWritingAgent,
+    ResearchDesignAgent,
+)
+from stem_sci.core.claims import AtomicClaim, ClaimType
+from stem_sci.research_protocol import PreregisteredAnalysisPlan
+
+
+AGENT_TYPES = (
+    MentorPlanningAgent,
+    EvidenceReviewAgent,
+    ResearchDesignAgent,
+    DataAnalysisAgent,
+    PaperWritingAgent,
+    IndependentReviewAgent,
+)
+
+
+@pytest.mark.parametrize("agent_type", AGENT_TYPES)
+def test_each_agent_returns_structured_candidate_result(agent_type: type) -> None:
+    """Every role can run without an LLM and only proposes allowed artifacts."""
+    agent = agent_type()
+    agent_input = AgentInput(
+        agent_run_id=f"run-{agent.agent_id}",
+        task_ref="task-demo",
+        context_bundle_ref="context-demo",
+        allowed_tool_capabilities=list(agent.allowed_tool_capabilities),
+        allowed_output_types=list(agent.allowed_output_types),
+        policy_version="policy-v1",
+        prompt_template_version="prompt-v1",
+    )
+
+    result = agent.run(agent_input)
+
+    assert result.agent_id == agent.agent_id
+    assert result.agent_run_id == agent_input.agent_run_id
+    assert result.candidate_artifact_refs
+    assert all(ref.startswith(f"candidate://{agent.agent_id}/") for ref in result.candidate_artifact_refs)
+    assert result.approval_requests == []
+    assert agent.capability().read_only_global_state is True
+    assert set(agent.capability().forbidden_actions) == {
+        "new_current_stage",
+        "approved",
+        "freeze_dataset",
+        "official_result",
+        "publish",
+    }
+
+
+def test_agent_result_rejects_governance_fields() -> None:
+    """Agent output cannot smuggle Controller operations through extra fields."""
+    payload = {
+        "agent_run_id": "run-1",
+        "agent_id": "mentor_planning",
+        "agent_version": "phase1-scaffold",
+        "candidate_artifact_refs": [],
+        "tool_requests": [],
+        "approval_requests": [],
+        "risk_flags": [],
+        "unresolved_questions": [],
+        "recommendations": [],
+        "confidence": 0.5,
+        "created_at": datetime.now(timezone.utc),
+        "new_current_stage": "RELEASED",
+    }
+
+    with pytest.raises(ValidationError):
+        AgentResult.model_validate(payload)
+
+
+def test_agent_respects_controller_output_allow_list() -> None:
+    """An agent does not emit artifact types that the Controller did not grant."""
+    agent = ResearchDesignAgent()
+    result = agent.run(
+        AgentInput(
+            agent_run_id="run-2",
+            task_ref="task-design",
+            context_bundle_ref="context-1",
+            allowed_tool_capabilities=[],
+            allowed_output_types=["StudyProtocolCandidate"],
+            policy_version="policy-v1",
+            prompt_template_version="prompt-v1",
+        )
+    )
+
+    assert result.candidate_artifact_refs == [
+        "candidate://research_design/task-design/StudyProtocolCandidate"
+    ]
+    assert "OUTPUT_CAPABILITY_NOT_GRANTED" in result.risk_flags
+
+
+def test_preregistered_plan_requires_approval_before_freeze() -> None:
+    """The plan model distinguishes a candidate from an approved frozen plan."""
+    common = {
+        "plan_id": "plan-1",
+        "primary_outcomes": ["transfer_score"],
+        "confirmatory_models": ["linear_mixed_model"],
+        "missing_data_strategy": "multiple_imputation",
+        "outlier_strategy": "predefined_rule",
+        "alpha": 0.05,
+        "multiple_comparison_strategy": "holm",
+        "exploratory_analysis_policy": "label_exploratory",
+    }
+
+    assert PreregisteredAnalysisPlan(**common).status == "candidate"
+    with pytest.raises(ValidationError):
+        PreregisteredAnalysisPlan(**common, status="frozen", frozen_at=datetime.now(timezone.utc))
+
+    frozen = PreregisteredAnalysisPlan(
+        **common,
+        status="frozen",
+        approval_ref="approval-1",
+        frozen_at=datetime.now(timezone.utc),
+    )
+    assert frozen.status == "frozen"
+
+
+def test_atomic_claim_has_one_claim_type() -> None:
+    """Composite RESULT+INTERPRETATION labels are rejected."""
+    claim = AtomicClaim(
+        claim_id="claim-1",
+        text="The intervention changed transfer performance.",
+        claim_type=ClaimType.RESULT,
+        result_card_ref="result-card-1",
+    )
+    assert claim.claim_type is ClaimType.RESULT
+
+    with pytest.raises(ValidationError):
+        AtomicClaim(
+            claim_id="claim-2",
+            text="The intervention changed performance and therefore improved learning.",
+            claim_type="RESULT+INTERPRETATION",
+        )
+
+
+def test_independent_reviewer_has_no_execution_capability() -> None:
+    """The reviewer can report findings but cannot request execution tools."""
+    capability = IndependentReviewAgent.capability()
+    assert capability.allowed_tool_capabilities == []
+    assert capability.read_only_global_state is True
