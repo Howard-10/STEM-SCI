@@ -1,1 +1,69 @@
-"""Phase 1 placeholder for controlled lifecycle enumerations."""
+"""Controlled lifecycle values shared by the workflow and its stores."""
+
+from enum import StrEnum
+
+
+class ProjectStage(StrEnum):
+    INTAKE = "INTAKE"
+    SCOPED = "SCOPED"
+    SEARCH_PROTOCOL_APPROVED = "SEARCH_PROTOCOL_APPROVED"
+    EVIDENCE_READY = "EVIDENCE_READY"
+    RESEARCH_QUESTION_APPROVED = "RESEARCH_QUESTION_APPROVED"
+    STUDY_PROTOCOL_APPROVED = "STUDY_PROTOCOL_APPROVED"
+    DATA_READY = "DATA_READY"
+    ANALYZED = "ANALYZED"
+    DRAFTED = "DRAFTED"
+    VERIFIED = "VERIFIED"
+    RELEASED = "RELEASED"
+    REWORK = "REWORK"
+    BLOCKED = "BLOCKED"
+    WAITING_HUMAN = "WAITING_HUMAN"
+    FAILED = "FAILED"
+
+
+class TaskStatus(StrEnum):
+    DRAFT = "DRAFT"
+    READY = "READY"
+    RUNNING = "RUNNING"
+    REVIEW = "REVIEW"
+    DONE = "DONE"
+    REWORK = "REWORK"
+    BLOCKED = "BLOCKED"
+    WAITING_HUMAN = "WAITING_HUMAN"
+    FAILED = "FAILED"
+
+
+class ArtifactStatus(StrEnum):
+    DRAFT = "DRAFT"
+    CANDIDATE = "CANDIDATE"
+    VALIDATED = "VALIDATED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    BLOCKED = "BLOCKED"
+    SUPERSEDED = "SUPERSEDED"
+
+
+class RunStatus(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    TERMINATED = "TERMINATED"
+    BLOCKED = "BLOCKED"
+
+
+class DecisionScope(StrEnum):
+    RUN = "RUN"
+    ARTIFACT = "ARTIFACT"
+    TASK = "TASK"
+    STAGE = "STAGE"
+    PROJECT = "PROJECT"
+
+
+class GateDecision(StrEnum):
+    PASS = "PASS"
+    PASS_WITH_WARNING = "PASS_WITH_WARNING"
+    REWORK = "REWORK"
+    BLOCKED = "BLOCKED"
+    WAITING_HUMAN = "WAITING_HUMAN"
+    FAILED = "FAILED"

@@ -1,1 +1,5 @@
-"""Phase 1 placeholder for GateResult contracts."""
+"""Gate contracts exposed from the controller package."""
+
+from stem_sci.core.models import GateResult
+
+__all__ = ["GateResult"]

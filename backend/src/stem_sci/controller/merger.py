@@ -21,9 +21,7 @@ def validate_agent_result(result: AgentResult, capability: AgentCapability) -> A
 
     allowed_tools = set(capability.allowed_tool_capabilities)
     for tool_request in result.tool_requests:
-        if not tool_request.startswith("request://"):
-            raise ValueError("tool requests must use request:// scheme")
-        capability_name = tool_request.removeprefix("request://")
+        capability_name = tool_request.capability
         if capability_name not in allowed_tools:
             raise ValueError(f"agent requested tool outside capability: {capability_name}")
     return result

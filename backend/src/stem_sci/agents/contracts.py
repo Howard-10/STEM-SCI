@@ -32,6 +32,16 @@ class AgentInput(AgentContract):
     prompt_template_version: str = Field(min_length=1)
 
 
+class ToolRequest(AgentContract):
+    """A request for a deterministic operator; it is not an execution command."""
+
+    request_id: str = Field(min_length=1)
+    capability: str = Field(min_length=1)
+    input_refs: list[str] = Field(default_factory=list)
+    required_output_types: list[str] = Field(default_factory=list)
+    reason: str = Field(min_length=1)
+
+
 class AgentResult(AgentContract):
     """Candidate outputs from an agent; governance fields are intentionally absent."""
 
@@ -39,7 +49,8 @@ class AgentResult(AgentContract):
     agent_id: str = Field(min_length=1)
     agent_version: str = Field(min_length=1)
     candidate_artifact_refs: list[str] = Field(default_factory=list)
-    tool_requests: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+    tool_requests: list[ToolRequest] = Field(default_factory=list)
     approval_requests: list[str] = Field(default_factory=list)
     risk_flags: list[str] = Field(default_factory=list)
     unresolved_questions: list[str] = Field(default_factory=list)
@@ -57,16 +68,6 @@ class AgentCapability(AgentContract):
     allowed_output_types: list[str] = Field(default_factory=list)
     forbidden_actions: list[str] = Field(default_factory=list)
     read_only_global_state: bool = True
-
-
-class ToolRequest(AgentContract):
-    """A request for a deterministic operator; it is not an execution command."""
-
-    request_id: str = Field(min_length=1)
-    capability: str = Field(min_length=1)
-    input_refs: list[str] = Field(default_factory=list)
-    required_output_types: list[str] = Field(default_factory=list)
-    reason: str = Field(min_length=1)
 
 
 class ApprovalRequest(AgentContract):

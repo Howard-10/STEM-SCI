@@ -1,10 +1,14 @@
-"""Reserved Phase 1 invariant tests for reducer behavior."""
-
-import pytest
-
-pytestmark = pytest.mark.skip(reason="Phase 1 model not implemented yet")
+from stem_sci.core.enums import TaskStatus
+from stem_sci.core.reducers import merge_references
+from stem_sci.core.state import ResearchState
 
 
-def test_reducer_behavior_placeholder() -> None:
-    """Reserved until Phase 1 reducer contracts are implemented."""
-    raise AssertionError("The module-level skip should prevent execution.")
+def test_reducer_deduplicates_references_and_merges_status() -> None:
+    state = ResearchState(project_id="reducer-demo")
+    merged = merge_references(
+        state,
+        artifact_refs=["artifact://1", "artifact://1"],
+        task_status={"planning": TaskStatus.DONE},
+    )
+    assert merged.artifact_refs == ["artifact://1"]
+    assert merged.task_status["planning"] is TaskStatus.DONE

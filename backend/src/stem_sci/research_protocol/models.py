@@ -90,7 +90,7 @@ class PreregisteredAnalysisPlan(ProtocolModel):
     frozen_at: datetime | None = None
 
     @model_validator(mode="after")
-    def validate_approval_and_freeze(self) -> "PreregisteredAnalysisPlan":
+    def validate_approval_and_freeze(self) -> PreregisteredAnalysisPlan:
         if self.status in {"approved", "frozen"} and not self.approval_ref:
             raise ValueError("approved or frozen analysis plans require approval_ref")
         if self.status == "frozen" and self.frozen_at is None:

@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from abc import ABC
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import ClassVar
 
-from .contracts import AgentCapability, AgentInput, AgentResult
-
+from .contracts import AgentCapability, AgentInput, AgentResult, ToolRequest
 
 FORBIDDEN_AGENT_ACTIONS: tuple[str, ...] = (
     "new_current_stage",
@@ -87,11 +86,18 @@ class BaseAgent(ABC):
             agent_id=self.agent_id,
             agent_version=self.agent_version,
             candidate_artifact_refs=refs,
-            tool_requests=[f"request://{tool}" for tool in permitted_tools],
+            tool_requests=[
+                ToolRequest(
+                    request_id=f"{agent_input.agent_run_id}:tool:{index}",
+                    capability=tool,
+                    reason=f"Agent {self.agent_id} requests the {tool} capability.",
+                )
+                for index, tool in enumerate(permitted_tools)
+            ],
             approval_requests=[],
             risk_flags=risk_flags,
             unresolved_questions=unresolved_questions,
             recommendations=recommendations,
             confidence=0.5 if refs else 0.0,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )

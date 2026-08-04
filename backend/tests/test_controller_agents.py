@@ -1,6 +1,6 @@
 """Controller integration tests for the first Agent vertical slice."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -77,7 +77,7 @@ def test_result_merger_rejects_output_outside_registered_capability() -> None:
         agent_id="mentor_planning",
         agent_version="phase1-scaffold",
         candidate_artifact_refs=["candidate://mentor_planning/task/NotAllowed"],
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     with pytest.raises(ValueError, match="outside capability"):

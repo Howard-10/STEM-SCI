@@ -1,10 +1,29 @@
-"""Reserved Phase 1 invariant tests for dataset-version safety."""
+from datetime import UTC, datetime
 
 import pytest
 
-pytestmark = pytest.mark.skip(reason="Phase 1 model not implemented yet")
+from stem_sci.research_data import FrozenDatasetRef, ProcessedDatasetRef, RawDatasetRef
 
 
-def test_dataset_invariant_placeholder() -> None:
-    """Reserved until Phase 1 data contracts are implemented."""
-    raise AssertionError("The module-level skip should prevent execution.")
+def test_dataset_versions_are_positive_and_frozen_requires_source() -> None:
+    raw = RawDatasetRef(
+        dataset_id="raw-1", project_id="dataset-demo", version=1,
+        content_uri="dataset://raw-1/1", sha256="a" * 64, created_at=datetime.now(UTC)
+    )
+    processed = ProcessedDatasetRef(
+        dataset_id="processed-1", project_id="dataset-demo", version=1,
+        content_uri="dataset://processed-1/1", sha256="b" * 64,
+        created_at=datetime.now(UTC), source_dataset_ref=raw.ref
+    )
+    frozen = FrozenDatasetRef(
+        dataset_id="frozen-1", project_id="dataset-demo", version=1,
+        content_uri="dataset://frozen-1/1", sha256="c" * 64,
+        created_at=datetime.now(UTC), source_dataset_ref=processed.ref,
+        freeze_approval_ref="approval-1", frozen_at=datetime.now(UTC)
+    )
+    assert frozen.source_dataset_ref == processed.ref
+    with pytest.raises(ValueError):
+        RawDatasetRef(
+            dataset_id="invalid", project_id="dataset-demo", version=0,
+            content_uri="dataset://invalid/0", sha256="d" * 64, created_at=datetime.now(UTC)
+        )

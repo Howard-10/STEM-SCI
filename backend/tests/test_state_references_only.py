@@ -1,10 +1,11 @@
-"""Reserved Phase 1 invariant tests for reference-only state storage."""
-
 import pytest
+from pydantic import ValidationError
 
-pytestmark = pytest.mark.skip(reason="Phase 1 model not implemented yet")
+from stem_sci.core.state import ResearchState
 
 
-def test_reference_only_state_invariant_placeholder() -> None:
-    """Reserved until the Phase 1 state model is approved and implemented."""
-    raise AssertionError("The module-level skip should prevent execution.")
+def test_research_state_contains_references_not_large_payloads() -> None:
+    state = ResearchState(project_id="reference-demo", evidence_refs=["evidence://1"])
+    assert state.evidence_refs == ["evidence://1"]
+    with pytest.raises(ValidationError):
+        ResearchState(project_id="reference-demo", full_pdf="not allowed")

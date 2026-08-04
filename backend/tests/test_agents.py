@@ -1,6 +1,6 @@
 """Contract and permission tests for the six Phase 1 agent boundaries."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -14,10 +14,10 @@ from stem_sci.agents import (
     MentorPlanningAgent,
     PaperWritingAgent,
     ResearchDesignAgent,
+    ToolRequest,
 )
 from stem_sci.core.claims import AtomicClaim, ClaimType
 from stem_sci.research_protocol import PreregisteredAnalysisPlan
-
 
 AGENT_TYPES = (
     MentorPlanningAgent,
@@ -73,7 +73,7 @@ def test_agent_result_rejects_governance_fields() -> None:
         "unresolved_questions": [],
         "recommendations": [],
         "confidence": 0.5,
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
         "new_current_stage": "RELEASED",
     }
 
@@ -102,6 +102,26 @@ def test_agent_respects_controller_output_allow_list() -> None:
     assert "OUTPUT_CAPABILITY_NOT_GRANTED" in result.risk_flags
 
 
+def test_tool_request_is_structured_and_agent_result_rejects_uri_strings() -> None:
+    request = ToolRequest(
+        request_id="tool-1",
+        capability="literature_search",
+        input_refs=["artifact://scope/1"],
+        required_output_types=["EvidenceSet"],
+        reason="Need project-scoped evidence.",
+    )
+
+    assert request.capability == "literature_search"
+    with pytest.raises(ValidationError):
+        AgentResult(
+            agent_run_id="run-structured",
+            agent_id="mentor_planning",
+            agent_version="phase1-scaffold",
+            tool_requests=["request://literature_search"],  # type: ignore[list-item]
+            created_at=datetime.now(UTC),
+        )
+
+
 def test_preregistered_plan_requires_approval_before_freeze() -> None:
     """The plan model distinguishes a candidate from an approved frozen plan."""
     common = {
@@ -117,13 +137,13 @@ def test_preregistered_plan_requires_approval_before_freeze() -> None:
 
     assert PreregisteredAnalysisPlan(**common).status == "candidate"
     with pytest.raises(ValidationError):
-        PreregisteredAnalysisPlan(**common, status="frozen", frozen_at=datetime.now(timezone.utc))
+        PreregisteredAnalysisPlan(**common, status="frozen", frozen_at=datetime.now(UTC))
 
     frozen = PreregisteredAnalysisPlan(
         **common,
         status="frozen",
         approval_ref="approval-1",
-        frozen_at=datetime.now(timezone.utc),
+        frozen_at=datetime.now(UTC),
     )
     assert frozen.status == "frozen"
 

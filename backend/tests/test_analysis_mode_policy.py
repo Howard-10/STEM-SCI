@@ -1,10 +1,12 @@
-"""Reserved Phase 1 invariant tests for analysis execution modes."""
-
 import pytest
+from pydantic import ValidationError
 
-pytestmark = pytest.mark.skip(reason="Phase 1 model not implemented yet")
+from stem_sci.statistics.mode_policy import AnalysisMode, AnalysisModePolicy
 
 
-def test_analysis_mode_policy_placeholder() -> None:
-    """Reserved until Phase 1 analysis-mode contracts are implemented."""
-    raise AssertionError("The module-level skip should prevent execution.")
+def test_analysis_mode_policy_requires_python_for_dual_mode() -> None:
+    policy = AnalysisModePolicy(mode=AnalysisMode.PYTHON_ONLY, python_required=True)
+    assert policy.mode is AnalysisMode.PYTHON_ONLY
+
+    with pytest.raises(ValidationError):
+        AnalysisModePolicy(mode=AnalysisMode.PYTHON_ONLY, python_required=False)
