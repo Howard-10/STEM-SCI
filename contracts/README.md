@@ -1,5 +1,5 @@
 # Contracts
 
-`openapi/` is reserved for versioned HTTP API specifications. `schemas/` is reserved for shared, versioned data-contract schemas.
+`openapi/` contains the exported FastAPI contract for both the Context MVP and the Controller workflow API. `schemas/` is reserved for shared, versioned data-contract schemas.
 
-No API or schema contract has been defined in Phase 1.
+The OpenAPI file is generated with `backend/scripts/export_openapi.py` after backend API changes. It is a transport contract; internal Pydantic domain models remain under `backend/src/stem_sci/`.

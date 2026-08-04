@@ -2,7 +2,7 @@
 
 STEM-SCI is a traceable research-agent system for STEM programming education experiments within education research. The repository uses a frontend/backend Monorepo layout.
 
-Current status: Phase 0 passed; Phase 1 includes a local, project-scoped Context MVP. This repository intentionally contains no production agent, statistical, sandbox, GraphRAG, or external-provider implementation yet.
+Current status: the Phase 1 six-Agent workflow framework is implemented. It includes Controller routing, approval gates, REWORK and review-finding feedback, project-scoped Context MVP integration, structured Operator requests, SQLite audit persistence, and a React workflow workspace. Agent internals and real external providers remain intentionally unimplemented.
 
 ## Context MVP local development
 
@@ -16,5 +16,11 @@ The Context MVP accepts Markdown, TXT, JSON, and text-extractable PDF files unde
 - `docs/`: project architecture, decisions, tracks, and authoritative planning materials.
 - `data/`: local demo-data boundary; formal research data must not be committed.
 - `infra/`: reserved Docker and Compose infrastructure configuration.
+
+## Workflow framework
+
+The workflow entry point is the Controller-backed API. The six role boundaries live under `backend/src/stem_sci/agents/`; routing, approval, and REWORK policy live under `backend/src/stem_sci/controller/`. Candidate artifacts, Agent runs, route decisions, approvals, and Operator runs are stored as project-scoped references. A rejected approval or structured `ReviewFinding` returns the project to a mapped Agent without allowing an Agent to mutate workflow state directly.
+
+Run the backend checks from `backend/` with `python -m pytest -q`, `python -m ruff check src tests`, and `python -m mypy src`. Run the frontend checks from `frontend/` with `npm.cmd run typecheck` and `npm.cmd run build`.
 
 The root-level planning materials are retained as project references and are not application source code.

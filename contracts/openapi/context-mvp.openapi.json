@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "STEM-SCI Context MVP",
-    "version": "0.1.1"
+    "title": "STEM-SCI Research Workflow Platform",
+    "version": "0.2.0"
   },
   "paths": {
     "/api/v1/health": {
@@ -20,6 +20,437 @@
                   },
                   "type": "object",
                   "title": "Response Health Api V1 Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/projects": {
+      "post": {
+        "summary": "Create Workflow Project",
+        "description": "Create a project and run the first planning slice.",
+        "operationId": "create_workflow_project_api_v1_workflow_projects_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningRunResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/projects/{project_id}": {
+      "get": {
+        "summary": "Workflow Project",
+        "operationId": "workflow_project_api_v1_workflow_projects__project_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControllerWorkflowState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/projects/{project_id}/next": {
+      "post": {
+        "summary": "Workflow Next",
+        "operationId": "workflow_next_api_v1_workflow_projects__project_id__next_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRunResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/projects/{project_id}/approve": {
+      "post": {
+        "summary": "Workflow Approve",
+        "operationId": "workflow_approve_api_v1_workflow_projects__project_id__approve_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowApprovalInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/agents": {
+      "get": {
+        "summary": "Workflow Agents",
+        "operationId": "workflow_agents_api_v1_workflow_agents_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentCapability"
+                  },
+                  "type": "array",
+                  "title": "Response Workflow Agents Api V1 Workflow Agents Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/operators": {
+      "get": {
+        "summary": "Workflow Operators",
+        "operationId": "workflow_operators_api_v1_workflow_operators_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorSpec"
+                  },
+                  "type": "array",
+                  "title": "Response Workflow Operators Api V1 Workflow Operators Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/projects/{project_id}/executions": {
+      "get": {
+        "summary": "Workflow Executions",
+        "operationId": "workflow_executions_api_v1_workflow_projects__project_id__executions_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OperatorRun"
+                  },
+                  "title": "Response Workflow Executions Api V1 Workflow Projects  Project Id  Executions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/projects/{project_id}/artifacts": {
+      "get": {
+        "summary": "Workflow Artifacts",
+        "operationId": "workflow_artifacts_api_v1_workflow_projects__project_id__artifacts_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArtifactRef"
+                  },
+                  "title": "Response Workflow Artifacts Api V1 Workflow Projects  Project Id  Artifacts Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/projects/{project_id}/agent-runs": {
+      "get": {
+        "summary": "Workflow Agent Runs",
+        "operationId": "workflow_agent_runs_api_v1_workflow_projects__project_id__agent_runs_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentRunRecord"
+                  },
+                  "title": "Response Workflow Agent Runs Api V1 Workflow Projects  Project Id  Agent Runs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/projects/{project_id}/routes": {
+      "get": {
+        "summary": "Workflow Routes",
+        "operationId": "workflow_routes_api_v1_workflow_projects__project_id__routes_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RouteDecision"
+                  },
+                  "title": "Response Workflow Routes Api V1 Workflow Projects  Project Id  Routes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/projects/{project_id}/review-findings": {
+      "post": {
+        "summary": "Workflow Review Finding",
+        "operationId": "workflow_review_finding_api_v1_workflow_projects__project_id__review_findings_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewFinding"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -473,6 +904,362 @@
   },
   "components": {
     "schemas": {
+      "AgentCapability": {
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent Id"
+          },
+          "supported_task_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Supported Task Types"
+          },
+          "allowed_tool_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Tool Capabilities"
+          },
+          "allowed_output_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Allowed Output Types"
+          },
+          "forbidden_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Forbidden Actions"
+          },
+          "read_only_global_state": {
+            "type": "boolean",
+            "title": "Read Only Global State",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "agent_id"
+        ],
+        "title": "AgentCapability",
+        "description": "Machine-readable role boundary advertised to the Controller."
+      },
+      "AgentResult": {
+        "properties": {
+          "agent_run_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent Run Id"
+          },
+          "agent_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent Id"
+          },
+          "agent_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent Version"
+          },
+          "candidate_artifact_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Candidate Artifact Refs"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "tool_requests": {
+            "items": {
+              "$ref": "#/components/schemas/ToolRequest"
+            },
+            "type": "array",
+            "title": "Tool Requests"
+          },
+          "approval_requests": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Approval Requests"
+          },
+          "risk_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Flags"
+          },
+          "unresolved_questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unresolved Questions"
+          },
+          "recommendations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recommendations"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "agent_run_id",
+          "agent_id",
+          "agent_version",
+          "created_at"
+        ],
+        "title": "AgentResult",
+        "description": "Candidate outputs from an agent; governance fields are intentionally absent."
+      },
+      "AgentRunRecord": {
+        "properties": {
+          "agent_run_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent Run Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "agent_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent Id"
+          },
+          "agent_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent Version"
+          },
+          "prompt_template_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Prompt Template Version"
+          },
+          "input_artifact_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Input Artifact Refs"
+          },
+          "output_artifact_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Output Artifact Refs"
+          },
+          "tool_run_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tool Run Refs"
+          },
+          "reviewer_feedback_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reviewer Feedback Refs"
+          },
+          "route_decision_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Decision Ref"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "agent_run_id",
+          "project_id",
+          "agent_id",
+          "agent_version",
+          "prompt_template_version",
+          "started_at"
+        ],
+        "title": "AgentRunRecord"
+      },
+      "ApprovalRequest": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Request Id"
+          },
+          "artifact_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Artifact Ref"
+          },
+          "approval_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Approval Type"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reason"
+          },
+          "risk_summary": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Risk Summary"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "artifact_ref",
+          "approval_type",
+          "reason",
+          "risk_summary"
+        ],
+        "title": "ApprovalRequest",
+        "description": "A request that the Controller route to a human approval node."
+      },
+      "ArtifactRef": {
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Artifact Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Artifact Type"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "content_uri": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content Uri"
+          },
+          "sha256": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Sha256"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_by": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Created By"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "CANDIDATE"
+          },
+          "supersedes_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Ref"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "artifact_id",
+          "project_id",
+          "artifact_type",
+          "version",
+          "content_uri",
+          "sha256",
+          "created_at",
+          "created_by"
+        ],
+        "title": "ArtifactRef",
+        "description": "A pointer to a versioned artifact; content stays outside ResearchState."
+      },
       "Body_import_source_api_v1_sources_import_post": {
         "properties": {
           "project_id": {
@@ -645,6 +1432,79 @@
           "generated_at"
         ],
         "title": "ContextBundle"
+      },
+      "ControllerWorkflowState": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "current_stage": {
+            "$ref": "#/components/schemas/ProjectStage",
+            "default": "INTAKE"
+          },
+          "pending_approval_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Approval Ref"
+          },
+          "last_agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Agent Run Id"
+          },
+          "last_route_decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RouteDecision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "research_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id"
+        ],
+        "title": "ControllerWorkflowState",
+        "description": "Reference-only state owned and changed by the Controller."
+      },
+      "DecisionScope": {
+        "type": "string",
+        "enum": [
+          "RUN",
+          "ARTIFACT",
+          "TASK",
+          "STAGE",
+          "PROJECT"
+        ],
+        "title": "DecisionScope"
       },
       "EvidenceDetail": {
         "properties": {
@@ -875,6 +1735,619 @@
         ],
         "title": "MemoryRef"
       },
+      "OperatorRun": {
+        "properties": {
+          "operator_run_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Operator Run Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "operator_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Operator Id"
+          },
+          "operator_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Operator Version"
+          },
+          "request_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Request Ref"
+          },
+          "input_artifact_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Input Artifact Refs"
+          },
+          "output_artifact_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Output Artifact Refs"
+          },
+          "environment_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Ref"
+          },
+          "log_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Ref"
+          },
+          "error_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Ref"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus",
+            "default": "PENDING"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "operator_run_id",
+          "project_id",
+          "operator_id",
+          "operator_version",
+          "request_ref"
+        ],
+        "title": "OperatorRun"
+      },
+      "OperatorSpec": {
+        "properties": {
+          "operator_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Operator Id"
+          },
+          "operator_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Operator Version"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Display Name"
+          },
+          "capability": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Capability"
+          },
+          "input_schema_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Input Schema Ref"
+          },
+          "output_schema_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Output Schema Ref"
+          },
+          "required_permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Permissions"
+          },
+          "supported_artifact_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Supported Artifact Types"
+          },
+          "estimated_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost"
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Timeout Seconds"
+          },
+          "retry_policy": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Retry Policy"
+          },
+          "health_check_required": {
+            "type": "boolean",
+            "title": "Health Check Required",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "operator_id",
+          "operator_version",
+          "display_name",
+          "capability",
+          "input_schema_ref",
+          "output_schema_ref",
+          "timeout_seconds"
+        ],
+        "title": "OperatorSpec"
+      },
+      "PlanningRunResult": {
+        "properties": {
+          "workflow_state": {
+            "$ref": "#/components/schemas/ControllerWorkflowState"
+          },
+          "agent_result": {
+            "$ref": "#/components/schemas/AgentResult"
+          },
+          "approval_request": {
+            "$ref": "#/components/schemas/ApprovalRequest"
+          },
+          "route_decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RouteDecision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workflow_state",
+          "agent_result",
+          "approval_request"
+        ],
+        "title": "PlanningRunResult",
+        "description": "Result of the planning slice, paused at human approval."
+      },
+      "ProjectStage": {
+        "type": "string",
+        "enum": [
+          "INTAKE",
+          "SCOPED",
+          "SEARCH_PROTOCOL_APPROVED",
+          "EVIDENCE_READY",
+          "RESEARCH_QUESTION_APPROVED",
+          "STUDY_PROTOCOL_APPROVED",
+          "DATA_READY",
+          "ANALYZED",
+          "DRAFTED",
+          "VERIFIED",
+          "RELEASED",
+          "REWORK",
+          "BLOCKED",
+          "WAITING_HUMAN",
+          "FAILED"
+        ],
+        "title": "ProjectStage"
+      },
+      "ResearchState": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "current_stage": {
+            "$ref": "#/components/schemas/ProjectStage",
+            "default": "INTAKE"
+          },
+          "rework_target_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rework Target Agent"
+          },
+          "rework_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rework Reason"
+          },
+          "rework_trigger_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Rework Trigger Refs"
+          },
+          "task_status": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TaskStatus"
+            },
+            "type": "object",
+            "title": "Task Status"
+          },
+          "task_ledger": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Task Ledger"
+          },
+          "progress_ledger": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Progress Ledger"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "context_bundle_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Context Bundle Refs"
+          },
+          "artifact_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Artifact Refs"
+          },
+          "data_asset_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Data Asset Refs"
+          },
+          "execution_run_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Execution Run Refs"
+          },
+          "protocol_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Protocol Refs"
+          },
+          "research_test_result_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Research Test Result Refs"
+          },
+          "risk_profile_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Profile Refs"
+          },
+          "route_decision_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Route Decision Refs"
+          },
+          "agent_run_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Agent Run Refs"
+          },
+          "approval_request_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Approval Request Refs"
+          },
+          "budget_state_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget State Ref"
+          },
+          "recent_rounds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recent Rounds"
+          },
+          "short_memory_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Memory Summary"
+          },
+          "long_memory_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Long Memory Refs"
+          },
+          "risk_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Flags"
+          },
+          "unresolved_questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unresolved Questions"
+          },
+          "error_log": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Error Log"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id"
+        ],
+        "title": "ResearchState",
+        "description": "Small project ledger; large payloads must remain in stores."
+      },
+      "ReviewFinding": {
+        "properties": {
+          "finding_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Finding Id"
+          },
+          "reviewer_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reviewer Type"
+          },
+          "artifact_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Artifact Ref"
+          },
+          "severity": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Severity"
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Category"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Description"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "suggested_action": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Suggested Action"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "finding_id",
+          "reviewer_type",
+          "artifact_ref",
+          "severity",
+          "category",
+          "description",
+          "suggested_action"
+        ],
+        "title": "ReviewFinding",
+        "description": "One independent-review finding; it never mutates the reviewed artifact."
+      },
+      "RouteDecision": {
+        "properties": {
+          "decision_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Decision Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "current_stage": {
+            "$ref": "#/components/schemas/ProjectStage"
+          },
+          "selected_route": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Selected Route"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reason"
+          },
+          "required_context": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Context"
+          },
+          "required_tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Tools"
+          },
+          "decision_scope": {
+            "$ref": "#/components/schemas/DecisionScope"
+          },
+          "risk_level": {
+            "type": "string",
+            "title": "Risk Level",
+            "default": "LOW"
+          },
+          "triggered_rules": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Triggered Rules"
+          },
+          "final_decider": {
+            "type": "string",
+            "title": "Final Decider",
+            "default": "controller"
+          },
+          "policy_version": {
+            "type": "string",
+            "title": "Policy Version",
+            "default": "controller-policy-v1"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision_id",
+          "project_id",
+          "current_stage",
+          "selected_route",
+          "reason",
+          "decision_scope",
+          "created_at"
+        ],
+        "title": "RouteDecision"
+      },
+      "RunStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "RUNNING",
+          "SUCCEEDED",
+          "FAILED",
+          "TERMINATED",
+          "BLOCKED"
+        ],
+        "title": "RunStatus"
+      },
       "SourceChunk": {
         "properties": {
           "chunk_id": {
@@ -992,6 +2465,63 @@
         ],
         "title": "SourceLocation"
       },
+      "TaskStatus": {
+        "type": "string",
+        "enum": [
+          "DRAFT",
+          "READY",
+          "RUNNING",
+          "REVIEW",
+          "DONE",
+          "REWORK",
+          "BLOCKED",
+          "WAITING_HUMAN",
+          "FAILED"
+        ],
+        "title": "TaskStatus"
+      },
+      "ToolRequest": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Request Id"
+          },
+          "capability": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Capability"
+          },
+          "input_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Input Refs"
+          },
+          "required_output_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Output Types"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "capability",
+          "reason"
+        ],
+        "title": "ToolRequest",
+        "description": "A request for a deterministic operator; it is not an execution command."
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -1041,6 +2571,90 @@
           "human_verified"
         ],
         "title": "VerificationStatus"
+      },
+      "WorkflowApprovalInput": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Decision"
+          },
+          "decided_by": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Decided By"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision",
+          "decided_by"
+        ],
+        "title": "WorkflowApprovalInput"
+      },
+      "WorkflowProjectRequest": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "research_intent": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Research Intent"
+          },
+          "context_bundle_ref": {
+            "type": "string",
+            "title": "Context Bundle Ref",
+            "default": "context://initial"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "research_intent"
+        ],
+        "title": "WorkflowProjectRequest"
+      },
+      "WorkflowRunResult": {
+        "properties": {
+          "workflow_state": {
+            "$ref": "#/components/schemas/ControllerWorkflowState"
+          },
+          "agent_result": {
+            "$ref": "#/components/schemas/AgentResult"
+          },
+          "approval_request": {
+            "$ref": "#/components/schemas/ApprovalRequest"
+          },
+          "route_decision": {
+            "$ref": "#/components/schemas/RouteDecision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workflow_state",
+          "agent_result",
+          "approval_request",
+          "route_decision"
+        ],
+        "title": "WorkflowRunResult",
+        "description": "A routed Agent run and the approval required before progression."
       }
     }
   }
