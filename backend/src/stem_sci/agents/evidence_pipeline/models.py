@@ -59,7 +59,7 @@ class ScreeningDecision(EvidenceModel):
     decision: ScreeningStatus
     reason: str = Field(min_length=1)
     criteria_refs: list[str] = Field(default_factory=list)
-    evidence_refs: list[str] = Field(min_length=1)
+    evidence_refs: list[str] = Field(default_factory=list)
 
 
 class PaperCard(EvidenceModel):
@@ -147,3 +147,20 @@ class EvidenceReviewPackage(EvidenceModel):
     risk_flags: list[str] = Field(default_factory=list)
     unresolved_questions: list[str] = Field(default_factory=list)
     generation_metadata_refs: list[str] = Field(default_factory=list)
+
+
+class PaperCardBatch(EvidenceModel):
+    cards: list[PaperCard] = Field(default_factory=list)
+
+
+class EvidenceMatrixBatch(EvidenceModel):
+    rows: list[EvidenceMatrixRow] = Field(default_factory=list)
+
+
+class ConflictGapResponse(EvidenceModel):
+    conflict_map: EvidenceConflictMap
+    gap_report: ResearchGapReport
+
+
+class SynthesisResponse(EvidenceModel):
+    synthesis: BoundedEvidenceSynthesis

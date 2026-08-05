@@ -16,6 +16,7 @@ from .models import (
     ScreeningDecision,
     ScreeningStatus,
 )
+from .pipeline import EvidenceReviewPipeline
 from .validators import validate_evidence_context
 
 __all__ = [
@@ -26,6 +27,7 @@ __all__ = [
     "EvidenceMatrixRow",
     "EvidenceReviewContext",
     "EvidenceReviewPackage",
+    "EvidenceReviewPipeline",
     "EvidenceSufficiencyReport",
     "PackageStatus",
     "PaperCard",

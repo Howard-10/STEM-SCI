@@ -1,9 +1,14 @@
 """Evidence-review Agent role boundary."""
 
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
 from stem_sci.context.models import ContextBundle
 
 from .base import BaseAgent
 from .contracts import AgentInput, AgentResult
+from .evidence_pipeline import EvidenceReviewContext, EvidenceReviewPackage, EvidenceReviewPipeline
 
 
 class EvidenceReviewAgent(BaseAgent):
@@ -24,10 +29,26 @@ class EvidenceReviewAgent(BaseAgent):
         "ResearchGapReport",
         "EvidenceSufficiencyReport",
         "LiteratureNeedUpdate",
+        "CorpusCoverageReport",
+        "ScreeningLedger",
+        "BoundedEvidenceSynthesis",
     )
+
+    def __init__(self, pipeline: EvidenceReviewPipeline | None = None) -> None:
+        self.pipeline = pipeline
 
     def run_with_context(self, agent_input: AgentInput, context: ContextBundle) -> AgentResult:
         """Create evidence candidates while preserving source references from Context MVP."""
+        if self.pipeline is not None:
+            pipeline_context = EvidenceReviewContext(
+                project_id=context.project_id,
+                context_bundle_ref=context.context_id,
+                research_scope=context.query,
+                evidence_refs=context.evidence_refs,
+                source_refs=context.source_refs,
+                context_hash=context.context_hash,
+            )
+            return self.run_pipeline(agent_input, pipeline_context)
         result = self.run(agent_input)
         risk_flags = list(result.risk_flags)
         unresolved_questions = [*result.unresolved_questions, *context.unresolved_questions]
@@ -44,3 +65,48 @@ class EvidenceReviewAgent(BaseAgent):
                 ],
             }
         )
+
+    def run_pipeline(
+        self, agent_input: AgentInput, context: EvidenceReviewContext
+    ) -> AgentResult:
+        if self.pipeline is None:
+            raise ValueError("evidence review pipeline is not configured")
+        package = self.pipeline.run(context, agent_input)
+        candidate_types = self._candidate_types(package)
+        allowed = set(agent_input.allowed_output_types)
+        refs = [
+            f"candidate://{self.agent_id}/{agent_input.task_ref}/{output_type}"
+            for output_type in candidate_types
+            if output_type in allowed
+        ]
+        return AgentResult(
+            agent_run_id=agent_input.agent_run_id,
+            agent_id=self.agent_id,
+            agent_version=self.agent_version,
+            candidate_artifact_refs=refs,
+            evidence_refs=package.used_evidence_refs,
+            risk_flags=package.risk_flags,
+            unresolved_questions=package.unresolved_questions,
+            recommendations=[
+                "Controller must validate the bounded evidence package before progression."
+            ],
+            confidence=1.0 if package.status.value == "READY" else 0.0,
+            created_at=datetime.now(UTC),
+        )
+
+    @staticmethod
+    def _candidate_types(package: EvidenceReviewPackage) -> list[str]:
+        output_types = ["CorpusCoverageReport", "EvidenceSufficiencyReport"]
+        if package.screening_decisions:
+            output_types.append("ScreeningLedger")
+        if package.paper_cards:
+            output_types.append("PaperCardCollection")
+        if package.evidence_matrix:
+            output_types.append("EvidenceMatrixCandidate")
+        if package.conflict_map is not None:
+            output_types.append("EvidenceConflictMap")
+        if package.research_gap_report is not None:
+            output_types.append("ResearchGapReport")
+        if package.synthesis is not None:
+            output_types.append("BoundedEvidenceSynthesis")
+        return output_types
