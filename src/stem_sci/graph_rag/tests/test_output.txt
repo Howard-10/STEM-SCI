@@ -1,0 +1,37 @@
+test_missing_chunk_id_causes_failure (graph_rag.tests.test_runner.TestBatchProvenance.test_missing_chunk_id_causes_failure) ... ok
+test_same_triple_merged (graph_rag.tests.test_runner.TestDedup.test_same_triple_merged) ... ok
+test_sources_sorted (graph_rag.tests.test_runner.TestDedup.test_sources_sorted) ... ok
+test_empty_paper_id_noop (graph_rag.tests.test_runner.TestNormalizePaperRelations.test_empty_paper_id_noop) ... ok
+test_non_paper_relation_unchanged (graph_rag.tests.test_runner.TestNormalizePaperRelations.test_non_paper_relation_unchanged) ... ok
+test_self_loop_converted_to_paper_edge (graph_rag.tests.test_runner.TestNormalizePaperRelations.test_self_loop_converted_to_paper_edge) ... ok
+test_batch_vs_single_call_count (graph_rag.tests.test_runner.TestPerformanceMock.test_batch_vs_single_call_count) ... ok
+test_batch_prompt_includes_paper_id (graph_rag.tests.test_runner.TestPromptTemplates.test_batch_prompt_includes_paper_id) ... ok
+test_profile_prompt_is_metadata_only (graph_rag.tests.test_runner.TestPromptTemplates.test_profile_prompt_is_metadata_only) ... ok
+test_first_success_has_retry_zero (graph_rag.tests.test_runner.TestRetryCount.test_first_success_has_retry_zero) ... ok
+test_one_retry_then_success (graph_rag.tests.test_runner.TestRetryCount.test_one_retry_then_success) ... ok
+test_claims_capped_at_5 (graph_rag.tests.test_runner.TestSparseProfile.test_claims_capped_at_5) ... ok
+test_profile_cache_hit (graph_rag.tests.test_runner.TestSparseProfile.test_profile_cache_hit) ... C:\Users\25946\AppData\Local\Programs\Python\Python313\Lib\unittest\mock.py:2245: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x000001ECDED32D40>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_profile_caps_max_triples (graph_rag.tests.test_runner.TestSparseProfile.test_profile_caps_max_triples) ... ok
+test_profile_requires_paper_id (graph_rag.tests.test_runner.TestSparseProfile.test_profile_requires_paper_id) ... ok
+test_profile_returns_profil_mode (graph_rag.tests.test_runner.TestSparseProfile.test_profile_returns_profil_mode) ... ok
+test_related_to_capped_at_2 (graph_rag.tests.test_runner.TestSparseProfile.test_related_to_capped_at_2) ... ok
+test_accepts_paper_relation_with_correct_head (graph_rag.tests.test_runner.TestValidation.test_accepts_paper_relation_with_correct_head) ... ok
+test_accepts_valid_cross_entity_relation (graph_rag.tests.test_runner.TestValidation.test_accepts_valid_cross_entity_relation) ... ok
+test_rejects_bad_confidence (graph_rag.tests.test_runner.TestValidation.test_rejects_bad_confidence) ... ok
+test_rejects_empty_evidence (graph_rag.tests.test_runner.TestValidation.test_rejects_empty_evidence) ... ok
+test_rejects_invalid_type (graph_rag.tests.test_runner.TestValidation.test_rejects_invalid_type) ... ok
+test_rejects_long_entity (graph_rag.tests.test_runner.TestValidation.test_rejects_long_entity) ... ok
+test_rejects_many_word_entity (graph_rag.tests.test_runner.TestValidation.test_rejects_many_word_entity) ... ok
+test_rejects_paper_relation_without_paper_head (graph_rag.tests.test_runner.TestValidation.test_rejects_paper_relation_without_paper_head) ... ok
+test_rejects_self_loop (graph_rag.tests.test_runner.TestValidation.test_rejects_self_loop) ... ok
+test_rejects_sentence_as_entity (graph_rag.tests.test_runner.TestValidation.test_rejects_sentence_as_entity) ... ok
+test_sentence_head_rejected (graph_rag.tests.test_runner.TestValidation.test_sentence_head_rejected) ... ok
+test_statistical_value_as_effect_size (graph_rag.tests.test_runner.TestValidation.test_statistical_value_as_effect_size) ... ok
+
+----------------------------------------------------------------------
+Ran 29 tests in 0.085s
+
+OK
