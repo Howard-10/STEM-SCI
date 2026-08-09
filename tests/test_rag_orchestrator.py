@@ -4,16 +4,16 @@ import os
 import sys
 from pathlib import Path
 
-# 确保项目路径
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# 确保项目路径（rag_orchestrator 已移至 STEM-SCI-repo/src/stem_sci/）
+sys.path.insert(0, str(Path(__file__).resolve().parent / "STEM-SCI-repo" / "src" / "stem_sci"))
 
-# 设置环境变量
-os.environ["LLM_API_KEY"] = "sk-your-api-key-here"
-os.environ["LLM_BASE_URL"] = "https://api.deepseek.com"
-os.environ["LLM_MODEL"] = "deepseek-chat"
-os.environ["NEO4J_URI"] = "bolt://localhost:7688"
-os.environ["NEO4J_USERNAME"] = "neo4j"
-os.environ["NEO4J_PASSWORD"] = "12345678"
+# 设置环境变量（优先使用外部环境变量，未设置时用默认值）
+os.environ.setdefault("LLM_API_KEY", "sk-your-api-key-here")
+os.environ.setdefault("LLM_BASE_URL", "https://api.deepseek.com")
+os.environ.setdefault("LLM_MODEL", "deepseek-chat")
+os.environ.setdefault("NEO4J_URI", "bolt://localhost:7688")
+os.environ.setdefault("NEO4J_USERNAME", "neo4j")
+os.environ.setdefault("NEO4J_PASSWORD", "12345678")
 
 # 设置 stdout 为 utf-8 避免 GBK 编码错误
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")

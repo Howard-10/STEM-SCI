@@ -21,22 +21,15 @@ from typing import Optional
 # 路径配置 —— 找到 vector_kb 和 graph_rag 模块
 # ===========================================================================
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent  # 揭榜挂帅比赛/
+_SELF_DIR = Path(__file__).resolve().parent  # rag_orchestrator/
+_STEM_SCI_DIR = _SELF_DIR.parent             # stem_sci/
 
-# vector_kb: 使用 importlib 加载（目录名含括号，避免 import 问题）
-_VECTOR_KB_QUERY_PATH = (
-    _PROJECT_ROOT / "vector_kb(1)" / "vector_kb" / "query.py"
-)
+# vector_kb: 使用 importlib 加载
+_VECTOR_KB_QUERY_PATH = _STEM_SCI_DIR / "vector_kb" / "query.py"
 
-# graph_rag: 尝试多个可能的路径
-_GRAPH_RAG_PATHS = [
-    _PROJECT_ROOT / "STEM-SCI-repo" / "src" / "stem_sci",   # 新版目录结构
-    _PROJECT_ROOT,                                           # 旧版: graph_rag/ 直接在项目根目录
-]
-for _p in _GRAPH_RAG_PATHS:
-    if str(_p) not in sys.path and _p.exists():
-        sys.path.insert(0, str(_p))
-        break
+# graph_rag: 在 stem_sci 目录下
+if str(_STEM_SCI_DIR) not in sys.path:
+    sys.path.insert(0, str(_STEM_SCI_DIR))
 
 
 _VECTOR_KB_DIR = _VECTOR_KB_QUERY_PATH.parent  # vector_kb/ 目录
