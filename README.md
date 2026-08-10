@@ -24,3 +24,7 @@ The workflow entry point is the Controller-backed API. The six role boundaries l
 Run the backend checks from `backend/` with `python -m pytest -q`, `python -m ruff check src tests`, and `python -m mypy src`. Run the frontend checks from `frontend/` with `npm.cmd run typecheck` and `npm.cmd run build`.
 
 The root-level planning materials are retained as project references and are not application source code.
+
+## Optional GPT runtime
+
+The evidence-review and paper-writing pipelines use a provider interface and default to offline `FakeLLMProvider` in CI. For a local GPT run, set `STEM_SCI_LLM_PROVIDER=gpt`, `STEM_SCI_LLM_BASE_URL`, `STEM_SCI_LLM_MODEL`, `STEM_SCI_LLM_TIMEOUT_SECONDS`, and `STEM_SCI_MAX_LLM_CALLS` from the root `.env.example`. Set `STEM_SCI_LLM_API_KEY` only in the local shell or an ignored `.env.local`; never commit it or place it in prompts, logs, or artifact bodies.
