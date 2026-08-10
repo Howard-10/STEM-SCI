@@ -323,6 +323,49 @@
         }
       }
     },
+    "/api/v1/workflow/projects/{project_id}/artifact-contents": {
+      "get": {
+        "summary": "Workflow Artifact Contents",
+        "operationId": "workflow_artifact_contents_api_v1_workflow_projects__project_id__artifact_contents_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArtifactContent"
+                  },
+                  "title": "Response Workflow Artifact Contents Api V1 Workflow Projects  Project Id  Artifact Contents Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/workflow/projects/{project_id}/agent-runs": {
       "get": {
         "summary": "Workflow Agent Runs",
@@ -984,6 +1027,13 @@
             "type": "array",
             "title": "Evidence Refs"
           },
+          "llm_metadata_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Llm Metadata Refs"
+          },
           "tool_requests": {
             "items": {
               "$ref": "#/components/schemas/ToolRequest"
@@ -1097,6 +1147,13 @@
             "type": "array",
             "title": "Tool Run Refs"
           },
+          "llm_metadata_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Llm Metadata Refs"
+          },
           "reviewer_feedback_refs": {
             "items": {
               "type": "string"
@@ -1184,6 +1241,72 @@
         ],
         "title": "ApprovalRequest",
         "description": "A request that the Controller route to a human approval node."
+      },
+      "ArtifactContent": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "artifact_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Artifact Id"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "artifact_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Artifact Type"
+          },
+          "schema_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Schema Version"
+          },
+          "body": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Body"
+          },
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Hash"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "artifact_id",
+          "version",
+          "artifact_type",
+          "schema_version",
+          "body"
+        ],
+        "title": "ArtifactContent",
+        "description": "A versioned JSON body stored behind an ``ArtifactRef``."
       },
       "ArtifactRef": {
         "properties": {
@@ -1281,6 +1404,42 @@
           "file"
         ],
         "title": "Body_import_source_api_v1_sources_import_post"
+      },
+      "CandidateArtifact": {
+        "properties": {
+          "candidate_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Candidate Ref"
+          },
+          "artifact_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Artifact Type"
+          },
+          "schema_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Schema Version"
+          },
+          "body": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Body"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "candidate_ref",
+          "artifact_type",
+          "schema_version",
+          "body"
+        ],
+        "title": "CandidateArtifact",
+        "description": "Transient structured content that only the Controller may persist."
       },
       "ContextBuildRequest": {
         "properties": {
@@ -1704,6 +1863,7 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "JsonValue": {},
       "MemoryRef": {
         "properties": {
           "memory_id": {

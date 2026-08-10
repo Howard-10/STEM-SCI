@@ -100,6 +100,25 @@ def test_controller_runs_approved_csv_pipeline_to_verified_result(tmp_path: Path
     assert controller.get_state(project_id).current_stage is ProjectStage.ANALYZED
 
 
+def test_verified_result_card_is_available_to_the_writing_context(tmp_path: Path) -> None:
+    """Writing RESULT claims receive only the Controller-built result-card reference."""
+
+    project_id = "controller-data-writing-context"
+    controller = _ready_controller(tmp_path, project_id)
+    _start_pipeline(controller, project_id)
+    source = write_synthetic_demo_seed(tmp_path / "demo.csv")
+    controller.register_data_pipeline_raw_csv(project_id, filename="demo.csv", content=source.read_bytes())
+    controller.decide_data_pipeline(project_id, decision="approved", decided_by="researcher")
+    controller.decide_data_pipeline(project_id, decision="approved", decided_by="researcher")
+    pipeline = controller.decide_data_pipeline(project_id, decision="approved", decided_by="researcher")
+
+    assert pipeline.statistical_result_card is not None
+    workflow_state = controller._workflow_states[project_id]
+    context = controller._build_writing_context(project_id, "draft_manuscript", workflow_state)
+
+    assert pipeline.statistical_result_card.ref in context.validated_result_cards
+
+
 def test_controller_blocks_tampered_frozen_dataset_before_execution(tmp_path: Path) -> None:
     project_id = "controller-data-tamper"
     controller = _ready_controller(tmp_path, project_id)

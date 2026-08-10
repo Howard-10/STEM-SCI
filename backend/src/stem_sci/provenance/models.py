@@ -18,6 +18,7 @@ class AgentRunRecord(DomainModel):
     input_artifact_refs: list[str] = Field(default_factory=list)
     output_artifact_refs: list[str] = Field(default_factory=list)
     tool_run_refs: list[str] = Field(default_factory=list)
+    llm_metadata_refs: list[str] = Field(default_factory=list)
     reviewer_feedback_refs: list[str] = Field(default_factory=list)
     route_decision_ref: str | None = None
     started_at: datetime

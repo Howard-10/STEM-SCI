@@ -13,3 +13,7 @@ The main boundaries are:
 - `stem_sci.context`: project-scoped evidence and ContextBundle assembly.
 - `stem_sci.operators`: structured ToolRequest dispatch and explicit unsupported runs.
 - `stem_sci.artifacts` and `stem_sci.provenance`: versioned audit and lineage stores.
+
+## GPT configuration
+
+Real GPT calls are opt-in. Configure `STEM_SCI_LLM_PROVIDER=gpt`, a GPT-compatible `STEM_SCI_LLM_BASE_URL`, `STEM_SCI_LLM_MODEL`, `STEM_SCI_LLM_TIMEOUT_SECONDS`, and the per-run `STEM_SCI_MAX_LLM_CALLS` budget. Keep `STEM_SCI_LLM_API_KEY` in the local environment only. Automated tests inject `FakeLLMProvider` and do not access the network.
