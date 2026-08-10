@@ -43,6 +43,8 @@ class PaperWritingPipeline:
         sufficiency = audit_writing_inputs(context)
         risks: list[str] = []
         metadata_refs: list[str] = []
+        if not context.validated_result_cards:
+            risks.append("INCOMPLETE_RESULT_INPUT")
 
         graph_stage = build_claim_graph(
             context, self.generator, self.prompt_registry, self.model

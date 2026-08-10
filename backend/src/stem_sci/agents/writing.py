@@ -81,3 +81,20 @@ class PaperWritingAgent(BaseAgent):
             confidence=1.0 if not package.risk_flags else 0.0,
             created_at=datetime.now(UTC),
         )
+
+    def run_with_context(
+        self, agent_input: AgentInput, context: WritingContextBundle
+    ) -> AgentResult:
+        """Run the writing pipeline for a Controller-created project context."""
+        if self.pipeline is None:
+            result = self.run(agent_input)
+            return result.model_copy(
+                update={
+                    "risk_flags": [*result.risk_flags, "WRITING_PIPELINE_NOT_CONFIGURED"],
+                    "unresolved_questions": [
+                        *result.unresolved_questions,
+                        "Configure the GPT writing pipeline before generating manuscript content.",
+                    ],
+                }
+            )
+        return self.run_pipeline(agent_input, context)

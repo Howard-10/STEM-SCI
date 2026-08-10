@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -24,6 +25,8 @@ from stem_sci.agents import (
 )
 from stem_sci.agents.base import BaseAgent
 from stem_sci.agents.contracts import ApprovalRequest, ReviewFinding
+from stem_sci.agents.evidence_pipeline import EvidenceMatrixRow, PaperCard
+from stem_sci.agents.writing_pipeline import LanguageCode, WritingContextBundle
 from stem_sci.artifacts.artifact_store import ArtifactStore, InMemoryArtifactStore
 from stem_sci.artifacts.content_store import (
     ArtifactContent,
@@ -127,7 +130,7 @@ class AgentDispatcher:
         self,
         agent_id: str,
         agent_input: AgentInput,
-        context_bundle: ContextBundle | None = None,
+        context_bundle: ContextBundle | WritingContextBundle | None = None,
     ) -> AgentResult:
         agent = self.registry.get(agent_id)
         run_with_context = getattr(agent, "run_with_context", None)
@@ -387,6 +390,135 @@ class ResearchController:
         if self.route_store is not None:
             self.route_store.put(route)
 
+    def _approved_output_refs(self, project_id: str) -> set[str]:
+        """Return candidate refs from Agent runs whose candidate was approved."""
+        approved_refs = {
+            decision.artifact_id
+            for decision in self.decision_store.list_project(project_id)
+            if decision.decision == "approved"
+        }
+        output_refs: set[str] = set()
+        for record in self.agent_run_store.list_project(project_id):
+            if approved_refs.intersection(record.output_artifact_refs):
+                output_refs.update(record.output_artifact_refs)
+        return output_refs
+
+    def _build_writing_context(
+        self,
+        project_id: str,
+        task_type: str,
+        state: ControllerWorkflowState,
+    ) -> WritingContextBundle:
+        """Assemble writing inputs from project-scoped Controller references."""
+        research_state = state.research_state
+        if research_state is None or research_state.project_id != project_id:
+            raise ValueError("writing route requires a project-scoped research state")
+
+        evidence_refs = []
+        context_bundle: ContextBundle | None = None
+        if self.context_provider is not None:
+            context_bundle = self.context_provider.build_context(
+                project_id=project_id,
+                task_ref=f"{project_id}:{task_type}",
+                query=self._project_intents.get(project_id, "writing context"),
+                token_budget=2_000,
+            )
+            if context_bundle.project_id != project_id:
+                raise ValueError("context provider returned a cross-project bundle")
+            allowed_evidence = set(research_state.evidence_refs)
+            evidence_refs = [
+                evidence
+                for evidence in context_bundle.evidence_refs
+                if evidence.project_id == project_id
+                and evidence.evidence_id in allowed_evidence
+            ]
+
+        approved_refs = self._approved_output_refs(project_id)
+        approved_types = {
+            ref.rsplit("/", maxsplit=1)[-1] for ref in approved_refs
+        }
+        paper_cards: list[PaperCard] = []
+        evidence_matrix: list[dict[str, object]] = []
+        for content in self.artifact_content_store.list_project(project_id):
+            if content.artifact_type not in approved_types:
+                continue
+            if content.artifact_type == "PaperCardCollection":
+                cards = content.body.get("cards")
+                if isinstance(cards, list):
+                    for card in cards:
+                        if isinstance(card, dict):
+                            try:
+                                parsed = PaperCard.model_validate(card)
+                            except ValueError:
+                                continue
+                            if parsed.project_id == project_id:
+                                paper_cards.append(parsed)
+            elif content.artifact_type == "EvidenceMatrixCandidate":
+                rows = content.body.get("rows")
+                if isinstance(rows, list):
+                    for row in rows:
+                        if isinstance(row, dict):
+                            try:
+                                parsed_row = EvidenceMatrixRow.model_validate(row)
+                            except ValueError:
+                                continue
+                            if parsed_row.project_id == project_id:
+                                evidence_matrix.append(parsed_row.model_dump(mode="json"))
+
+        approved_research_scope = self._project_intents.get(project_id, "writing context")
+        protocol_refs = list(research_state.protocol_refs)
+        result_refs = list(research_state.research_test_result_refs)
+        protocol_output_types = {
+            "StudyProtocolCandidate",
+            "PreregisteredAnalysisPlanDraft",
+        }
+        result_output_types = {
+            "StatisticalResultCardCandidate",
+            "ResultInterpretationBoundary",
+        }
+        protocol_refs.extend(
+            ref
+            for ref in sorted(approved_refs)
+            if ref.rsplit("/", maxsplit=1)[-1] in protocol_output_types
+            and ref not in protocol_refs
+        )
+        result_refs.extend(
+            ref
+            for ref in sorted(approved_refs)
+            if ref.rsplit("/", maxsplit=1)[-1] in result_output_types
+            and ref not in result_refs
+        )
+        payload: dict[str, object] = {
+            "project_id": project_id,
+            "approved_research_scope": approved_research_scope,
+            "evidence_refs": [item.model_dump(mode="json") for item in evidence_refs],
+            "paper_cards": [item.model_dump(mode="json") for item in paper_cards],
+            "evidence_matrix": evidence_matrix,
+            "approved_study_protocol_refs": protocol_refs,
+            "validated_result_cards": result_refs,
+            "interpretation_boundaries": list(research_state.risk_flags),
+            "prior_review_findings": list(research_state.rework_trigger_refs),
+            "output_language": "zh-CN",
+        }
+        context_hash = sha256(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        return WritingContextBundle(
+            project_id=project_id,
+            approved_research_scope=approved_research_scope,
+            evidence_refs=evidence_refs,
+            paper_cards=paper_cards,
+            evidence_matrix=evidence_matrix,
+            approved_study_protocol_refs=protocol_refs,
+            validated_result_cards=result_refs,
+            interpretation_boundaries=list(research_state.risk_flags),
+            prior_review_findings=list(research_state.rework_trigger_refs),
+            output_language=LanguageCode.ZH_CN,
+            context_hash=context_hash,
+        )
+
     def start_planning(self, request: PlanningRequest) -> PlanningRunResult:
         """Call only the planner and pause before any formal scope approval."""
         planner = self.dispatcher.registry.get("mentor_planning")
@@ -512,7 +644,8 @@ class ResearchController:
                 raise ValueError(f"no route is defined for stage {state.current_stage}") from exc
         agent = self.dispatcher.registry.get(agent_id)
         run_id = f"{agent_id}-{uuid4().hex}"
-        context_bundle: ContextBundle | None = None
+        context_bundle: ContextBundle | WritingContextBundle | None = None
+        writing_context: WritingContextBundle | None = None
         if agent_id == "evidence_review" and self.context_provider is not None:
             context_bundle = self.context_provider.build_context(
                 project_id=project_id,
@@ -520,6 +653,16 @@ class ResearchController:
                 query=self._project_intents.get(project_id, ""),
                 token_budget=2_000,
             )
+        elif agent_id == "paper_writing":
+            writing_context = self._build_writing_context(project_id, task_type, state)
+            context_bundle = writing_context
+        context_ref = (
+            f"writing-context://{project_id}/{writing_context.context_hash}"
+            if writing_context is not None
+            else context_bundle.context_id
+            if isinstance(context_bundle, ContextBundle)
+            else required_context
+        )
         route = RouteDecision(
             decision_id=f"route-{run_id}",
             project_id=project_id,
@@ -530,7 +673,7 @@ class ResearchController:
                 if state.current_stage is ProjectStage.REWORK
                 else f"Current stage requires {task_type}."
             ),
-            required_context=[context_bundle.context_id] if context_bundle else [required_context],
+            required_context=[context_ref],
             required_tools=list(agent.allowed_tool_capabilities),
             decision_scope=DecisionScope.TASK,
             triggered_rules=[
@@ -543,7 +686,7 @@ class ResearchController:
         agent_input = AgentInput(
             agent_run_id=run_id,
             task_ref=f"{project_id}:{task_type}",
-            context_bundle_ref=f"context://{project_id}/{state.current_stage.lower()}",
+            context_bundle_ref=context_ref,
             allowed_tool_capabilities=list(agent.allowed_tool_capabilities),
             allowed_output_types=list(agent.allowed_output_types),
             policy_version=route.policy_version,
@@ -570,7 +713,7 @@ class ResearchController:
             artifact_refs=result.candidate_artifact_refs,
             execution_run_refs=execution_refs,
             evidence_refs=result.evidence_refs,
-            context_bundle_refs=[context_bundle.context_id] if context_bundle else [],
+            context_bundle_refs=[context_ref] if context_bundle is not None else [],
             approval_request_refs=[approval.request_id],
             route_decision_refs=[route.decision_id],
             risk_flags=[*result.risk_flags, *operator_risk_flags],
@@ -649,10 +792,29 @@ class ResearchController:
                 "manuscript": ProjectStage.DRAFTED,
                 "review_report": ProjectStage.VERIFIED,
             }.get(approval_request.approval_type, ProjectStage.REWORK)
+        approved_protocol_refs: list[str] = []
+        validated_result_refs: list[str] = []
+        if decision == "approved":
+            approved_outputs = self._approved_output_refs(project_id)
+            if approval_request.approval_type == "study_protocol":
+                approved_protocol_refs = [
+                    ref
+                    for ref in sorted(approved_outputs)
+                    if ref.rsplit("/", maxsplit=1)[-1]
+                    in {"StudyProtocolCandidate", "PreregisteredAnalysisPlanDraft"}
+                ]
+            elif approval_request.approval_type in {"analysis_specification", "analysis_execution"}:
+                validated_result_refs = [
+                    ref
+                    for ref in sorted(approved_outputs)
+                    if ref.rsplit("/", maxsplit=1)[-1] == "StatisticalResultCardCandidate"
+                ]
         updated = merge_references(
             state,
             task_status={"approval": TaskStatus.DONE},
             progress_ledger=[f"approval {approval_request.request_id}: {decision}"],
+            protocol_refs=approved_protocol_refs,
+            research_test_result_refs=validated_result_refs,
         ).model_copy(
             update={
                 "current_stage": next_stage,
