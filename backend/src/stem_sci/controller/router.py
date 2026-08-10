@@ -25,8 +25,17 @@ from stem_sci.agents import (
 )
 from stem_sci.agents.base import BaseAgent
 from stem_sci.agents.contracts import ApprovalRequest, ReviewFinding
-from stem_sci.agents.evidence_pipeline import EvidenceMatrixRow, PaperCard
-from stem_sci.agents.writing_pipeline import LanguageCode, WritingContextBundle
+from stem_sci.agents.evidence_pipeline import (
+    EvidenceMatrixRow,
+    EvidenceReviewPipeline,
+    PaperCard,
+)
+from stem_sci.agents.runtime import StructuredGenerator
+from stem_sci.agents.writing_pipeline import (
+    LanguageCode,
+    PaperWritingPipeline,
+    WritingContextBundle,
+)
 from stem_sci.artifacts.artifact_store import ArtifactStore, InMemoryArtifactStore
 from stem_sci.artifacts.content_store import (
     ArtifactContent,
@@ -102,13 +111,30 @@ class AgentRegistry:
     agents: Mapping[str, BaseAgent]
 
     @classmethod
-    def default(cls) -> AgentRegistry:
+    def default(
+        cls,
+        *,
+        generator: StructuredGenerator | None = None,
+        model: str | None = None,
+    ) -> AgentRegistry:
+        if (generator is None) != (model is None):
+            raise ValueError("generator and model must be configured together")
+        if generator is not None and model is not None:
+            evidence_agent = EvidenceReviewAgent(
+                pipeline=EvidenceReviewPipeline(generator=generator, model=model)
+            )
+            writing_agent = PaperWritingAgent(
+                pipeline=PaperWritingPipeline(generator=generator, model=model)
+            )
+        else:
+            evidence_agent = EvidenceReviewAgent()
+            writing_agent = PaperWritingAgent()
         instances: Iterable[BaseAgent] = (
             MentorPlanningAgent(),
-            EvidenceReviewAgent(),
+            evidence_agent,
             ResearchDesignAgent(),
             DataAnalysisAgent(),
-            PaperWritingAgent(),
+            writing_agent,
             IndependentReviewAgent(),
         )
         return cls({agent.agent_id: agent for agent in instances})

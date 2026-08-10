@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .agents import AgentCapability, ReviewFinding
+from .agents.runtime import GPTProvider, StructuredGenerator
 from .artifacts.artifact_store import SQLiteArtifactStore
 from .artifacts.content_store import ArtifactContent, SQLiteArtifactContentStore
 from .artifacts.execution_store import SQLiteExecutionStore
@@ -33,6 +34,8 @@ from .context.models import (
 from .context.provider import LocalContextProvider
 from .context.service import ContextInputError, ContextNotFoundError, ContextService
 from .controller import (
+    AgentDispatcher,
+    AgentRegistry,
     ControllerWorkflowState,
     PlanningRequest,
     PlanningRunResult,
@@ -88,6 +91,22 @@ app.add_middleware(
 storage_root = Path(os.getenv("STEM_SCI_STORAGE_DIR", ".stem_sci"))
 service = ContextService(storage_root, max_upload_bytes=_max_upload_bytes())
 workflow_database = storage_root / "workflow.db"
+
+
+def _configured_agent_registry() -> AgentRegistry:
+    """Inject GPT pipelines only when a local API key explicitly enables them."""
+    api_key = os.getenv("STEM_SCI_LLM_API_KEY", "")
+    if not api_key.strip():
+        return AgentRegistry.default()
+    provider = GPTProvider.from_env()
+    if not provider.default_model:
+        raise ValueError("STEM_SCI_LLM_MODEL is required when GPT is enabled")
+    return AgentRegistry.default(
+        generator=StructuredGenerator(provider),
+        model=provider.default_model,
+    )
+
+
 operator_registry = OperatorRegistry.default()
 execution_store = SQLiteExecutionStore(workflow_database)
 artifact_store = SQLiteArtifactStore(workflow_database)
@@ -95,6 +114,7 @@ artifact_content_store = SQLiteArtifactContentStore(workflow_database)
 agent_run_store = SQLiteAgentRunStore(workflow_database)
 route_store = SQLiteRouteDecisionStore(workflow_database)
 workflow_controller = ResearchController(
+    dispatcher=AgentDispatcher(_configured_agent_registry()),
     context_provider=LocalContextProvider(service),
     decision_store=SQLiteDecisionStore(workflow_database),
     workflow_store=SQLiteWorkflowStore(workflow_database),
