@@ -4,6 +4,14 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
+if os.getenv("RUN_RAG_INTEGRATION") != "1":
+    pytest.skip(
+        "Set RUN_RAG_INTEGRATION=1 with LLM, DashScope, and Neo4j credentials to run",
+        allow_module_level=True,
+    )
+
 # 确保项目路径（rag_orchestrator 已移至 STEM-SCI-repo/src/stem_sci/）
 sys.path.insert(0, str(Path(__file__).resolve().parent / "STEM-SCI-repo" / "src" / "stem_sci"))
 
@@ -18,8 +26,8 @@ os.environ.setdefault("NEO4J_PASSWORD", "12345678")
 # 设置 stdout 为 utf-8 避免 GBK 编码错误
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-from rag_orchestrator.config import LLMConfig
-from rag_orchestrator.pipeline import RAGPipeline
+from stem_sci.rag_orchestrator.config import LLMConfig
+from stem_sci.rag_orchestrator.pipeline import RAGPipeline
 
 print("=" * 60)
 print("  RAG Orchestrator -- End-to-End Test")

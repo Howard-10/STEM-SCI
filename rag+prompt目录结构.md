@@ -1,6 +1,7 @@
 # 我的板块（Memory + 知识库构建）目录结构文档
 
-> 说明：本目录为本人负责的底层底座模块完整代码结构。所有文件在 `src/` 下，与团队其他模块的 `src/` 合并后形成完整项目。
+> 说明：本目录为
+底层底座模块完整代码结构。所有文件在 `src/` 下，与团队其他模块的 `src/` 合并后形成完整项目。
 >
 > 最后更新：2026-07-23
 
@@ -249,7 +250,8 @@ Agent调用 api/rag_api.global_retrieve()
       → memory/long_memory.load_long_term_memory()
         → graph_rag/vector_store (读私有Chroma Collection)
         → graph_rag/graph_store  (读私有Neo4j子图)
-    → 预填充 state.evidence_ledger + state.long_memory_refs
+    → 预填充 state.decision_refs + state.long_memory_refs
+    → EvidenceItem 在每次调用前由 RAG 按需检索，不全量写入 State
     → controller/scheduler 驱动工作流执行
 ```
 
@@ -315,3 +317,9 @@ elasticsearch>=8.0.0         # 混合检索的BM25关键词通道
 - **Neo4j**：每个项目一个独立子图，通过 `project_id` 属性过滤
 - **PostgreSQL**：LangGraph checkpoint 表自动创建，需预先创建数据库和用户
 - **无需Docker也可运行**：Chroma嵌入式、Neo4j社区版本地安装、PostgreSQL本地安装
+
+---
+
+## 七、2026-08-10 实现更新
+
+`context/`、`memory/` 与 `prompts/` 已按 LangChain/LangGraph 的 Runtime Context、State/Checkpointer 与 Store 边界落地。旧文中“将全部证据加载到 State”和“每轮备份完整 State JSON”不再适用。详见 `docs/architecture/context_memory_prompt.md`。
