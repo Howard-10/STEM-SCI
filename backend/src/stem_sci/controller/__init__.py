@@ -18,6 +18,8 @@ from .router import (
     ControllerWorkflowState,
     PlanningRequest,
     PlanningRunResult,
+    ReproducibilityReviewRequest,
+    ReproducibilityReviewRunResult,
     ResearchController,
     WorkflowRunResult,
 )
@@ -38,6 +40,8 @@ __all__ = [
     "PlanningRequest",
     "PlanningRunResult",
     "ProjectStage",
+    "ReproducibilityReviewRequest",
+    "ReproducibilityReviewRunResult",
     "ResearchController",
     "SQLiteDecisionStore",
     "SQLiteWorkflowStore",

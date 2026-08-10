@@ -37,6 +37,11 @@ from stem_sci.agents.writing_pipeline import (
     PaperWritingPipeline,
     WritingContextBundle,
 )
+from stem_sci.agents.reviewer_contracts import (
+    ManuscriptNumericClaim,
+    ReproducibilityReviewInput,
+    ReproducibilityReviewOutcome,
+)
 from stem_sci.artifacts.artifact_store import ArtifactStore, InMemoryArtifactStore
 from stem_sci.artifacts.content_store import (
     ArtifactContent,
@@ -110,6 +115,32 @@ class WorkflowRunResult(BaseModel):
     agent_result: AgentResult
     approval_request: ApprovalRequest
     route_decision: RouteDecision
+
+
+class ReproducibilityReviewRequest(BaseModel):
+    """Controller input for read-only manuscript-number verification.
+
+    Statistical result cards are intentionally not accepted from callers. The
+    Controller derives the sole permitted card from the project's completed
+    deterministic data pipeline.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str = Field(min_length=1)
+    manuscript_ref: str = Field(min_length=1)
+    numeric_claims: list[ManuscriptNumericClaim] = Field(min_length=1)
+    tolerance: float = Field(default=1e-9, ge=0.0)
+
+
+class ReproducibilityReviewRunResult(BaseModel):
+    """Controller-routed reviewer output; the Reviewer never sets workflow state."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_state: ControllerWorkflowState
+    outcome: ReproducibilityReviewOutcome
+    approval_request: ApprovalRequest | None = None
 
 
 @dataclass(frozen=True)
@@ -779,6 +810,7 @@ class ResearchController:
             last_agent_run_id=run_id,
             last_route_decision=route,
             research_state=updated_research,
+            data_pipeline=state.data_pipeline,
         )
         self._states[project_id] = updated_research
         self._workflow_states[project_id] = workflow_state
@@ -1039,6 +1071,154 @@ class ResearchController:
         )
         self._persist(project_id)
         return updated_pipeline
+
+    def run_reproducibility_review(
+        self, request: ReproducibilityReviewRequest
+    ) -> ReproducibilityReviewRunResult:
+        """Verify manuscript numbers against the Controller-owned result card.
+
+        This is deliberately a Controller operation: the independent reviewer
+        receives read-only data, while only this method records artifacts and
+        routes the project to human approval, REWORK, or BLOCKED.
+        """
+
+        workflow_state = self.get_state(request.project_id)
+        if workflow_state.current_stage is not ProjectStage.DRAFTED:
+            raise ValueError("reproducibility review requires a drafted manuscript")
+        pipeline = self._require_data_pipeline(workflow_state)
+        if (
+            pipeline.validation_report is None
+            or not pipeline.validation_report.passed
+            or pipeline.statistical_result_card is None
+        ):
+            raise ValueError("reproducibility review requires a validated result card")
+        reviewer = self.dispatcher.registry.get("independent_review")
+        if not isinstance(reviewer, IndependentReviewAgent):
+            raise ValueError("independent_review registry entry has an invalid implementation")
+
+        outcome = reviewer.review_reproducibility(
+            ReproducibilityReviewInput(
+                project_id=request.project_id,
+                manuscript_ref=request.manuscript_ref,
+                numeric_claims=request.numeric_claims,
+                statistical_result_cards=[pipeline.statistical_result_card],
+                tolerance=request.tolerance,
+            )
+        )
+        report_artifact_id = f"review:{uuid4().hex}"
+        content = self.artifact_content_store.put(
+            ArtifactContent(
+                project_id=request.project_id,
+                artifact_id=report_artifact_id,
+                version=1,
+                artifact_type="ReproducibilityReviewReport",
+                schema_version="v1",
+                body={
+                    "report": outcome.report.model_dump(mode="json"),
+                    "findings": [item.model_dump(mode="json") for item in outcome.findings],
+                    "revision_requests": [
+                        item.model_dump(mode="json") for item in outcome.revision_requests
+                    ],
+                },
+            )
+        )
+        if content.content_hash is None:
+            raise ValueError("persisted review content has no hash")
+        self.artifact_store.put(
+            ArtifactRef(
+                artifact_id=report_artifact_id,
+                project_id=request.project_id,
+                artifact_type="ReproducibilityReviewReport",
+                version=1,
+                content_uri=(
+                    f"artifact-content://{request.project_id}/{report_artifact_id}/{content.version}"
+                ),
+                sha256=content.content_hash,
+                created_at=datetime.now(UTC),
+                created_by="independent_review",
+                status="VALIDATED",
+            )
+        )
+
+        research_state = self._require_research_state(workflow_state)
+        artifact_refs = [*research_state.artifact_refs]
+        if outcome.report.review_report_id not in artifact_refs:
+            artifact_refs.append(outcome.report.review_report_id)
+        if outcome.report.overall_recommendation == "PASS":
+            approval = ApprovalRequest(
+                request_id=f"approval-{uuid4().hex}",
+                artifact_ref=outcome.report.review_report_id,
+                approval_type="review_report",
+                reason="Human approval is required before a passed review can verify the manuscript.",
+                risk_summary="Independent reproducibility review passed; release remains human-controlled.",
+            )
+            updated_research = research_state.model_copy(
+                update={
+                    "current_stage": ProjectStage.WAITING_HUMAN,
+                    "artifact_refs": artifact_refs,
+                    "approval_request_refs": [
+                        *research_state.approval_request_refs,
+                        approval.request_id,
+                    ],
+                }
+            )
+            updated_workflow = workflow_state.model_copy(
+                update={
+                    "current_stage": ProjectStage.WAITING_HUMAN,
+                    "pending_approval_ref": approval.request_id,
+                    "research_state": updated_research,
+                }
+            )
+            self._approvals[request.project_id] = approval
+        else:
+            blocking_findings = [
+                item for item in outcome.findings if item.decision_scope in {DecisionScope.STAGE, DecisionScope.PROJECT}
+            ]
+            if blocking_findings:
+                finding = blocking_findings[0]
+                next_stage = ProjectStage.BLOCKED
+                target_agent = None
+                risk_flags = [
+                    *research_state.risk_flags,
+                    f"REVIEW_BLOCK_{finding.decision_scope.value}",
+                ]
+            else:
+                finding = outcome.findings[0]
+                next_stage = ProjectStage.REWORK
+                target_agent = self._REVIEW_FINDING_TARGETS.get(
+                    finding.category.strip().lower(), "paper_writing"
+                )
+                risk_flags = list(research_state.risk_flags)
+            updated_research = research_state.model_copy(
+                update={
+                    "current_stage": next_stage,
+                    "artifact_refs": artifact_refs,
+                    "rework_target_agent": target_agent,
+                    "rework_target_refs": list(finding.blocked_target_ids),
+                    "rework_trigger_refs": [
+                        *research_state.rework_trigger_refs,
+                        *[item.finding_id for item in outcome.findings],
+                    ],
+                    "rework_reason": f"{finding.category}: {finding.description}",
+                    "risk_flags": risk_flags,
+                }
+            )
+            updated_workflow = workflow_state.model_copy(
+                update={
+                    "current_stage": next_stage,
+                    "pending_approval_ref": None,
+                    "research_state": updated_research,
+                }
+            )
+            approval = None
+        self._states[request.project_id] = updated_research
+        self._workflow_states[request.project_id] = updated_workflow
+        self._persist(request.project_id)
+        return ReproducibilityReviewRunResult(
+            workflow_state=updated_workflow,
+            outcome=outcome,
+            approval_request=approval,
+        )
 
     @staticmethod
     def _require_research_state(workflow_state: ControllerWorkflowState) -> ResearchState:

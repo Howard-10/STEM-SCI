@@ -41,6 +41,8 @@ from .controller import (
     DataPipelineState,
     PlanningRequest,
     PlanningRunResult,
+    ReproducibilityReviewRequest,
+    ReproducibilityReviewRunResult,
     ResearchController,
     SQLiteDecisionStore,
     SQLiteWorkflowStore,
@@ -265,6 +267,15 @@ def workflow_routes(project_id: str) -> list[RouteDecision]:
 @app.post("/api/v1/workflow/projects/{project_id}/review-findings")
 def workflow_review_finding(project_id: str, finding: ReviewFinding) -> ResearchState:
     return workflow_controller.route_review_finding(project_id, finding)
+
+
+@app.post("/api/v1/workflow/projects/{project_id}/reviews/reproducibility")
+def workflow_reproducibility_review(
+    project_id: str, request: ReproducibilityReviewRequest
+) -> ReproducibilityReviewRunResult:
+    if request.project_id != project_id:
+        raise ContextInputError("project_mismatch", "path project_id does not match request project_id")
+    return workflow_controller.run_reproducibility_review(request)
 
 
 @app.post("/api/v1/workflow/projects/{project_id}/data-pipeline/start")

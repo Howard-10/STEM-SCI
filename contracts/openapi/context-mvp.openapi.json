@@ -501,6 +501,202 @@
         }
       }
     },
+    "/api/v1/workflow/projects/{project_id}/reviews/reproducibility": {
+      "post": {
+        "summary": "Workflow Reproducibility Review",
+        "operationId": "workflow_reproducibility_review_api_v1_workflow_projects__project_id__reviews_reproducibility_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReproducibilityReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReproducibilityReviewRunResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/projects/{project_id}/data-pipeline/start": {
+      "post": {
+        "summary": "Start Data Pipeline",
+        "operationId": "start_data_pipeline_api_v1_workflow_projects__project_id__data_pipeline_start_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataPipelineBeginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataPipelineState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/projects/{project_id}/data-pipeline/raw": {
+      "post": {
+        "summary": "Register Data Pipeline Raw Csv",
+        "operationId": "register_data_pipeline_raw_csv_api_v1_workflow_projects__project_id__data_pipeline_raw_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_register_data_pipeline_raw_csv_api_v1_workflow_projects__project_id__data_pipeline_raw_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataPipelineState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/projects/{project_id}/data-pipeline/decide": {
+      "post": {
+        "summary": "Decide Data Pipeline",
+        "operationId": "decide_data_pipeline_api_v1_workflow_projects__project_id__data_pipeline_decide_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowApprovalInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataPipelineState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sources/import": {
       "post": {
         "summary": "Import Source",
@@ -996,7 +1192,117 @@
         "title": "AgentCapability",
         "description": "Machine-readable role boundary advertised to the Controller."
       },
-      "AgentResult": {
+      "AgentResult-Input": {
+        "properties": {
+          "agent_run_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent Run Id"
+          },
+          "agent_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent Id"
+          },
+          "agent_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent Version"
+          },
+          "candidate_artifact_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Candidate Artifact Refs"
+          },
+          "candidate_artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateArtifact"
+            },
+            "type": "array",
+            "title": "Candidate Artifacts"
+          },
+          "evidence_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "llm_metadata_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Llm Metadata Refs"
+          },
+          "tool_requests": {
+            "items": {
+              "$ref": "#/components/schemas/ToolRequest"
+            },
+            "type": "array",
+            "title": "Tool Requests"
+          },
+          "approval_requests": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Approval Requests"
+          },
+          "risk_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Flags"
+          },
+          "unresolved_questions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unresolved Questions"
+          },
+          "recommendations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recommendations"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "agent_run_id",
+          "agent_id",
+          "agent_version",
+          "created_at"
+        ],
+        "title": "AgentResult",
+        "description": "Candidate outputs from an agent; governance fields are intentionally absent."
+      },
+      "AgentResult-Output": {
         "properties": {
           "agent_run_id": {
             "type": "string",
@@ -1202,6 +1508,153 @@
         ],
         "title": "AgentRunRecord"
       },
+      "AnalysisMode": {
+        "type": "string",
+        "enum": [
+          "PYTHON_ONLY",
+          "SPSS_PYTHON_DUAL"
+        ],
+        "title": "AnalysisMode"
+      },
+      "AnalysisModelSpecification": {
+        "properties": {
+          "model_spec_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Model Spec Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "model_family": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Model Family"
+          },
+          "outcome_variables": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Outcome Variables"
+          },
+          "predictor_variables": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Predictor Variables"
+          },
+          "grouping_variables": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Grouping Variables"
+          },
+          "repeated_measure_structure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repeated Measure Structure"
+          },
+          "formula_or_design": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Formula Or Design"
+          },
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Assumptions"
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Rationale"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "model_spec_id",
+          "project_id",
+          "model_family",
+          "outcome_variables",
+          "formula_or_design",
+          "rationale"
+        ],
+        "title": "AnalysisModelSpecification",
+        "description": "A replaceable model description; it is not restricted to LMM."
+      },
+      "AnalysisReadinessReport": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Report Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "preregistered_plan_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Preregistered Plan Ref"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "REWORK",
+              "BLOCKED"
+            ],
+            "title": "Status"
+          },
+          "missing_requirements": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Requirements"
+          },
+          "blocked_target_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blocked Target Ids"
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Rationale"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "report_id",
+          "project_id",
+          "preregistered_plan_ref",
+          "status",
+          "rationale"
+        ],
+        "title": "AnalysisReadinessReport",
+        "description": "Readiness assessment before any data operation is dispatched."
+      },
       "ApprovalRequest": {
         "properties": {
           "request_id": {
@@ -1405,6 +1858,20 @@
         ],
         "title": "Body_import_source_api_v1_sources_import_post"
       },
+      "Body_register_data_pipeline_raw_csv_api_v1_workflow_projects__project_id__data_pipeline_raw_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_register_data_pipeline_raw_csv_api_v1_workflow_projects__project_id__data_pipeline_raw_post"
+      },
       "CandidateArtifact": {
         "properties": {
           "candidate_ref": {
@@ -1440,6 +1907,58 @@
         ],
         "title": "CandidateArtifact",
         "description": "Transient structured content that only the Controller may persist."
+      },
+      "CodeSpecificationDraft": {
+        "properties": {
+          "draft_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Draft Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "executable_plan_candidate_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Executable Plan Candidate Ref"
+          },
+          "expected_dataset_schema_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Expected Dataset Schema Ref"
+          },
+          "required_outputs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Required Outputs"
+          },
+          "expected_language": {
+            "type": "string",
+            "enum": [
+              "python",
+              "spss"
+            ],
+            "title": "Expected Language",
+            "default": "python"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "draft_id",
+          "project_id",
+          "executable_plan_candidate_ref",
+          "expected_dataset_schema_ref",
+          "required_outputs"
+        ],
+        "title": "CodeSpecificationDraft",
+        "description": "A draft input for the coding operator; it contains no source code."
       },
       "ContextBuildRequest": {
         "properties": {
@@ -1644,6 +2163,16 @@
                 "type": "null"
               }
             ]
+          },
+          "data_pipeline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataPipelineState"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -1653,6 +2182,517 @@
         ],
         "title": "ControllerWorkflowState",
         "description": "Reference-only state owned and changed by the Controller."
+      },
+      "DataAnalysisPreAnalysisOutcome-Input": {
+        "properties": {
+          "agent_result": {
+            "$ref": "#/components/schemas/AgentResult-Input"
+          },
+          "readiness_report": {
+            "$ref": "#/components/schemas/AnalysisReadinessReport"
+          },
+          "data_audit_specification": {
+            "$ref": "#/components/schemas/DataAuditSpecification"
+          },
+          "data_processing_plan_candidate": {
+            "$ref": "#/components/schemas/DataProcessingPlanCandidate"
+          },
+          "executable_plan_candidate": {
+            "$ref": "#/components/schemas/ExecutableAnalysisPlanCandidate"
+          },
+          "code_specification_draft": {
+            "$ref": "#/components/schemas/CodeSpecificationDraft"
+          },
+          "model_diagnostic_recommendation": {
+            "$ref": "#/components/schemas/ModelDiagnosticRecommendation"
+          },
+          "robustness_check_plan": {
+            "$ref": "#/components/schemas/RobustnessCheckPlan"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "agent_result",
+          "readiness_report",
+          "data_audit_specification",
+          "data_processing_plan_candidate",
+          "executable_plan_candidate",
+          "code_specification_draft",
+          "model_diagnostic_recommendation",
+          "robustness_check_plan"
+        ],
+        "title": "DataAnalysisPreAnalysisOutcome",
+        "description": "Complete, proposal-only package returned by PRE_ANALYSIS."
+      },
+      "DataAnalysisPreAnalysisOutcome-Output": {
+        "properties": {
+          "agent_result": {
+            "$ref": "#/components/schemas/AgentResult-Output"
+          },
+          "readiness_report": {
+            "$ref": "#/components/schemas/AnalysisReadinessReport"
+          },
+          "data_audit_specification": {
+            "$ref": "#/components/schemas/DataAuditSpecification"
+          },
+          "data_processing_plan_candidate": {
+            "$ref": "#/components/schemas/DataProcessingPlanCandidate"
+          },
+          "executable_plan_candidate": {
+            "$ref": "#/components/schemas/ExecutableAnalysisPlanCandidate"
+          },
+          "code_specification_draft": {
+            "$ref": "#/components/schemas/CodeSpecificationDraft"
+          },
+          "model_diagnostic_recommendation": {
+            "$ref": "#/components/schemas/ModelDiagnosticRecommendation"
+          },
+          "robustness_check_plan": {
+            "$ref": "#/components/schemas/RobustnessCheckPlan"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "agent_result",
+          "readiness_report",
+          "data_audit_specification",
+          "data_processing_plan_candidate",
+          "executable_plan_candidate",
+          "code_specification_draft",
+          "model_diagnostic_recommendation",
+          "robustness_check_plan"
+        ],
+        "title": "DataAnalysisPreAnalysisOutcome",
+        "description": "Complete, proposal-only package returned by PRE_ANALYSIS."
+      },
+      "DataAuditReport": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Report Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "raw_dataset_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Raw Dataset Ref"
+          },
+          "passed": {
+            "type": "boolean",
+            "title": "Passed"
+          },
+          "missing_required_variables": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Required Variables"
+          },
+          "risk_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Flags"
+          },
+          "decision_scope": {
+            "$ref": "#/components/schemas/DecisionScope"
+          },
+          "blocked_target_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blocked Target Ids"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "report_id",
+          "project_id",
+          "raw_dataset_ref",
+          "passed",
+          "decision_scope",
+          "created_at"
+        ],
+        "title": "DataAuditReport"
+      },
+      "DataAuditSpecification": {
+        "properties": {
+          "specification_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Specification Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "data_collection_schema_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Data Collection Schema Ref"
+          },
+          "variable_dictionary_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Variable Dictionary Ref"
+          },
+          "required_variables": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Required Variables"
+          },
+          "missingness_checks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Missingness Checks"
+          },
+          "range_and_type_checks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Range And Type Checks"
+          },
+          "privacy_checks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Privacy Checks"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "specification_id",
+          "project_id",
+          "data_collection_schema_ref",
+          "variable_dictionary_ref",
+          "required_variables",
+          "missingness_checks",
+          "range_and_type_checks",
+          "privacy_checks"
+        ],
+        "title": "DataAuditSpecification",
+        "description": "Rules a deterministic data-audit operator must evaluate."
+      },
+      "DataPipelineApproval": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Request Id"
+          },
+          "approval_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Approval Type"
+          },
+          "artifact_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Artifact Ref"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "approval_type",
+          "artifact_ref",
+          "reason"
+        ],
+        "title": "DataPipelineApproval"
+      },
+      "DataPipelineBeginRequest": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "preregistered_plan_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Preregistered Plan Ref"
+          },
+          "preregistration_approval_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Preregistration Approval Ref"
+          },
+          "pre_analysis": {
+            "$ref": "#/components/schemas/DataAnalysisPreAnalysisOutcome-Input"
+          },
+          "model_specification": {
+            "$ref": "#/components/schemas/AnalysisModelSpecification"
+          },
+          "code_artifact_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Code Artifact Ref"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "preregistered_plan_ref",
+          "preregistration_approval_ref",
+          "pre_analysis",
+          "model_specification",
+          "code_artifact_ref"
+        ],
+        "title": "DataPipelineBeginRequest"
+      },
+      "DataPipelineStage": {
+        "type": "string",
+        "enum": [
+          "WAITING_RAW_DATA",
+          "WAITING_PROCESSING_APPROVAL",
+          "REWORK",
+          "WAITING_FREEZE_APPROVAL",
+          "WAITING_EXECUTION_APPROVAL",
+          "ANALYZED",
+          "BLOCKED"
+        ],
+        "title": "DataPipelineStage"
+      },
+      "DataPipelineState": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/DataPipelineStage"
+          },
+          "preregistered_plan_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Preregistered Plan Ref"
+          },
+          "preregistration_approval_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Preregistration Approval Ref"
+          },
+          "pre_analysis": {
+            "$ref": "#/components/schemas/DataAnalysisPreAnalysisOutcome-Output"
+          },
+          "model_specification": {
+            "$ref": "#/components/schemas/AnalysisModelSpecification"
+          },
+          "code_artifact_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Code Artifact Ref"
+          },
+          "raw_dataset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RawDatasetRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "data_audit_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataAuditReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "processed_dataset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProcessedDatasetRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "frozen_dataset": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FrozenDatasetRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "executable_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutableAnalysisPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "validation_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResultValidationReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "statistical_result_card": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StatisticalResultCard"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gate_results": {
+            "items": {
+              "$ref": "#/components/schemas/GateResult"
+            },
+            "type": "array",
+            "title": "Gate Results"
+          },
+          "pending_approval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataPipelineApproval"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rework_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rework Reason"
+          },
+          "blocked_target_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blocked Target Ids"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "stage",
+          "preregistered_plan_ref",
+          "preregistration_approval_ref",
+          "pre_analysis",
+          "model_specification",
+          "code_artifact_ref"
+        ],
+        "title": "DataPipelineState",
+        "description": "Reference-only state for Controller data operations; no file payloads."
+      },
+      "DataProcessingPlanCandidate": {
+        "properties": {
+          "candidate_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Candidate Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "data_audit_specification_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Data Audit Specification Ref"
+          },
+          "proposed_steps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Proposed Steps"
+          },
+          "missing_data_strategy_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Missing Data Strategy Ref"
+          },
+          "exclusion_rule_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Exclusion Rule Refs"
+          },
+          "requires_human_approval": {
+            "type": "boolean",
+            "const": true,
+            "title": "Requires Human Approval",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "candidate_id",
+          "project_id",
+          "data_audit_specification_ref",
+          "proposed_steps",
+          "missing_data_strategy_ref"
+        ],
+        "title": "DataProcessingPlanCandidate",
+        "description": "A human-approvable candidate, never a data mutation command."
       },
       "DecisionScope": {
         "type": "string",
@@ -1850,6 +2890,339 @@
         ],
         "title": "EvidenceSearchResult"
       },
+      "ExecutableAnalysisPlan": {
+        "properties": {
+          "executable_plan_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Executable Plan Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "preregistered_plan_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Preregistered Plan Ref"
+          },
+          "frozen_dataset_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Frozen Dataset Ref"
+          },
+          "frozen_dataset_sha256": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Frozen Dataset Sha256"
+          },
+          "dataset_schema_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Dataset Schema Ref"
+          },
+          "variable_mapping": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Variable Mapping"
+          },
+          "type_confirmations": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Type Confirmations"
+          },
+          "software_configuration": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Software Configuration"
+          },
+          "analysis_mode": {
+            "$ref": "#/components/schemas/AnalysisMode"
+          },
+          "model_specification_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Model Specification Refs"
+          },
+          "compatibility_gate_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compatibility Gate Ref"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "executable_plan_id",
+          "project_id",
+          "preregistered_plan_ref",
+          "frozen_dataset_ref",
+          "frozen_dataset_sha256",
+          "dataset_schema_ref",
+          "analysis_mode",
+          "model_specification_refs"
+        ],
+        "title": "ExecutableAnalysisPlan",
+        "description": "Schema-bound compilation of an approved preregistered plan.\n\nIt may map variable names, confirm their types, and select software\nsettings.  Substantive choices (outcomes, models, covariates, exclusion\nrules, or missing-data strategy) remain in the preregistered plan or an\napproved amendment."
+      },
+      "ExecutableAnalysisPlanCandidate": {
+        "properties": {
+          "candidate_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Candidate Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "preregistered_plan_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Preregistered Plan Ref"
+          },
+          "data_collection_schema_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Data Collection Schema Ref"
+          },
+          "variable_mapping": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Variable Mapping"
+          },
+          "type_confirmations": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Type Confirmations"
+          },
+          "software_configuration": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Software Configuration"
+          },
+          "analysis_mode": {
+            "$ref": "#/components/schemas/AnalysisMode"
+          },
+          "model_specification_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Model Specification Refs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "candidate_id",
+          "project_id",
+          "preregistered_plan_ref",
+          "data_collection_schema_ref",
+          "analysis_mode",
+          "model_specification_refs"
+        ],
+        "title": "ExecutableAnalysisPlanCandidate",
+        "description": "Schema mapping proposal that cannot alter preregistered decisions."
+      },
+      "ExecutionStatus": {
+        "type": "string",
+        "enum": [
+          "generated",
+          "execution_verified",
+          "cross_engine_verified"
+        ],
+        "title": "ExecutionStatus",
+        "description": "How far deterministic execution and validation have progressed."
+      },
+      "FrozenDatasetRef": {
+        "properties": {
+          "dataset_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Dataset Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "content_uri": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content Uri"
+          },
+          "sha256": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Sha256"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "source_dataset_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Source Dataset Ref"
+          },
+          "freeze_approval_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Freeze Approval Ref"
+          },
+          "schema_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Schema Ref"
+          },
+          "frozen_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Frozen At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "dataset_id",
+          "project_id",
+          "version",
+          "content_uri",
+          "sha256",
+          "created_at",
+          "source_dataset_ref",
+          "freeze_approval_ref",
+          "schema_ref",
+          "frozen_at"
+        ],
+        "title": "FrozenDatasetRef"
+      },
+      "GateDecision": {
+        "type": "string",
+        "enum": [
+          "PASS",
+          "PASS_WITH_WARNING",
+          "REWORK",
+          "BLOCKED",
+          "WAITING_HUMAN",
+          "FAILED"
+        ],
+        "title": "GateDecision"
+      },
+      "GateResult": {
+        "properties": {
+          "gate_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Gate Id"
+          },
+          "gate_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Gate Version"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "artifact_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Artifact Id"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/GateDecision"
+          },
+          "decision_scope": {
+            "$ref": "#/components/schemas/DecisionScope"
+          },
+          "blocked_target_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blocked Target Ids"
+          },
+          "research_test_result_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Research Test Result Refs"
+          },
+          "risk_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Flags"
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Fields"
+          },
+          "next_action": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Next Action"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "gate_id",
+          "gate_version",
+          "project_id",
+          "artifact_id",
+          "decision",
+          "decision_scope",
+          "next_action",
+          "created_at"
+        ],
+        "title": "GateResult"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1863,7 +3236,50 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "InterpretationStatus": {
+        "type": "string",
+        "enum": [
+          "pending_human_review",
+          "human_approved",
+          "rejected"
+        ],
+        "title": "InterpretationStatus",
+        "description": "Human review state for an interpretation; distinct from numeric validity."
+      },
       "JsonValue": {},
+      "ManuscriptNumericClaim": {
+        "properties": {
+          "claim_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Claim Ref"
+          },
+          "result_card_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Result Card Ref"
+          },
+          "result_key": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Result Key"
+          },
+          "reported_value": {
+            "type": "number",
+            "title": "Reported Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "claim_ref",
+          "result_card_ref",
+          "result_key",
+          "reported_value"
+        ],
+        "title": "ManuscriptNumericClaim",
+        "description": "One number quoted by a manuscript, with its intended result-card link."
+      },
       "MemoryRef": {
         "properties": {
           "memory_id": {
@@ -1894,6 +3310,49 @@
           "summary"
         ],
         "title": "MemoryRef"
+      },
+      "ModelDiagnosticRecommendation": {
+        "properties": {
+          "recommendation_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Recommendation Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "model_specification_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Model Specification Ref"
+          },
+          "diagnostic_checks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Diagnostic Checks"
+          },
+          "interpretation_limitations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Interpretation Limitations"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "recommendation_id",
+          "project_id",
+          "model_specification_ref",
+          "diagnostic_checks"
+        ],
+        "title": "ModelDiagnosticRecommendation"
       },
       "OperatorRun": {
         "properties": {
@@ -2103,7 +3562,7 @@
             "$ref": "#/components/schemas/ControllerWorkflowState"
           },
           "agent_result": {
-            "$ref": "#/components/schemas/AgentResult"
+            "$ref": "#/components/schemas/AgentResult-Output"
           },
           "approval_request": {
             "$ref": "#/components/schemas/ApprovalRequest"
@@ -2129,6 +3588,76 @@
         "title": "PlanningRunResult",
         "description": "Result of the planning slice, paused at human approval."
       },
+      "ProcessedDatasetRef": {
+        "properties": {
+          "dataset_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Dataset Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "content_uri": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content Uri"
+          },
+          "sha256": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Sha256"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "source_dataset_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Source Dataset Ref"
+          },
+          "processing_plan_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Processing Plan Ref"
+          },
+          "processing_approval_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Processing Approval Ref"
+          },
+          "processed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Processed At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "dataset_id",
+          "project_id",
+          "version",
+          "content_uri",
+          "sha256",
+          "created_at",
+          "source_dataset_ref",
+          "processing_plan_ref",
+          "processing_approval_ref",
+          "processed_at"
+        ],
+        "title": "ProcessedDatasetRef"
+      },
       "ProjectStage": {
         "type": "string",
         "enum": [
@@ -2149,6 +3678,145 @@
           "FAILED"
         ],
         "title": "ProjectStage"
+      },
+      "RawDatasetRef": {
+        "properties": {
+          "dataset_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Dataset Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "content_uri": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content Uri"
+          },
+          "sha256": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 64,
+            "title": "Sha256"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "dataset_id",
+          "project_id",
+          "version",
+          "content_uri",
+          "sha256",
+          "created_at"
+        ],
+        "title": "RawDatasetRef"
+      },
+      "ReproducibilityReviewOutcome": {
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewFinding"
+            },
+            "type": "array",
+            "title": "Findings"
+          },
+          "revision_requests": {
+            "items": {
+              "$ref": "#/components/schemas/RevisionRequest"
+            },
+            "type": "array",
+            "title": "Revision Requests"
+          },
+          "report": {
+            "$ref": "#/components/schemas/ReviewReport"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "report"
+        ],
+        "title": "ReproducibilityReviewOutcome",
+        "description": "Only review artifacts; no paper, result, data, or state mutation."
+      },
+      "ReproducibilityReviewRequest": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "manuscript_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Manuscript Ref"
+          },
+          "numeric_claims": {
+            "items": {
+              "$ref": "#/components/schemas/ManuscriptNumericClaim"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Numeric Claims"
+          },
+          "tolerance": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Tolerance",
+            "default": 1e-09
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "manuscript_ref",
+          "numeric_claims"
+        ],
+        "title": "ReproducibilityReviewRequest",
+        "description": "Controller input for read-only manuscript-number verification.\n\nStatistical result cards are intentionally not accepted from callers. The\nController derives the sole permitted card from the project's completed\ndeterministic data pipeline."
+      },
+      "ReproducibilityReviewRunResult": {
+        "properties": {
+          "workflow_state": {
+            "$ref": "#/components/schemas/ControllerWorkflowState"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ReproducibilityReviewOutcome"
+          },
+          "approval_request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "workflow_state",
+          "outcome"
+        ],
+        "title": "ReproducibilityReviewRunResult",
+        "description": "Controller-routed reviewer output; the Reviewer never sets workflow state."
       },
       "ResearchState": {
         "properties": {
@@ -2171,6 +3839,13 @@
               }
             ],
             "title": "Rework Target Agent"
+          },
+          "rework_target_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Rework Target Refs"
           },
           "rework_reason": {
             "anyOf": [
@@ -2354,6 +4029,83 @@
         "title": "ResearchState",
         "description": "Small project ledger; large payloads must remain in stores."
       },
+      "ResultValidationReport": {
+        "properties": {
+          "report_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Report Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "analysis_mode": {
+            "$ref": "#/components/schemas/AnalysisMode"
+          },
+          "validation_mode": {
+            "$ref": "#/components/schemas/ValidationMode"
+          },
+          "execution_run_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Execution Run Refs"
+          },
+          "input_integrity_passed": {
+            "type": "boolean",
+            "title": "Input Integrity Passed"
+          },
+          "model_integrity_passed": {
+            "type": "boolean",
+            "title": "Model Integrity Passed"
+          },
+          "numeric_output_integrity_passed": {
+            "type": "boolean",
+            "title": "Numeric Output Integrity Passed"
+          },
+          "passed": {
+            "type": "boolean",
+            "title": "Passed"
+          },
+          "result_consistency_report_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Consistency Report Ref"
+          },
+          "finding_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Finding Refs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "report_id",
+          "project_id",
+          "analysis_mode",
+          "validation_mode",
+          "execution_run_refs",
+          "input_integrity_passed",
+          "model_integrity_passed",
+          "numeric_output_integrity_passed",
+          "passed"
+        ],
+        "title": "ResultValidationReport",
+        "description": "Deterministic validation result for one or two execution engines."
+      },
       "ReviewFinding": {
         "properties": {
           "finding_id": {
@@ -2397,6 +4149,17 @@
             "type": "string",
             "minLength": 1,
             "title": "Suggested Action"
+          },
+          "decision_scope": {
+            "$ref": "#/components/schemas/DecisionScope",
+            "default": "ARTIFACT"
+          },
+          "blocked_target_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blocked Target Ids"
           }
         },
         "additionalProperties": false,
@@ -2412,6 +4175,132 @@
         ],
         "title": "ReviewFinding",
         "description": "One independent-review finding; it never mutates the reviewed artifact."
+      },
+      "ReviewReport": {
+        "properties": {
+          "review_report_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Review Report Id"
+          },
+          "finding_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Finding Refs"
+          },
+          "revision_request_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Revision Request Refs"
+          },
+          "overall_recommendation": {
+            "type": "string",
+            "enum": [
+              "PASS",
+              "MINOR_REVISION",
+              "MAJOR_REVISION",
+              "BLOCK"
+            ],
+            "title": "Overall Recommendation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "review_report_id",
+          "overall_recommendation"
+        ],
+        "title": "ReviewReport",
+        "description": "Aggregate reviewer output, without approval or release authority."
+      },
+      "RevisionRequest": {
+        "properties": {
+          "revision_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Revision Id"
+          },
+          "artifact_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Artifact Ref"
+          },
+          "required_changes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Required Changes"
+          },
+          "blocking": {
+            "type": "boolean",
+            "title": "Blocking",
+            "default": false
+          },
+          "triggered_by_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Triggered By Refs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision_id",
+          "artifact_ref",
+          "required_changes"
+        ],
+        "title": "RevisionRequest",
+        "description": "A read-only request describing changes that a Controller may route."
+      },
+      "RobustnessCheckPlan": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Plan Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "preregistered_plan_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Preregistered Plan Ref"
+          },
+          "planned_checks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Planned Checks"
+          },
+          "reporting_rule": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reporting Rule"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "plan_id",
+          "project_id",
+          "preregistered_plan_ref",
+          "planned_checks",
+          "reporting_rule"
+        ],
+        "title": "RobustnessCheckPlan"
       },
       "RouteDecision": {
         "properties": {
@@ -2625,6 +4514,67 @@
         ],
         "title": "SourceLocation"
       },
+      "StatisticalResultCard": {
+        "properties": {
+          "result_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Result Id"
+          },
+          "project_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "execution_run_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Execution Run Ref"
+          },
+          "analysis_plan_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Analysis Plan Ref"
+          },
+          "validation_report_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Validation Report Ref"
+          },
+          "execution_status": {
+            "$ref": "#/components/schemas/ExecutionStatus"
+          },
+          "interpretation_status": {
+            "$ref": "#/components/schemas/InterpretationStatus",
+            "default": "pending_human_review"
+          },
+          "deterministic_parser_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Deterministic Parser Version"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Values"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "result_id",
+          "project_id",
+          "execution_run_ref",
+          "analysis_plan_ref",
+          "validation_report_ref",
+          "execution_status",
+          "deterministic_parser_version"
+        ],
+        "title": "StatisticalResultCard",
+        "description": "A card built by a deterministic parser after result validation.\n\nAgents may read this card, but their candidate outputs must never create or\nalter its values."
+      },
       "TaskStatus": {
         "type": "string",
         "enum": [
@@ -2722,6 +4672,15 @@
         ],
         "title": "ValidationError"
       },
+      "ValidationMode": {
+        "type": "string",
+        "enum": [
+          "SINGLE_ENGINE",
+          "CROSS_ENGINE"
+        ],
+        "title": "ValidationMode",
+        "description": "Whether results received one-engine or cross-engine validation."
+      },
       "VerificationStatus": {
         "type": "string",
         "enum": [
@@ -2797,7 +4756,7 @@
             "$ref": "#/components/schemas/ControllerWorkflowState"
           },
           "agent_result": {
-            "$ref": "#/components/schemas/AgentResult"
+            "$ref": "#/components/schemas/AgentResult-Output"
           },
           "approval_request": {
             "$ref": "#/components/schemas/ApprovalRequest"

@@ -96,3 +96,40 @@ def test_data_pipeline_api_runs_to_verified_python_only_result() -> None:
         assert decided.status_code == 200
         assert decided.json()["stage"] == expected_stage
     assert decided.json()["statistical_result_card"]["execution_status"] == "execution_verified"
+
+    writing = client.post(f"/api/v1/workflow/projects/{project_id}/next")
+    assert writing.status_code == 200
+    assert writing.json()["route_decision"]["selected_route"] == "paper_writing"
+    drafted = client.post(
+        f"/api/v1/workflow/projects/{project_id}/approve",
+        json={"decision": "approved", "decided_by": "researcher"},
+    )
+    assert drafted.status_code == 200
+    assert drafted.json()["current_stage"] == "DRAFTED"
+
+    result_card = decided.json()["statistical_result_card"]
+    result_key, result_value = next(iter(result_card["values"].items()))
+    review = client.post(
+        f"/api/v1/workflow/projects/{project_id}/reviews/reproducibility",
+        json={
+            "project_id": project_id,
+            "manuscript_ref": writing.json()["approval_request"]["artifact_ref"],
+            "numeric_claims": [
+                {
+                    "claim_ref": f"claim://{project_id}/result-1",
+                        "result_card_ref": f"result-card://{result_card['result_id']}",
+                    "result_key": result_key,
+                    "reported_value": result_value,
+                }
+            ],
+        },
+    )
+    assert review.status_code == 200
+    assert review.json()["outcome"]["report"]["overall_recommendation"] == "PASS"
+    assert review.json()["workflow_state"]["current_stage"] == "WAITING_HUMAN"
+    verified = client.post(
+        f"/api/v1/workflow/projects/{project_id}/approve",
+        json={"decision": "approved", "decided_by": "researcher"},
+    )
+    assert verified.status_code == 200
+    assert verified.json()["current_stage"] == "VERIFIED"
