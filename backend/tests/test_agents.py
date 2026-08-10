@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from stem_sci.agents import (
     AgentInput,
     AgentResult,
+    CandidateArtifact,
     DataAnalysisAgent,
     EvidenceReviewAgent,
     IndependentReviewAgent,
@@ -16,6 +17,7 @@ from stem_sci.agents import (
     ResearchDesignAgent,
     ToolRequest,
 )
+from stem_sci.controller.merger import validate_agent_result
 from stem_sci.core.claims import AtomicClaim, ClaimType
 from stem_sci.research_protocol import PreregisteredAnalysisPlan
 
@@ -120,6 +122,29 @@ def test_tool_request_is_structured_and_agent_result_rejects_uri_strings() -> No
             tool_requests=["request://literature_search"],  # type: ignore[list-item]
             created_at=datetime.now(UTC),
         )
+
+
+def test_candidate_content_must_match_public_candidate_reference() -> None:
+    result = AgentResult(
+        agent_run_id="run-content",
+        agent_id="evidence_review",
+        agent_version="v1",
+        candidate_artifact_refs=[
+            "candidate://evidence_review/task/EvidenceSufficiencyReport"
+        ],
+        candidate_artifacts=[
+            CandidateArtifact(
+                candidate_ref="candidate://evidence_review/task/EvidenceSufficiencyReport",
+                artifact_type="BoundedEvidenceSynthesis",
+                schema_version="v1",
+                body={"status": "READY"},
+            )
+        ],
+        created_at=datetime.now(UTC),
+    )
+
+    with pytest.raises(ValueError, match="candidate content type"):
+        validate_agent_result(result, EvidenceReviewAgent.capability())
 
 
 def test_preregistered_plan_requires_approval_before_freeze() -> None:

@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 
 class AgentContract(BaseModel):
@@ -42,6 +42,15 @@ class ToolRequest(AgentContract):
     reason: str = Field(min_length=1)
 
 
+class CandidateArtifact(AgentContract):
+    """Transient structured content that only the Controller may persist."""
+
+    candidate_ref: str = Field(min_length=1)
+    artifact_type: str = Field(min_length=1)
+    schema_version: str = Field(min_length=1)
+    body: dict[str, JsonValue]
+
+
 class AgentResult(AgentContract):
     """Candidate outputs from an agent; governance fields are intentionally absent."""
 
@@ -49,7 +58,9 @@ class AgentResult(AgentContract):
     agent_id: str = Field(min_length=1)
     agent_version: str = Field(min_length=1)
     candidate_artifact_refs: list[str] = Field(default_factory=list)
+    candidate_artifacts: list[CandidateArtifact] = Field(default_factory=list, exclude=True)
     evidence_refs: list[str] = Field(default_factory=list)
+    llm_metadata_refs: list[str] = Field(default_factory=list)
     tool_requests: list[ToolRequest] = Field(default_factory=list)
     approval_requests: list[str] = Field(default_factory=list)
     risk_flags: list[str] = Field(default_factory=list)

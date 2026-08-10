@@ -25,6 +25,11 @@ from stem_sci.agents import (
 from stem_sci.agents.base import BaseAgent
 from stem_sci.agents.contracts import ApprovalRequest, ReviewFinding
 from stem_sci.artifacts.artifact_store import ArtifactStore, InMemoryArtifactStore
+from stem_sci.artifacts.content_store import (
+    ArtifactContent,
+    ArtifactContentStore,
+    InMemoryArtifactContentStore,
+)
 from stem_sci.artifacts.decision_store import DecisionStore, InMemoryDecisionStore
 from stem_sci.artifacts.models import ArtifactRef
 from stem_sci.context.models import ContextBundle
@@ -254,6 +259,7 @@ class ResearchController:
         workflow_store: WorkflowStore | None = None,
         operator_executor: OperatorExecutor | None = None,
         artifact_store: ArtifactStore | None = None,
+        artifact_content_store: ArtifactContentStore | None = None,
         agent_run_store: AgentRunStore | None = None,
         route_store: RouteDecisionStore | None = None,
     ) -> None:
@@ -263,6 +269,7 @@ class ResearchController:
         self.workflow_store = workflow_store
         self.operator_executor = operator_executor or OperatorExecutor()
         self.artifact_store = artifact_store or InMemoryArtifactStore()
+        self.artifact_content_store = artifact_content_store or InMemoryArtifactContentStore()
         self.agent_run_store = agent_run_store or InMemoryAgentRunStore()
         self.route_store = route_store
         self._states: dict[str, ResearchState] = {}
@@ -323,15 +330,40 @@ class ResearchController:
         route: RouteDecision,
         execution_refs: list[str],
     ) -> None:
+        candidate_content = {
+            artifact.candidate_ref: artifact for artifact in result.candidate_artifacts
+        }
         for index, artifact_ref in enumerate(result.candidate_artifact_refs):
             artifact_type = artifact_ref.rsplit("/", maxsplit=1)[-1]
+            artifact_id = f"{result.agent_run_id}:artifact:{index}"
+            content_uri = artifact_ref
+            artifact_hash = sha256(artifact_ref.encode("utf-8")).hexdigest()
+            payload = candidate_content.get(artifact_ref)
+            if payload is not None:
+                content = self.artifact_content_store.put(
+                    ArtifactContent(
+                        artifact_id=artifact_id,
+                        project_id=route.project_id,
+                        artifact_type=payload.artifact_type,
+                        version=1,
+                        schema_version=payload.schema_version,
+                        body=payload.body,
+                        created_at=result.created_at,
+                    )
+                )
+                if content.content_hash is None:
+                    raise ValueError("persisted artifact content has no hash")
+                artifact_hash = content.content_hash
+                content_uri = (
+                    f"artifact-content://{route.project_id}/{artifact_id}/{content.version}"
+                )
             artifact = ArtifactRef(
-                artifact_id=f"{result.agent_run_id}:artifact:{index}",
+                artifact_id=artifact_id,
                 project_id=route.project_id,
                 artifact_type=artifact_type,
                 version=1,
-                content_uri=artifact_ref,
-                sha256=sha256(artifact_ref.encode("utf-8")).hexdigest(),
+                content_uri=content_uri,
+                sha256=artifact_hash,
                 created_at=result.created_at,
                 created_by=result.agent_id,
             )
@@ -346,6 +378,7 @@ class ResearchController:
                 input_artifact_refs=[agent_input.context_bundle_ref],
                 output_artifact_refs=list(result.candidate_artifact_refs),
                 tool_run_refs=execution_refs,
+                llm_metadata_refs=result.llm_metadata_refs,
                 route_decision_ref=route.decision_id,
                 started_at=result.created_at,
                 finished_at=result.created_at,

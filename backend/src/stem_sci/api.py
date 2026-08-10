@@ -15,6 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .agents import AgentCapability, ReviewFinding
 from .artifacts.artifact_store import SQLiteArtifactStore
+from .artifacts.content_store import ArtifactContent, SQLiteArtifactContentStore
 from .artifacts.execution_store import SQLiteExecutionStore
 from .artifacts.models import ArtifactRef
 from .context.models import (
@@ -90,6 +91,7 @@ workflow_database = storage_root / "workflow.db"
 operator_registry = OperatorRegistry.default()
 execution_store = SQLiteExecutionStore(workflow_database)
 artifact_store = SQLiteArtifactStore(workflow_database)
+artifact_content_store = SQLiteArtifactContentStore(workflow_database)
 agent_run_store = SQLiteAgentRunStore(workflow_database)
 route_store = SQLiteRouteDecisionStore(workflow_database)
 workflow_controller = ResearchController(
@@ -101,6 +103,7 @@ workflow_controller = ResearchController(
         execution_store=execution_store,
     ),
     artifact_store=artifact_store,
+    artifact_content_store=artifact_content_store,
     agent_run_store=agent_run_store,
     route_store=route_store,
 )
@@ -214,6 +217,11 @@ def workflow_executions(project_id: str) -> list[OperatorRun]:
 @app.get("/api/v1/workflow/projects/{project_id}/artifacts")
 def workflow_artifacts(project_id: str) -> list[ArtifactRef]:
     return artifact_store.list_project(project_id)
+
+
+@app.get("/api/v1/workflow/projects/{project_id}/artifact-contents")
+def workflow_artifact_contents(project_id: str) -> list[ArtifactContent]:
+    return artifact_content_store.list_project(project_id)
 
 
 @app.get("/api/v1/workflow/projects/{project_id}/agent-runs")
