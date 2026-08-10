@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 from stem_sci.agents.contracts import ToolRequest
 from stem_sci.artifacts.execution_store import ExecutionStore, InMemoryExecutionStore
 from stem_sci.core.enums import RunStatus
+from stem_sci.statistics.python_operator import PythonAnalysisRequest, PythonExecutionOutcome
 
 from .models import OperatorRun
 from .registry import OperatorRegistry
@@ -80,3 +82,18 @@ class OperatorExecutor:
                 finished_at=now,
             )
         return self.execution_store.put(run)
+
+    def execute_python_only(
+        self, request: PythonAnalysisRequest, output_root: Path
+    ) -> PythonExecutionOutcome:
+        """Controller entry point for the real CSV/PYTHON_ONLY MVP operator.
+
+        This deliberately bypasses Agent ToolRequest generation: the Controller
+        calls it only after the relevant plan and data approvals have completed.
+        """
+
+        from stem_sci.statistics.python_operator import CsvPythonAnalysisOperator
+
+        return CsvPythonAnalysisOperator(execution_store=self.execution_store).execute(
+            request, output_root
+        )

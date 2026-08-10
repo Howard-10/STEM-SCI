@@ -33,6 +33,8 @@ from .context.provider import LocalContextProvider
 from .context.service import ContextInputError, ContextNotFoundError, ContextService
 from .controller import (
     ControllerWorkflowState,
+    DataPipelineBeginRequest,
+    DataPipelineState,
     PlanningRequest,
     PlanningRunResult,
     ResearchController,
@@ -103,6 +105,7 @@ workflow_controller = ResearchController(
     artifact_store=artifact_store,
     agent_run_store=agent_run_store,
     route_store=route_store,
+    data_pipeline_root=storage_root,
 )
 
 
@@ -130,6 +133,11 @@ async def handle_context_input(_: Request, error: ContextInputError) -> JSONResp
 @app.exception_handler(ContextNotFoundError)
 async def handle_not_found(_: Request, error: ContextNotFoundError) -> JSONResponse:
     return _error(404, "not_found", f"{error.resource} was not found")
+
+
+@app.exception_handler(ValueError)
+async def handle_workflow_value_error(_: Request, error: ValueError) -> JSONResponse:
+    return _error(400, "workflow_input_error", str(error))
 
 
 @app.exception_handler(RequestValidationError)
@@ -229,6 +237,38 @@ def workflow_routes(project_id: str) -> list[RouteDecision]:
 @app.post("/api/v1/workflow/projects/{project_id}/review-findings")
 def workflow_review_finding(project_id: str, finding: ReviewFinding) -> ResearchState:
     return workflow_controller.route_review_finding(project_id, finding)
+
+
+@app.post("/api/v1/workflow/projects/{project_id}/data-pipeline/start")
+def start_data_pipeline(
+    project_id: str, request: DataPipelineBeginRequest
+) -> DataPipelineState:
+    if request.project_id != project_id:
+        raise ContextInputError("project_mismatch", "path project_id does not match request project_id")
+    return workflow_controller.begin_data_pipeline(request)
+
+
+@app.post("/api/v1/workflow/projects/{project_id}/data-pipeline/raw")
+async def register_data_pipeline_raw_csv(
+    project_id: str,
+    file: Annotated[UploadFile, File(...)],
+) -> DataPipelineState:
+    return workflow_controller.register_data_pipeline_raw_csv(
+        project_id,
+        filename=file.filename or "upload.csv",
+        content=await file.read(),
+    )
+
+
+@app.post("/api/v1/workflow/projects/{project_id}/data-pipeline/decide")
+def decide_data_pipeline(
+    project_id: str, request: WorkflowApprovalInput
+) -> DataPipelineState:
+    return workflow_controller.decide_data_pipeline(
+        project_id,
+        decision=request.decision,
+        decided_by=request.decided_by,
+    )
 
 
 @app.post("/api/v1/sources/import")

@@ -14,6 +14,7 @@ class ResearchState(DomainModel):
     project_id: str = Field(min_length=1)
     current_stage: ProjectStage = ProjectStage.INTAKE
     rework_target_agent: str | None = None
+    rework_target_refs: list[str] = Field(default_factory=list)
     rework_reason: str | None = None
     rework_trigger_refs: list[str] = Field(default_factory=list)
     task_status: dict[str, TaskStatus] = Field(default_factory=dict)

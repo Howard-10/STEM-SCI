@@ -6,6 +6,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
+from pathlib import Path
 from typing import ClassVar
 from uuid import uuid4
 
@@ -29,6 +30,12 @@ from stem_sci.artifacts.decision_store import DecisionStore, InMemoryDecisionSto
 from stem_sci.artifacts.models import ArtifactRef
 from stem_sci.context.models import ContextBundle
 from stem_sci.context.provider import ContextProvider
+from stem_sci.controller.data_pipeline import (
+    DataPipelineBeginRequest,
+    DataPipelineController,
+    DataPipelineStage,
+    DataPipelineState,
+)
 from stem_sci.controller.policy.route_decision import RouteDecision
 from stem_sci.core.enums import DecisionScope, ProjectStage, TaskStatus
 from stem_sci.core.models import ApprovalRecord
@@ -54,6 +61,7 @@ class ControllerWorkflowState(BaseModel):
     last_agent_run_id: str | None = None
     last_route_decision: RouteDecision | None = None
     research_state: ResearchState | None = None
+    data_pipeline: DataPipelineState | None = None
 
 
 class PlanningRequest(BaseModel):
@@ -234,6 +242,9 @@ class ResearchController:
         "sampling": "research_design",
         "measurement": "research_design",
         "causal": "research_design",
+        "pedagogy": "research_design",
+        "transfer": "research_design",
+        "intervention": "research_design",
         "analysis": "data_analysis",
         "statistics": "data_analysis",
         "data": "data_analysis",
@@ -256,6 +267,7 @@ class ResearchController:
         artifact_store: ArtifactStore | None = None,
         agent_run_store: AgentRunStore | None = None,
         route_store: RouteDecisionStore | None = None,
+        data_pipeline_root: Path | None = None,
     ) -> None:
         self.dispatcher = dispatcher or AgentDispatcher()
         self.context_provider = context_provider
@@ -265,6 +277,10 @@ class ResearchController:
         self.artifact_store = artifact_store or InMemoryArtifactStore()
         self.agent_run_store = agent_run_store or InMemoryAgentRunStore()
         self.route_store = route_store
+        self.data_pipeline = DataPipelineController(
+            storage_root=data_pipeline_root or Path(".stem_sci"),
+            operator_executor=self.operator_executor,
+        )
         self._states: dict[str, ResearchState] = {}
         self._workflow_states: dict[str, ControllerWorkflowState] = {}
         self._routes: dict[str, RouteDecision] = {}
@@ -649,6 +665,161 @@ class ResearchController:
         except KeyError as exc:
             raise ValueError(f"project has no pending approval: {project_id}") from exc
 
+    def begin_data_pipeline(self, request: DataPipelineBeginRequest) -> DataPipelineState:
+        """Controller-only entry to the approved CSV/PYTHON_ONLY data pipeline."""
+
+        workflow_state = self.get_state(request.project_id)
+        if workflow_state.current_stage not in {
+            ProjectStage.STUDY_PROTOCOL_APPROVED,
+            ProjectStage.DATA_READY,
+        }:
+            raise ValueError("data pipeline requires an approved study protocol")
+        pipeline = self.data_pipeline.begin(request)
+        updated_research = self._require_research_state(workflow_state).model_copy(
+            update={"current_stage": ProjectStage.DATA_READY}
+        )
+        self._states[request.project_id] = updated_research
+        self._workflow_states[request.project_id] = workflow_state.model_copy(
+            update={
+                "current_stage": ProjectStage.DATA_READY,
+                "research_state": updated_research,
+                "data_pipeline": pipeline,
+            }
+        )
+        self._persist(request.project_id)
+        return pipeline
+
+    def register_data_pipeline_raw_csv(
+        self, project_id: str, *, filename: str, content: bytes
+    ) -> DataPipelineState:
+        """Controller-only raw-data registration and deterministic audit."""
+
+        workflow_state = self.get_state(project_id)
+        pipeline = self._require_data_pipeline(workflow_state)
+        updated_pipeline = self.data_pipeline.register_raw_csv(
+            pipeline, filename=filename, content=content
+        )
+        next_stage = (
+            ProjectStage.REWORK
+            if updated_pipeline.stage is DataPipelineStage.REWORK
+            else ProjectStage.WAITING_HUMAN
+        )
+        research_state = self._require_research_state(workflow_state)
+        data_refs = [*research_state.data_asset_refs]
+        if updated_pipeline.raw_dataset is not None and updated_pipeline.raw_dataset.ref not in data_refs:
+            data_refs.append(updated_pipeline.raw_dataset.ref)
+        updated_research = research_state.model_copy(
+            update={
+                "current_stage": next_stage,
+                "data_asset_refs": data_refs,
+                "risk_flags": [
+                    *research_state.risk_flags,
+                    *(updated_pipeline.data_audit_report.risk_flags
+                      if updated_pipeline.data_audit_report is not None else []),
+                ],
+            }
+        )
+        self._states[project_id] = updated_research
+        self._workflow_states[project_id] = workflow_state.model_copy(
+            update={
+                "current_stage": next_stage,
+                "research_state": updated_research,
+                "data_pipeline": updated_pipeline,
+            }
+        )
+        self._persist(project_id)
+        return updated_pipeline
+
+    def decide_data_pipeline(
+        self, project_id: str, *, decision: str, decided_by: str
+    ) -> DataPipelineState:
+        """Persist one human decision, then execute only the approved operation."""
+
+        workflow_state = self.get_state(project_id)
+        pipeline = self._require_data_pipeline(workflow_state)
+        approval = pipeline.pending_approval
+        if approval is None:
+            raise ValueError("data pipeline has no pending human approval")
+        if decision not in {"approved", "rejected"}:
+            raise ValueError("data pipeline approval decision must be approved or rejected")
+        idempotency_key = f"data-pipeline:{approval.request_id}:{decision}"
+        existing = self.decision_store.get_by_idempotency(project_id, idempotency_key)
+        if existing is None:
+            self.decision_store.put(
+                ApprovalRecord(
+                    approval_id=approval.request_id,
+                    project_id=project_id,
+                    artifact_id=approval.artifact_ref,
+                    artifact_version=1,
+                    decision=decision,
+                    decided_by=decided_by,
+                    decided_at=datetime.now(UTC),
+                    reason=approval.reason,
+                    idempotency_key=idempotency_key,
+                )
+            )
+        else:
+            decision = existing.decision
+        updated_pipeline = self.data_pipeline.decide(pipeline, decision=decision)
+        next_stage = {
+            DataPipelineStage.WAITING_PROCESSING_APPROVAL: ProjectStage.WAITING_HUMAN,
+            DataPipelineStage.WAITING_FREEZE_APPROVAL: ProjectStage.WAITING_HUMAN,
+            DataPipelineStage.WAITING_EXECUTION_APPROVAL: ProjectStage.WAITING_HUMAN,
+            DataPipelineStage.REWORK: ProjectStage.REWORK,
+            DataPipelineStage.BLOCKED: ProjectStage.BLOCKED,
+            DataPipelineStage.ANALYZED: ProjectStage.ANALYZED,
+        }.get(updated_pipeline.stage, ProjectStage.DATA_READY)
+        research_state = self._require_research_state(workflow_state)
+        data_refs = [*research_state.data_asset_refs]
+        for dataset in (
+            updated_pipeline.processed_dataset,
+            updated_pipeline.frozen_dataset,
+        ):
+            if dataset is not None and dataset.ref not in data_refs:
+                data_refs.append(dataset.ref)
+        execution_refs = [*research_state.execution_run_refs]
+        if updated_pipeline.validation_report is not None:
+            for execution_ref in updated_pipeline.validation_report.execution_run_refs:
+                if execution_ref not in execution_refs:
+                    execution_refs.append(execution_ref)
+        artifact_refs = [*research_state.artifact_refs]
+        if updated_pipeline.statistical_result_card is not None:
+            result_ref = updated_pipeline.statistical_result_card.ref
+            if result_ref not in artifact_refs:
+                artifact_refs.append(result_ref)
+        updated_research = research_state.model_copy(
+            update={
+                "current_stage": next_stage,
+                "data_asset_refs": data_refs,
+                "execution_run_refs": execution_refs,
+                "artifact_refs": artifact_refs,
+                "rework_reason": updated_pipeline.rework_reason,
+                "rework_target_refs": updated_pipeline.blocked_target_ids,
+            }
+        )
+        self._states[project_id] = updated_research
+        self._workflow_states[project_id] = workflow_state.model_copy(
+            update={
+                "current_stage": next_stage,
+                "research_state": updated_research,
+                "data_pipeline": updated_pipeline,
+            }
+        )
+        self._persist(project_id)
+        return updated_pipeline
+
+    @staticmethod
+    def _require_research_state(workflow_state: ControllerWorkflowState) -> ResearchState:
+        if workflow_state.research_state is None:
+            raise ValueError("workflow state has no research state")
+        return workflow_state.research_state
+
+    @staticmethod
+    def _require_data_pipeline(workflow_state: ControllerWorkflowState) -> DataPipelineState:
+        if workflow_state.data_pipeline is None:
+            raise ValueError("workflow has no active data pipeline")
+        return workflow_state.data_pipeline
+
     def route_review_finding(
         self, project_id: str, finding: ReviewFinding
     ) -> ResearchState:
@@ -656,18 +827,38 @@ class ResearchController:
         workflow_state = self.get_state(project_id)
         if workflow_state.current_stage is not ProjectStage.REWORK:
             raise ValueError("review findings can only route a project in REWORK")
-        target_agent = self._REVIEW_FINDING_TARGETS.get(finding.category.strip().lower())
-        if target_agent is None:
-            raise ValueError(f"no rework target is defined for review category {finding.category}")
         state = workflow_state.research_state
         if state is None:
             raise ValueError("workflow state has no research state")
+        if finding.decision_scope in {DecisionScope.STAGE, DecisionScope.PROJECT}:
+            updated = state.model_copy(
+                update={
+                    "current_stage": ProjectStage.BLOCKED,
+                    "rework_target_agent": None,
+                    "rework_target_refs": list(finding.blocked_target_ids),
+                    "rework_reason": f"{finding.category}: {finding.description}",
+                    "risk_flags": [
+                        *state.risk_flags,
+                        f"REVIEW_BLOCK_{finding.decision_scope.value}",
+                    ],
+                }
+            )
+            self._states[project_id] = updated
+            self._workflow_states[project_id] = workflow_state.model_copy(
+                update={"current_stage": ProjectStage.BLOCKED, "research_state": updated}
+            )
+            self._persist(project_id)
+            return updated
+        target_agent = self._REVIEW_FINDING_TARGETS.get(finding.category.strip().lower())
+        if target_agent is None:
+            raise ValueError(f"no rework target is defined for review category {finding.category}")
         trigger_refs = [*state.rework_trigger_refs]
         if finding.finding_id not in trigger_refs:
             trigger_refs.append(finding.finding_id)
         updated = state.model_copy(
             update={
                 "rework_target_agent": target_agent,
+                "rework_target_refs": list(finding.blocked_target_ids),
                 "rework_reason": f"{finding.category}: {finding.description}",
                 "rework_trigger_refs": trigger_refs,
             }

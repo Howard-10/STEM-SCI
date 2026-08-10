@@ -28,11 +28,15 @@ class RawDatasetRef(DatasetRef):
 
 class ProcessedDatasetRef(DatasetRef):
     source_dataset_ref: str = Field(min_length=1)
+    processing_plan_ref: str = Field(min_length=1)
+    processing_approval_ref: str = Field(min_length=1)
+    processed_at: datetime
 
 
 class FrozenDatasetRef(DatasetRef):
     source_dataset_ref: str = Field(min_length=1)
     freeze_approval_ref: str = Field(min_length=1)
+    schema_ref: str = Field(min_length=1)
     frozen_at: datetime
 
     @model_validator(mode="after")

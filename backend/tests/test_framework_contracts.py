@@ -9,7 +9,14 @@ from stem_sci.controller.approvals import ApprovalInterrupt, approval_idempotenc
 from stem_sci.controller.policy.rule_policy import RouteRule, RulePolicy
 from stem_sci.core.events import EventType, ResearchEvent
 from stem_sci.core.ledgers import LedgerEntry, append_ledger_entry
-from stem_sci.statistics.models import AnalysisPlan, ResultValidationReport, StatisticalResultCard
+from stem_sci.statistics.models import (
+    AnalysisPlan,
+    ExecutionStatus,
+    ResultValidationReport,
+    StatisticalResultCard,
+    ValidationMode,
+)
+from stem_sci.statistics.mode_policy import AnalysisMode
 from stem_sci.utils.hash_utils import sha256_text
 from stem_sci.utils.ids import new_id
 from stem_sci.utils.validators import require_nonempty, require_reference
@@ -51,11 +58,20 @@ def test_statistics_and_verification_outputs_require_traceable_refs() -> None:
         project_id="contracts-demo",
         execution_run_ref="operator-run-1",
         analysis_plan_ref="analysis-1",
+        validation_report_ref="validation-1",
+        execution_status=ExecutionStatus.EXECUTION_VERIFIED,
+        deterministic_parser_version="result-parser-v1",
         values={"estimate": 0.2},
     )
     report = ResultValidationReport(
         report_id="validation-1",
-        result_ref=result.ref,
+        project_id="contracts-demo",
+        analysis_mode=AnalysisMode.PYTHON_ONLY,
+        validation_mode=ValidationMode.SINGLE_ENGINE,
+        execution_run_refs=["operator-run-1"],
+        input_integrity_passed=True,
+        model_integrity_passed=True,
+        numeric_output_integrity_passed=True,
         passed=False,
         finding_refs=["finding://1"],
     )
@@ -68,7 +84,7 @@ def test_statistics_and_verification_outputs_require_traceable_refs() -> None:
         message="Execution provider unavailable.",
         created_at=datetime.now(UTC),
     )
-    assert report.result_ref == result.ref
+    assert report.execution_status is ExecutionStatus.GENERATED
     assert test_result.status == "blocked"
 
 

@@ -13,6 +13,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from stem_sci.core.enums import DecisionScope
+
 
 class AgentContract(BaseModel):
     """Base model for protocol objects crossing an agent boundary."""
@@ -91,6 +93,8 @@ class ReviewFinding(AgentContract):
     description: str = Field(min_length=1)
     evidence_refs: list[str] = Field(default_factory=list)
     suggested_action: str = Field(min_length=1)
+    decision_scope: DecisionScope = DecisionScope.ARTIFACT
+    blocked_target_ids: list[str] = Field(default_factory=list)
 
 
 class RevisionRequest(AgentContract):
