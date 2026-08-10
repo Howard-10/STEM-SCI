@@ -15,6 +15,7 @@ from .models import (
     WritingSufficiencyReport,
     WritingSufficiencyStatus,
 )
+from .pipeline import PaperWritingPipeline
 from .validators import validate_claim_graph, validate_claim_node
 
 __all__ = [
@@ -26,6 +27,7 @@ __all__ = [
     "LanguageCode",
     "ManuscriptDraft",
     "ManuscriptOutline",
+    "PaperWritingPipeline",
     "WritingContextBundle",
     "WritingPackage",
     "WritingSufficiencyReport",

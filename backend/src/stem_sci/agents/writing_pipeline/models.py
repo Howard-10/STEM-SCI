@@ -123,3 +123,15 @@ class WritingPackage(WritingModel):
     sufficiency: WritingSufficiencyReport
     risk_flags: list[str] = Field(default_factory=list)
     generation_metadata_refs: list[str] = Field(default_factory=list)
+
+
+class ClaimGraphResponse(WritingModel):
+    graph: AtomicClaimGraph
+
+
+class OutlineResponse(WritingModel):
+    outline: ManuscriptOutline
+
+
+class DraftResponse(WritingModel):
+    draft: ManuscriptDraft
