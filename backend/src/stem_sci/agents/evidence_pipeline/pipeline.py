@@ -79,6 +79,8 @@ class EvidenceReviewPipeline:
         cards = _valid_cards(
             cards_stage.value, context.project_id, allowed_sources, allowed_ids, risk_flags
         )
+        if not cards:
+            risk_flags.append("NO_VALID_PAPER_CARDS")
 
         matrix_stage = build_evidence_matrix(
             context, cards, self.generator, self.prompt_registry, self.model
@@ -87,6 +89,8 @@ class EvidenceReviewPipeline:
         rows = _valid_rows(
             matrix_stage.value, context.project_id, allowed_sources, allowed_ids, risk_flags
         )
+        if not rows:
+            risk_flags.append("NO_VALID_EVIDENCE_MATRIX_ROWS")
 
         conflict_stage = analyze_conflicts_and_gaps(
             context, rows, self.generator, self.prompt_registry, self.model
@@ -111,8 +115,17 @@ class EvidenceReviewPipeline:
         synthesis = _valid_synthesis(
             synthesis_stage.value, context.project_id, allowed_ids, risk_flags
         )
-        status = PackageStatus.READY if synthesis is not None else PackageStatus.INCOMPLETE
-        sufficiency = sufficiency.model_copy(update={"status": status})
+        missing_requirements: list[str] = []
+        if not cards:
+            missing_requirements.append("valid_paper_cards")
+        if not rows:
+            missing_requirements.append("valid_evidence_matrix_rows")
+        if synthesis is None:
+            missing_requirements.append("bounded_evidence_synthesis")
+        status = PackageStatus.READY if not missing_requirements else PackageStatus.INCOMPLETE
+        sufficiency = sufficiency.model_copy(
+            update={"status": status, "missing_requirements": missing_requirements}
+        )
         used_refs = sorted(
             {
                 ref

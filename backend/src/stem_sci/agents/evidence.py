@@ -3,14 +3,29 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import cast
 
 from pydantic import JsonValue
 
-from stem_sci.context.models import ContextBundle
+from stem_sci.context.models import ContextBundle, EvidenceRef
 
 from .base import BaseAgent
 from .contracts import AgentInput, AgentResult, CandidateArtifact
-from .evidence_pipeline import EvidenceReviewContext, EvidenceReviewPackage, EvidenceReviewPipeline
+from .evidence_pipeline import (
+    CorpusCoverageReport,
+    EvidenceConflictMap,
+    EvidenceMatrixRow,
+    EvidenceReviewContext,
+    EvidenceReviewPackage,
+    EvidenceReviewPipeline,
+    EvidenceSufficiencyReport,
+    PackageStatus,
+    PaperCard,
+    ResearchGapReport,
+    ScreeningDecision,
+    ScreeningStatus,
+)
+from .runtime import StructuredGenerationError
 
 
 class EvidenceReviewAgent(BaseAgent):
@@ -50,20 +65,73 @@ class EvidenceReviewAgent(BaseAgent):
                 source_refs=context.source_refs,
                 context_hash=context.context_hash,
             )
-            return self.run_pipeline(agent_input, pipeline_context)
-        result = self.run(agent_input)
-        risk_flags = list(result.risk_flags)
-        unresolved_questions = [*result.unresolved_questions, *context.unresolved_questions]
-        if not context.evidence_refs:
-            risk_flags.append("INSUFFICIENT_VERIFIED_EVIDENCE")
-        return result.model_copy(
+            try:
+                return self.run_pipeline(agent_input, pipeline_context)
+            except StructuredGenerationError:
+                return self._fallback_with_generation_failure(agent_input, context)
+        return self._deterministic_result(agent_input, context)
+
+    def _deterministic_result(self, agent_input: AgentInput, context: ContextBundle) -> AgentResult:
+        package = self._deterministic_fallback(context)
+        allowed = set(agent_input.allowed_output_types)
+        artifacts = self._candidate_artifacts(agent_input, package, allowed)
+        fallback_payloads: list[tuple[str, dict[str, object]]] = [
+            (
+                "SearchProtocolCandidate",
+                {
+                    "project_id": context.project_id,
+                    "query": context.query,
+                    "mode": "deterministic_context_only",
+                    "source_refs": context.source_refs,
+                },
+            ),
+            (
+                "InclusionExclusionCriteria",
+                {
+                    "include": ["Evidence is present in the supplied ContextBundle."],
+                    "exclude": ["Sources absent from the supplied ContextBundle."],
+                },
+            ),
+            (
+                "LiteratureNeedUpdate",
+                {
+                    "status": "MODEL_SYNTHESIS_PENDING",
+                    "reason": "Deterministic fallback does not infer cross-source conclusions.",
+                },
+            ),
+        ]
+        for artifact_type, body in fallback_payloads:
+            if artifact_type in allowed:
+                artifacts.append(self._artifact(agent_input.task_ref, artifact_type, body))
+        return AgentResult(
+            agent_run_id=agent_input.agent_run_id,
+            agent_id=self.agent_id,
+            agent_version="phase1-deterministic-evidence-v1",
+            candidate_artifact_refs=[artifact.candidate_ref for artifact in artifacts],
+            candidate_artifacts=artifacts,
+            evidence_refs=package.used_evidence_refs,
+            risk_flags=list(dict.fromkeys([*package.risk_flags, *context.risk_flags])),
+            unresolved_questions=list(
+                dict.fromkeys([*package.unresolved_questions, *context.unresolved_questions])
+            ),
+            recommendations=[
+                "Deterministic fallback organizes supplied evidence but does not create a formal synthesis.",
+                "Source evidence must be verified before supporting a formal claim.",
+            ],
+            confidence=0.4 if package.used_evidence_refs else 0.0,
+            created_at=datetime.now(UTC),
+        )
+
+    def _fallback_with_generation_failure(
+        self, agent_input: AgentInput, context: ContextBundle
+    ) -> AgentResult:
+        fallback = self._deterministic_result(agent_input, context)
+        return fallback.model_copy(
             update={
-                "evidence_refs": [evidence.evidence_id for evidence in context.evidence_refs],
-                "risk_flags": list(dict.fromkeys([*risk_flags, *context.risk_flags])),
-                "unresolved_questions": list(dict.fromkeys(unresolved_questions)),
-                "recommendations": [
-                    *result.recommendations,
-                    "Source evidence must be verified before supporting a formal claim.",
+                "risk_flags": [*fallback.risk_flags, "MODEL_GENERATION_FAILED"],
+                "unresolved_questions": [
+                    *fallback.unresolved_questions,
+                    "Model-assisted evidence synthesis is unavailable; deterministic evidence organization remains incomplete.",
                 ],
             }
         )
@@ -158,3 +226,96 @@ class EvidenceReviewAgent(BaseAgent):
             for artifact_type, body in payloads
             if artifact_type in allowed
         ]
+
+    def _deterministic_fallback(self, context: ContextBundle) -> EvidenceReviewPackage:
+        """Organize existing evidence without interpreting it or calling a model."""
+
+        evidence_by_source: dict[str, list[EvidenceRef]] = {}
+        for evidence in context.evidence_refs:
+            evidence_by_source.setdefault(evidence.source_id, []).append(evidence)
+        decisions = [
+            ScreeningDecision(
+                source_ref=source_ref,
+                decision=ScreeningStatus.INCLUDE,
+                reason="A project-scoped evidence reference is present in the ContextBundle.",
+                evidence_refs=[item.evidence_id for item in refs],
+            )
+            for source_ref, refs in sorted(evidence_by_source.items())
+        ]
+        cards = [
+            PaperCard(
+                paper_card_id=f"deterministic-card:{context.project_id}:{source_ref}",
+                project_id=context.project_id,
+                source_ref=source_ref,
+                title=f"Source {source_ref}",
+                main_findings=[item.excerpt for item in refs],
+                limitations=["Deterministic fallback preserves excerpts but performs no semantic extraction."],
+                evidence_refs=[item.evidence_id for item in refs],
+            )
+            for source_ref, refs in sorted(evidence_by_source.items())
+        ]
+        rows = [
+            EvidenceMatrixRow(
+                row_id=f"deterministic-row:{context.project_id}:{evidence.evidence_id}",
+                project_id=context.project_id,
+                research_question=context.query,
+                source_ref=evidence.source_id,
+                relation="MENTIONING",
+                finding=evidence.excerpt,
+                applicability_boundary="Excerpt retained without model-generated support or contrast inference.",
+                evidence_refs=[evidence.evidence_id],
+            )
+            for evidence in context.evidence_refs
+        ]
+        coverage = CorpusCoverageReport(
+            report_id=f"deterministic-coverage:{context.context_id}",
+            project_id=context.project_id,
+            source_count=len(evidence_by_source),
+            evidence_count=len(context.evidence_refs),
+            covered_topics=[context.query] if context.evidence_refs else [],
+            missing_topics=[] if context.evidence_refs else [context.query],
+        )
+        missing = ["model_assisted_bounded_synthesis"]
+        if not context.evidence_refs:
+            missing.insert(0, "verified_evidence")
+        return EvidenceReviewPackage(
+            project_id=context.project_id,
+            status=PackageStatus.INCOMPLETE,
+            coverage_report=coverage,
+            screening_decisions=decisions,
+            paper_cards=cards,
+            evidence_matrix=rows,
+            conflict_map=EvidenceConflictMap(
+                map_id=f"deterministic-conflicts:{context.context_id}",
+                project_id=context.project_id,
+                conflicts=[],
+            ),
+            research_gap_report=ResearchGapReport(
+                report_id=f"deterministic-gaps:{context.context_id}",
+                project_id=context.project_id,
+                gaps=[],
+                limit_text="Deterministic fallback does not infer research gaps from source excerpts.",
+            ),
+            sufficiency=EvidenceSufficiencyReport(
+                report_id=f"deterministic-sufficiency:{context.context_id}",
+                project_id=context.project_id,
+                status=PackageStatus.INCOMPLETE,
+                evidence_count=len(context.evidence_refs),
+                missing_requirements=missing,
+            ),
+            used_evidence_refs=[item.evidence_id for item in context.evidence_refs],
+            risk_flags=["MODEL_SYNTHESIS_NOT_CONFIGURED"],
+            unresolved_questions=[
+                "Configure a structured model pipeline before producing conflict analysis or a bounded synthesis."
+            ],
+        )
+
+    def _artifact(
+        self, task_ref: str, artifact_type: str, body: dict[str, object]
+    ) -> CandidateArtifact:
+        return CandidateArtifact(
+            candidate_ref=f"candidate://{self.agent_id}/{task_ref}/{artifact_type}",
+            artifact_type=artifact_type,
+            schema_version="v1",
+            body=cast(dict[str, JsonValue], body),
+        )

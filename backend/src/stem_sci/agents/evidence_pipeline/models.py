@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -35,6 +36,7 @@ class EvidenceReviewContext(EvidenceModel):
     inclusion_criteria: list[str] = Field(default_factory=list)
     exclusion_criteria: list[str] = Field(default_factory=list)
     corpus_time_boundary: str | None = None
+    intended_use: Literal["formal", "demo"] = "formal"
     context_hash: str = Field(min_length=64, max_length=64)
     allowed_verification_statuses: list[VerificationStatus] = Field(
         default_factory=lambda: [

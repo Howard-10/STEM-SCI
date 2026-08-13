@@ -81,6 +81,7 @@ class CodeSpecificationDraft(AgentContract):
     expected_dataset_schema_ref: str = Field(min_length=1)
     required_outputs: list[str] = Field(min_length=1)
     expected_language: Literal["python", "spss"] = "python"
+    expected_languages: list[Literal["python", "spss"]] = Field(min_length=1)
 
 
 class ModelDiagnosticRecommendation(AgentContract):
@@ -139,7 +140,7 @@ class DataAnalysisPreAnalysisInput(AgentContract):
     task_ref: str = Field(min_length=1)
     study_protocol_ref: str = Field(min_length=1)
     preregistered_plan_ref: str = Field(min_length=1)
-    preregistered_plan_status: Literal["approved", "frozen"]
+    preregistered_plan_status: Literal["frozen"]
     preregistration_approval_ref: str = Field(min_length=1)
     data_collection_schema_ref: str = Field(min_length=1)
     variable_dictionary_ref: str = Field(min_length=1)

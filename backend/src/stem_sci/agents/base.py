@@ -101,3 +101,48 @@ class BaseAgent(ABC):
             confidence=0.5 if refs else 0.0,
             created_at=datetime.now(UTC),
         )
+
+    def restrict_to_authorized_outputs(
+        self, agent_input: AgentInput, result: AgentResult
+    ) -> AgentResult:
+        """Return only candidate artifacts authorized for this invocation.
+
+        Rich specialist methods may construct a full candidate package for
+        local inspection.  This adapter is the safe boundary for an
+        orchestrator: ungranted outputs are omitted and visibly recorded as a
+        capability gap instead of silently flowing to persistence.
+        """
+
+        if result.agent_id != self.agent_id:
+            raise ValueError("cannot authorize an AgentResult from another agent")
+        if result.agent_run_id != agent_input.agent_run_id:
+            raise ValueError("AgentResult run ID does not match AgentInput")
+        allowed = set(agent_input.allowed_output_types)
+        selected_artifacts = [
+            artifact for artifact in result.candidate_artifacts if artifact.artifact_type in allowed
+        ]
+        selected_refs = [
+            ref
+            for ref in result.candidate_artifact_refs
+            if ref.rsplit("/", maxsplit=1)[-1] in allowed
+        ]
+        omitted = [
+            ref
+            for ref in result.candidate_artifact_refs
+            if ref.rsplit("/", maxsplit=1)[-1] not in allowed
+        ]
+        risk_flags = list(result.risk_flags)
+        unresolved = list(result.unresolved_questions)
+        if omitted:
+            risk_flags.append("OUTPUT_CAPABILITY_NOT_GRANTED")
+            unresolved.append(
+                "Controller must grant the required candidate artifact types before they can be persisted."
+            )
+        return result.model_copy(
+            update={
+                "candidate_artifact_refs": selected_refs,
+                "candidate_artifacts": selected_artifacts,
+                "risk_flags": list(dict.fromkeys(risk_flags)),
+                "unresolved_questions": list(dict.fromkeys(unresolved)),
+            }
+        )

@@ -6,6 +6,9 @@ Those are Controller-owned calls to deterministic operators.
 """
 
 from datetime import UTC, datetime
+from typing import cast
+
+from pydantic import JsonValue
 
 from .analysis_contracts import (
     AnalysisReadinessReport,
@@ -22,7 +25,7 @@ from .analysis_contracts import (
     RobustnessCheckPlan,
 )
 from .base import BaseAgent
-from .contracts import AgentInput, AgentResult
+from .contracts import AgentContract, AgentInput, AgentResult, CandidateArtifact
 
 
 class DataAnalysisAgent(BaseAgent):
@@ -73,41 +76,11 @@ class DataAnalysisAgent(BaseAgent):
     ) -> DataAnalysisPreAnalysisOutcome:
         """Build typed specifications that a Controller can gate and store."""
 
-        output_types = (
-            "DataAuditSpecification",
-            "AnalysisReadinessReport",
-            "DataProcessingPlanCandidate",
-            "ExecutableAnalysisPlanCandidate",
-            "CodeSpecificationDraft",
-            "ModelDiagnosticRecommendation",
-            "RobustnessCheckPlan",
-            "RiskFlags",
-        )
-        agent_result = AgentResult(
-            agent_run_id=request.agent_run_id,
-            agent_id=self.agent_id,
-            agent_version=self.agent_version,
-            candidate_artifact_refs=[
-                f"candidate://{self.agent_id}/{request.task_ref}/{output_type}"
-                for output_type in output_types
-            ],
-            recommendations=[
-                "Data collection must occur only after the preregistered plan is approved.",
-                "Controller must obtain human approval before creating ProcessedDataset or "
-                "FrozenDataset.",
-                "Controller must compile an ExecutableAnalysisPlan from FrozenDataset schema "
-                "without changing preregistered substantive decisions.",
-            ],
-            confidence=0.5,
-            created_at=datetime.now(UTC),
-        )
         audit_ref = f"candidate://{self.agent_id}/{request.task_ref}/DataAuditSpecification"
         executable_ref = (
             f"candidate://{self.agent_id}/{request.task_ref}/ExecutableAnalysisPlanCandidate"
         )
-        return DataAnalysisPreAnalysisOutcome(
-            agent_result=agent_result,
-            readiness_report=AnalysisReadinessReport(
+        readiness = AnalysisReadinessReport(
                 report_id=f"analysis-readiness://{request.agent_run_id}",
                 project_id=request.project_id,
                 preregistered_plan_ref=request.preregistered_plan_ref,
@@ -116,8 +89,8 @@ class DataAnalysisAgent(BaseAgent):
                     "Approved preregistration, study protocol, collection schema, and "
                     "variable dictionary were supplied before data collection."
                 ),
-            ),
-            data_audit_specification=DataAuditSpecification(
+            )
+        audit = DataAuditSpecification(
                 specification_id=f"data-audit-spec://{request.agent_run_id}",
                 project_id=request.project_id,
                 data_collection_schema_ref=request.data_collection_schema_ref,
@@ -126,31 +99,36 @@ class DataAnalysisAgent(BaseAgent):
                 missingness_checks=request.missingness_checks,
                 range_and_type_checks=request.range_and_type_checks,
                 privacy_checks=request.privacy_checks,
-            ),
-            data_processing_plan_candidate=DataProcessingPlanCandidate(
+            )
+        processing = DataProcessingPlanCandidate(
                 candidate_id=f"processing-plan-candidate://{request.agent_run_id}",
                 project_id=request.project_id,
                 data_audit_specification_ref=audit_ref,
                 proposed_steps=request.proposed_processing_steps,
                 missing_data_strategy_ref=request.missing_data_strategy_ref,
                 exclusion_rule_refs=request.exclusion_rule_refs,
-            ),
-            executable_plan_candidate=ExecutableAnalysisPlanCandidate(
+            )
+        executable = ExecutableAnalysisPlanCandidate(
                 candidate_id=f"executable-plan-candidate://{request.agent_run_id}",
                 project_id=request.project_id,
                 preregistered_plan_ref=request.preregistered_plan_ref,
                 data_collection_schema_ref=request.data_collection_schema_ref,
                 analysis_mode=request.analysis_mode,
                 model_specification_refs=request.model_specification_refs,
-            ),
-            code_specification_draft=CodeSpecificationDraft(
+            )
+        code_specification = CodeSpecificationDraft(
                 draft_id=f"code-spec-draft://{request.agent_run_id}",
                 project_id=request.project_id,
                 executable_plan_candidate_ref=executable_ref,
                 expected_dataset_schema_ref=request.data_collection_schema_ref,
                 required_outputs=["ExecutionRun", "ResultValidationReport", "StatisticalResultCard"],
-            ),
-            model_diagnostic_recommendation=ModelDiagnosticRecommendation(
+                expected_languages=(
+                    ["python"]
+                    if request.analysis_mode.value == "PYTHON_ONLY"
+                    else ["spss", "python"]
+                ),
+            )
+        diagnostics = ModelDiagnosticRecommendation(
                 recommendation_id=f"model-diagnostic://{request.agent_run_id}",
                 project_id=request.project_id,
                 model_specification_ref=request.model_specification_refs[0],
@@ -158,14 +136,63 @@ class DataAnalysisAgent(BaseAgent):
                 interpretation_limitations=[
                     "Do not make causal claims outside the approved study protocol and estimand."
                 ],
-            ),
-            robustness_check_plan=RobustnessCheckPlan(
+            )
+        robustness = RobustnessCheckPlan(
                 plan_id=f"robustness-plan://{request.agent_run_id}",
                 project_id=request.project_id,
                 preregistered_plan_ref=request.preregistered_plan_ref,
                 planned_checks=request.robustness_checks,
                 reporting_rule="Report all pre-specified checks and label any amendment-driven work.",
-            ),
+            )
+        artifacts = [
+            self._artifact(request.task_ref, "DataAuditSpecification", audit),
+            self._artifact(request.task_ref, "AnalysisReadinessReport", readiness),
+            self._artifact(request.task_ref, "DataProcessingPlanCandidate", processing),
+            self._artifact(request.task_ref, "ExecutableAnalysisPlanCandidate", executable),
+            self._artifact(request.task_ref, "CodeSpecificationDraft", code_specification),
+            self._artifact(request.task_ref, "ModelDiagnosticRecommendation", diagnostics),
+            self._artifact(request.task_ref, "RobustnessCheckPlan", robustness),
+            self._artifact(request.task_ref, "RiskFlags", {
+                "items": ["Formal execution requires Controller-owned deterministic operators."],
+            }),
+        ]
+        agent_result = AgentResult(
+            agent_run_id=request.agent_run_id,
+            agent_id=self.agent_id,
+            agent_version="phase1-analysis-specification-v1",
+            candidate_artifact_refs=[artifact.candidate_ref for artifact in artifacts],
+            candidate_artifacts=artifacts,
+            recommendations=[
+                "Data collection must occur only after the preregistered plan is human-approved and frozen.",
+                "Controller must obtain human approval before creating ProcessedDataset or "
+                "FrozenDataset.",
+                "Controller must compile an ExecutableAnalysisPlan from FrozenDataset schema "
+                "without changing preregistered substantive decisions.",
+            ],
+            confidence=0.5,
+            created_at=datetime.now(UTC),
+        )
+        return DataAnalysisPreAnalysisOutcome(
+            agent_result=agent_result,
+            readiness_report=readiness,
+            data_audit_specification=audit,
+            data_processing_plan_candidate=processing,
+            executable_plan_candidate=executable,
+            code_specification_draft=code_specification,
+            model_diagnostic_recommendation=diagnostics,
+            robustness_check_plan=robustness,
+        )
+
+    def propose_pre_analysis_for(
+        self, agent_input: AgentInput, request: DataAnalysisPreAnalysisInput
+    ) -> DataAnalysisPreAnalysisOutcome:
+        """Create a full analysis specification but reveal only granted candidate outputs."""
+
+        if request.agent_run_id != agent_input.agent_run_id or request.task_ref != agent_input.task_ref:
+            raise ValueError("DataAnalysisPreAnalysisInput must match AgentInput run and task references")
+        outcome = self.propose_pre_analysis(request)
+        return outcome.model_copy(
+            update={"agent_result": self.restrict_to_authorized_outputs(agent_input, outcome.agent_result)}
         )
 
     def run_post_execution_interpretation(
@@ -180,13 +207,39 @@ class DataAnalysisAgent(BaseAgent):
     ) -> DataAnalysisInterpretationOutcome:
         """Create a typed post-execution boundary without copying result numbers."""
 
+        allowed_interpretations = [
+            "Describe the verified result using the referenced StatisticalResultCard.",
+            "Discuss results only within the approved estimand and protocol boundary.",
+        ]
+        prohibited_interpretations = [
+            "Do not invent, round, or alter statistical values.",
+            "Do not convert exploratory amendments into confirmatory conclusions.",
+            "Do not make causal claims unsupported by the approved study design.",
+        ]
+        if request.execution_status.value == "execution_verified":
+            allowed_interpretations.append(
+                "Identify the result as PYTHON_ONLY single-engine validation when describing its validation mode."
+            )
+            prohibited_interpretations.append(
+                "Do not describe a single-engine result as cross-engine verified."
+            )
+        boundary = ResultInterpretationBoundary(
+            boundary_id=f"interpretation-boundary://{request.agent_run_id}",
+            project_id=request.project_id,
+            statistical_result_card_ref=request.statistical_result_card_ref,
+            execution_status=request.execution_status,
+            allowed_interpretations=allowed_interpretations,
+            prohibited_interpretations=prohibited_interpretations,
+        )
+        artifact = self._artifact(
+            request.task_ref, "ResultInterpretationBoundary", boundary
+        )
         agent_result = AgentResult(
             agent_run_id=request.agent_run_id,
             agent_id=self.agent_id,
-            agent_version=self.agent_version,
-            candidate_artifact_refs=[
-                f"candidate://{self.agent_id}/{request.task_ref}/ResultInterpretationBoundary"
-            ],
+            agent_version="phase1-analysis-specification-v1",
+            candidate_artifact_refs=[artifact.candidate_ref],
+            candidate_artifacts=[artifact],
             recommendations=[
                 "Interpretation remains pending human review and must cite the immutable "
                 "StatisticalResultCard rather than restating or altering its values."
@@ -196,19 +249,31 @@ class DataAnalysisAgent(BaseAgent):
         )
         return DataAnalysisInterpretationOutcome(
             agent_result=agent_result,
-            interpretation_boundary=ResultInterpretationBoundary(
-                boundary_id=f"interpretation-boundary://{request.agent_run_id}",
-                project_id=request.project_id,
-                statistical_result_card_ref=request.statistical_result_card_ref,
-                execution_status=request.execution_status,
-                allowed_interpretations=[
-                    "Describe the verified result using the referenced StatisticalResultCard.",
-                    "Discuss results only within the approved estimand and protocol boundary.",
-                ],
-                prohibited_interpretations=[
-                    "Do not invent, round, or alter statistical values.",
-                    "Do not convert exploratory amendments into confirmatory conclusions.",
-                    "Do not make causal claims unsupported by the approved study design.",
-                ],
-            ),
+            interpretation_boundary=boundary,
+        )
+
+    def propose_interpretation_boundary_for(
+        self, agent_input: AgentInput, request: DataAnalysisPostExecutionInput
+    ) -> DataAnalysisInterpretationOutcome:
+        """Expose a post-execution interpretation boundary through AgentInput permissions."""
+
+        if request.agent_run_id != agent_input.agent_run_id or request.task_ref != agent_input.task_ref:
+            raise ValueError("DataAnalysisPostExecutionInput must match AgentInput run and task references")
+        outcome = self.propose_interpretation_boundary(request)
+        return outcome.model_copy(
+            update={"agent_result": self.restrict_to_authorized_outputs(agent_input, outcome.agent_result)}
+        )
+
+    def _artifact(
+        self,
+        task_ref: str,
+        artifact_type: str,
+        body: AgentContract | dict[str, object],
+    ) -> CandidateArtifact:
+        payload = body if isinstance(body, dict) else body.model_dump(mode="json")
+        return CandidateArtifact(
+            candidate_ref=f"candidate://{self.agent_id}/{task_ref}/{artifact_type}",
+            artifact_type=artifact_type,
+            schema_version="v1",
+            body=cast(dict[str, JsonValue], payload),
         )

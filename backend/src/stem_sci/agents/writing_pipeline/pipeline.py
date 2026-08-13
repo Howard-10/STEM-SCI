@@ -66,7 +66,13 @@ class PaperWritingPipeline:
             nodes=valid_nodes,
             graph_hash=graph_stage.value.graph_hash,
         )
-        validate_claim_graph(graph, context)
+        try:
+            validate_claim_graph(graph, context)
+        except ValueError:
+            # A malformed claim graph is never rendered as a manuscript.  The
+            # Controller may route this candidate back for bounded rework.
+            risks.append("INVALID_CLAIM_GRAPH")
+            graph = AtomicClaimGraph(project_id=context.project_id, nodes=[])
 
         outline_stage = build_manuscript_outline(
             context, graph, self.generator, self.prompt_registry, self.model

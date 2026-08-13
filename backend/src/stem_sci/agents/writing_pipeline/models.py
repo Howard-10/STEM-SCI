@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -48,6 +49,7 @@ class AtomicClaimNode(WritingModel):
     evidence_refs: list[str] = Field(default_factory=list)
     result_card_ref: str | None = None
     method_ref: str | None = None
+    interpretation_boundary_ref: str | None = None
     human_approval_ref: str | None = None
     relations: list[tuple[str, ClaimRelation]] = Field(default_factory=list)
     section_target: str = Field(min_length=1)
@@ -74,6 +76,7 @@ class WritingContextBundle(WritingModel):
     validated_result_cards: list[str] = Field(default_factory=list)
     interpretation_boundaries: list[str] = Field(default_factory=list)
     prior_review_findings: list[str] = Field(default_factory=list)
+    intended_use: Literal["formal", "demo"] = "formal"
     output_language: LanguageCode = LanguageCode.ZH_CN
     context_hash: str = Field(min_length=64, max_length=64)
 

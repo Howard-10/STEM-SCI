@@ -45,7 +45,7 @@ def test_data_analysis_agent_proposes_specs_without_operator_requests() -> None:
     assert "DataAuditSpecification" in " ".join(result.candidate_artifact_refs)
 
 
-def test_pre_analysis_requires_approved_preregistration_and_proposes_no_results() -> None:
+def test_pre_analysis_requires_frozen_preregistration_and_proposes_no_results() -> None:
     agent = DataAnalysisAgent()
     result = agent.run_pre_analysis(
         DataAnalysisPreAnalysisInput(
@@ -54,7 +54,7 @@ def test_pre_analysis_requires_approved_preregistration_and_proposes_no_results(
             task_ref="project-1:pre-analysis",
             study_protocol_ref="protocol://project-1/v1",
             preregistered_plan_ref="prereg-plan://project-1/v1",
-            preregistered_plan_status="approved",
+            preregistered_plan_status="frozen",
             preregistration_approval_ref="approval://project-1/prereg",
             data_collection_schema_ref="schema://collection/v1",
             variable_dictionary_ref="dictionary://collection/v1",
@@ -74,6 +74,31 @@ def test_pre_analysis_requires_approved_preregistration_and_proposes_no_results(
     assert result.tool_requests == []
     assert all("StatisticalResultCard" not in ref for ref in result.candidate_artifact_refs)
     assert any("ExecutableAnalysisPlanCandidate" in ref for ref in result.candidate_artifact_refs)
+
+
+def test_pre_analysis_rejects_an_unfrozen_preregistered_plan() -> None:
+    with pytest.raises(ValidationError, match="preregistered_plan_status"):
+        DataAnalysisPreAnalysisInput(
+            agent_run_id="analysis-pre-unfrozen",
+            project_id="project-1",
+            task_ref="project-1:pre-analysis",
+            study_protocol_ref="protocol://project-1/v1",
+            preregistered_plan_ref="prereg-plan://project-1/v1",
+            preregistered_plan_status="approved",  # type: ignore[arg-type]
+            preregistration_approval_ref="approval://project-1/prereg",
+            data_collection_schema_ref="schema://collection/v1",
+            variable_dictionary_ref="dictionary://collection/v1",
+            analysis_mode=AnalysisMode.PYTHON_ONLY,
+            model_specification_refs=["model-spec://project-1/main"],
+            required_variables=["group", "transfer_score"],
+            missingness_checks=["report missingness by group"],
+            range_and_type_checks=["transfer_score must be finite numeric"],
+            privacy_checks=["reject direct identifiers"],
+            proposed_processing_steps=["apply approved processing plan only"],
+            missing_data_strategy_ref="prereg-plan://project-1/missing-data",
+            diagnostic_checks=["inspect residual distribution"],
+            robustness_checks=["report pre-specified sensitivity analysis"],
+        )
 
 
 def test_interpretation_requires_verified_result_and_reviewer_is_read_only() -> None:

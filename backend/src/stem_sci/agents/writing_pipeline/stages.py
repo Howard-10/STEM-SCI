@@ -33,6 +33,11 @@ def audit_writing_inputs(context: WritingContextBundle) -> WritingSufficiencyRep
     missing: list[str] = []
     if not context.evidence_refs:
         missing.append("verified_evidence")
+    elif context.intended_use == "formal" and not any(
+        item.verification_status.value in {"source_verified", "human_verified"}
+        for item in context.evidence_refs
+    ):
+        missing.append("formal_verified_evidence")
     if not context.approved_study_protocol_refs:
         missing.append("approved_study_protocol")
     if not context.validated_result_cards:

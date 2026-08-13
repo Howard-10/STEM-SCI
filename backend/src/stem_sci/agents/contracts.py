@@ -60,7 +60,9 @@ class AgentResult(AgentContract):
     agent_id: str = Field(min_length=1)
     agent_version: str = Field(min_length=1)
     candidate_artifact_refs: list[str] = Field(default_factory=list)
-    candidate_artifacts: list[CandidateArtifact] = Field(default_factory=list, exclude=True)
+    # Candidate content is transient until the Controller persists it, but it
+    # must remain serializable so an orchestrator can validate and store it.
+    candidate_artifacts: list[CandidateArtifact] = Field(default_factory=list)
     evidence_refs: list[str] = Field(default_factory=list)
     llm_metadata_refs: list[str] = Field(default_factory=list)
     tool_requests: list[ToolRequest] = Field(default_factory=list)

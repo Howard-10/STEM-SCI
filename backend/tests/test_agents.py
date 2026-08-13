@@ -147,6 +147,28 @@ def test_candidate_content_must_match_public_candidate_reference() -> None:
         validate_agent_result(result, EvidenceReviewAgent.capability())
 
 
+def test_agent_result_serialization_keeps_candidate_artifact_body_for_orchestrators() -> None:
+    result = AgentResult(
+        agent_run_id="run-serialized-candidate",
+        agent_id="mentor_planning",
+        agent_version="v1",
+        candidate_artifact_refs=["candidate://mentor_planning/task/ResearchScopeCandidate"],
+        candidate_artifacts=[
+            CandidateArtifact(
+                candidate_ref="candidate://mentor_planning/task/ResearchScopeCandidate",
+                artifact_type="ResearchScopeCandidate",
+                schema_version="v1",
+                body={"in_scope": ["physics modelling"]},
+            )
+        ],
+        created_at=datetime.now(UTC),
+    )
+
+    payload = result.model_dump(mode="json")
+
+    assert payload["candidate_artifacts"][0]["body"]["in_scope"] == ["physics modelling"]
+
+
 def test_preregistered_plan_requires_approval_before_freeze() -> None:
     """The plan model distinguishes a candidate from an approved frozen plan."""
     common = {

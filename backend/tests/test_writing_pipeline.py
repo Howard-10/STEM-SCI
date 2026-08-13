@@ -1,12 +1,19 @@
 from stem_sci.agents import AgentInput, PaperWritingAgent
 from stem_sci.agents.evidence_pipeline import PaperCard
 from stem_sci.agents.runtime import FakeLLMProvider, StructuredGenerator
+import pytest
+
 from stem_sci.agents.writing_pipeline import (
+    AtomicClaimGraph,
+    AtomicClaimNode,
     BilingualConsistencyStatus,
+    ClaimRelation,
     PaperWritingPipeline,
     WritingContextBundle,
     WritingSufficiencyStatus,
 )
+from stem_sci.agents.writing_pipeline.validators import validate_claim_graph
+from stem_sci.core.claims import ClaimType
 from stem_sci.context.models import EvidenceRef, SourceLocation, VerificationStatus
 
 
@@ -155,6 +162,88 @@ def test_writing_pipeline_never_invents_results() -> None:
     assert "INCOMPLETE_RESULT_INPUT" in package.risk_flags
 
 
+def test_writing_pipeline_rejects_demo_evidence_for_formal_literature_claim() -> None:
+    original = context()
+    demo_context = original.model_copy(
+        update={
+            "evidence_refs": [
+                original.evidence_refs[0].model_copy(
+                    update={"verification_status": VerificationStatus.DEMO_SEED}
+                )
+            ]
+        }
+    )
+    literal_claim = {
+        "project_id": "physics-demo",
+        "claim_id": "literature-claim-1",
+        "text": "A literature claim.",
+        "claim_type": "LITERATURE",
+        "evidence_refs": ["evidence-1"],
+        "section_target": "introduction",
+    }
+    response_set = responses()
+    response_set[0] = {"graph": {"project_id": "physics-demo", "nodes": [literal_claim]}}
+    writing, _ = pipeline(response_set)
+
+    package = writing.run(demo_context, agent_input())
+
+    assert package.claim_graph.nodes == []
+    assert "INVALID_CLAIM_REFERENCE" in package.risk_flags
+
+
+def test_interpretation_claim_requires_result_relation_boundary_and_human_approval() -> None:
+    result = AtomicClaimNode(
+        project_id="physics-demo",
+        claim_id="result-1",
+        text="The validated result differs by group.",
+        claim_type=ClaimType.RESULT,
+        result_card_ref="result-1",
+        section_target="results",
+    )
+    interpretation = AtomicClaimNode(
+        project_id="physics-demo",
+        claim_id="interpretation-1",
+        text="The result may reflect the proposed learning mechanism.",
+        claim_type=ClaimType.INTERPRETATION,
+        evidence_refs=["evidence-1"],
+        interpretation_boundary_ref="boundary://physics-demo/1",
+        human_approval_ref="approval://physics-demo/interpretation/1",
+        relations=[("result-1", ClaimRelation.INTERPRETS)],
+        section_target="discussion",
+    )
+
+    graph = AtomicClaimGraph(project_id="physics-demo", nodes=[result, interpretation])
+    assert validate_claim_graph(graph, context()) is graph
+
+    invalid = interpretation.model_copy(update={"relations": []})
+    with pytest.raises(ValueError, match="must interpret a RESULT"):
+        validate_claim_graph(
+            AtomicClaimGraph(project_id="physics-demo", nodes=[result, invalid]), context()
+        )
+
+
+def test_writing_pipeline_does_not_render_an_invalid_claim_graph_as_valid_content() -> None:
+    invalid_interpretation = {
+        "project_id": "physics-demo",
+        "claim_id": "interpretation-1",
+        "text": "An unsupported interpretation.",
+        "claim_type": "INTERPRETATION",
+        "evidence_refs": ["evidence-1"],
+        "interpretation_boundary_ref": "boundary://physics-demo/1",
+        "human_approval_ref": "approval://physics-demo/interpretation/1",
+        "relations": [["missing-result", "INTERPRETS"]],
+        "section_target": "discussion",
+    }
+    response_set = responses()
+    response_set[0] = {"graph": {"project_id": "physics-demo", "nodes": [invalid_interpretation]}}
+    writing, _ = pipeline(response_set)
+
+    package = writing.run(context(), agent_input())
+
+    assert package.claim_graph.nodes == []
+    assert "INVALID_CLAIM_GRAPH" in package.risk_flags
+
+
 def test_writing_agent_capability_exposes_bilingual_outputs() -> None:
     output_types = set(PaperWritingAgent.capability().allowed_output_types)
 
@@ -176,3 +265,28 @@ def test_writing_agent_adapts_package_to_candidate_artifacts() -> None:
     assert len(result.llm_metadata_refs) == 4
     assert any("ManuscriptDraftZh" in ref for ref in result.candidate_artifact_refs)
     assert any("ManuscriptDraftEn" in ref for ref in result.candidate_artifact_refs)
+
+
+def test_writing_agent_deterministic_fallback_produces_no_result_numbers() -> None:
+    result = PaperWritingAgent().run_with_context(agent_input(), context())
+
+    artifact_types = {artifact.artifact_type for artifact in result.candidate_artifacts}
+    assert {"AtomicClaimGraph", "ManuscriptOutline", "WritingSufficiencyReport"} <= artifact_types
+    assert "WRITING_PIPELINE_NOT_CONFIGURED" in result.risk_flags
+    chinese = next(
+        artifact.body for artifact in result.candidate_artifacts
+        if artifact.artifact_type == "ManuscriptDraftZh"
+    )
+    assert chinese["numeric_literals"] == []
+    assert chinese["status"] == "INCOMPLETE_CANDIDATE"
+
+
+def test_writing_agent_falls_back_when_model_generation_fails() -> None:
+    failing = PaperWritingPipeline(
+        generator=StructuredGenerator(FakeLLMProvider([]), max_retries=0), model="gpt-test"
+    )
+
+    result = PaperWritingAgent(pipeline=failing).run_with_context(agent_input(), context())
+
+    assert "MODEL_GENERATION_FAILED" in result.risk_flags
+    assert "ManuscriptOutline" in {item.artifact_type for item in result.candidate_artifacts}
