@@ -38,7 +38,7 @@ def _start_pipeline(
             task_ref=f"{project_id}:pre-analysis",
             study_protocol_ref=f"protocol://{project_id}/v1",
             preregistered_plan_ref=f"prereg-plan://{project_id}/v1",
-            preregistered_plan_status="approved",
+            preregistered_plan_status="frozen",
             preregistration_approval_ref=f"approval://{project_id}/prereg-v1",
             data_collection_schema_ref=f"schema://{project_id}/collection-v1",
             variable_dictionary_ref=f"dictionary://{project_id}/v1",
@@ -97,6 +97,10 @@ def test_controller_runs_approved_csv_pipeline_to_verified_result(tmp_path: Path
     assert pipeline.validation_report is not None and pipeline.validation_report.passed
     assert pipeline.statistical_result_card is not None
     assert pipeline.statistical_result_card.execution_status == "execution_verified"
+    assert pipeline.code_specification_ref is not None
+    assert pipeline.code_artifact_ref is not None
+    assert pipeline.code_artifact_ref != f"code-artifact://{project_id}/mvp-v1"
+    assert pipeline.code_review_ref is not None
     assert controller.get_state(project_id).current_stage is ProjectStage.ANALYZED
 
 

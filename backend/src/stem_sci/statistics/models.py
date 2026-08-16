@@ -52,6 +52,13 @@ class AnalysisModelSpecification(DomainModel):
     grouping_variables: list[str] = Field(default_factory=list)
     repeated_measure_structure: str | None = None
     formula_or_design: str = Field(min_length=1)
+    human_readable_formula: str | None = None
+    executable_fixed_formula: str | None = None
+    groups_variable: str | None = None
+    re_formula: str | None = None
+    primary_contrast_weights: dict[str, float] = Field(default_factory=dict)
+    reference_levels: dict[str, str] = Field(default_factory=dict)
+    inference_contract_ref: str | None = None
     assumptions: list[str] = Field(default_factory=list)
     rationale: str = Field(min_length=1)
 
@@ -212,6 +219,22 @@ class ResultValidationReport(DomainModel):
     passed: bool
     result_consistency_report_ref: str | None = None
     finding_refs: list[str] = Field(default_factory=list)
+    fit_converged: bool | None = None
+    optimizer_warning: bool = False
+    variance_boundary: bool = False
+    rank_deficient: bool = False
+    nonfinite_inference: bool = False
+    design_matrix_rank: int | None = Field(default=None, ge=0)
+    design_columns: list[str] = Field(default_factory=list)
+    group_counts: dict[str, int] = Field(default_factory=dict)
+    sequence_counts: dict[str, int] = Field(default_factory=dict)
+    task_period_row_counts: dict[str, int] = Field(default_factory=dict)
+    variance_boundary_policy_version: str | None = None
+    variance_boundary_threshold: float | None = Field(default=None, ge=0.0)
+    random_intercept_variance: float | None = Field(default=None, ge=0.0)
+    residual_variance: float | None = Field(default=None, ge=0.0)
+    random_to_residual_variance_ratio: float | None = Field(default=None, ge=0.0)
+    diagnostics_ref: str | None = None
 
     @property
     def ref(self) -> str:
@@ -233,6 +256,16 @@ class ResultValidationReport(DomainModel):
                 raise ValueError("dual-engine validation requires both execution runs")
             if self.result_consistency_report_ref is None:
                 raise ValueError("dual-engine validation requires a consistency report")
+        if self.passed and any(
+            [
+                self.fit_converged is False,
+                self.optimizer_warning,
+                self.variance_boundary,
+                self.rank_deficient,
+                self.nonfinite_inference,
+            ]
+        ):
+            raise ValueError("failed model diagnostics cannot produce a passing validation report")
         return self
 
     @property
@@ -254,3 +287,56 @@ class ResultConsistencyReport(DomainModel):
     compared_result_keys: list[str] = Field(min_length=1)
     passed: bool
     tolerance: float = Field(ge=0.0)
+    difference_by_key: dict[str, float] = Field(default_factory=dict)
+    finding_codes: list[str] = Field(default_factory=list)
+
+    @property
+    def ref(self) -> str:
+        return f"result-consistency://{self.consistency_report_id}"
+
+
+class VarianceBoundaryPolicy(DomainModel):
+    policy_version: str = "1.0"
+    absolute_threshold: float = Field(default=1e-8, ge=0.0)
+    residual_ratio_threshold: float = Field(default=1e-6, ge=0.0)
+
+    def threshold(self, residual_variance: float) -> float:
+        return max(self.absolute_threshold, self.residual_ratio_threshold * residual_variance)
+
+
+class HumanExecutionApproval(DomainModel):
+    """Content-addressed human approval for one exact analysis execution package."""
+
+    approval_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    approved_at: datetime
+    approved_by: str = Field(min_length=1)
+    approval_status: Literal["approved", "rejected"]
+    plan_sha256: str = Field(min_length=64, max_length=64)
+    code_spec_sha256: str = Field(min_length=64, max_length=64)
+    code_artifact_sha256: str = Field(min_length=64, max_length=64)
+    code_review_result_sha256: str = Field(min_length=64, max_length=64)
+    analysis_dataset_sha256: str = Field(min_length=64, max_length=64)
+    environment_spec_sha256: str = Field(min_length=64, max_length=64)
+    template_version: str = Field(min_length=1)
+
+
+class ReproducibilityManifest(DomainModel):
+    manifest_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    plan_sha256: str = Field(min_length=64, max_length=64)
+    code_spec_sha256: str = Field(min_length=64, max_length=64)
+    code_artifact_sha256: str = Field(min_length=64, max_length=64)
+    frozen_dataset_sha256: str = Field(min_length=64, max_length=64)
+    analysis_dataset_sha256: str = Field(min_length=64, max_length=64)
+    result_file_sha256: str = Field(min_length=64, max_length=64)
+    python_version: str = Field(min_length=1)
+    statsmodels_version: str = Field(min_length=1)
+    container_image_digest: str | None = None
+    dependency_lock_hash: str = Field(min_length=64, max_length=64)
+    template_version: str = Field(min_length=1)
+    deterministic_template_sha256: str | None = Field(default=None, min_length=64, max_length=64)
+
+    @property
+    def ref(self) -> str:
+        return f"reproducibility-manifest://{self.manifest_id}"

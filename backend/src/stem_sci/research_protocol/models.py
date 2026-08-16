@@ -52,6 +52,43 @@ class Estimand(ProtocolModel):
     summary_measure: str = Field(min_length=1)
 
 
+class PrimaryEstimand(Estimand):
+    """The one pre-registered estimand that defines the primary conclusion."""
+
+
+class OutcomeOperationalDefinition(ProtocolModel):
+    outcome_id: str = Field(min_length=1)
+    construct_name: str = Field(min_length=1)
+    measurement_instrument: str = Field(min_length=1)
+    scoring_rule: str = Field(min_length=1)
+    available_groups: list[str] = Field(min_length=1)
+    available_tasks: list[str] = Field(min_length=1)
+    directionality: str = Field(min_length=1)
+
+
+class PrimaryContrast(ProtocolModel):
+    contrast_id: str = Field(min_length=1)
+    estimand_ref: str = Field(min_length=1)
+    coefficient_weights: dict[str, float] = Field(min_length=1)
+    reference_group: str = Field(min_length=1)
+    reference_measurement_period: str = Field(min_length=1)
+    interpretation: str = Field(min_length=1)
+
+
+class StatisticalInferenceContract(ProtocolModel):
+    contract_id: str = Field(min_length=1)
+    library: Literal["statsmodels"] = "statsmodels"
+    library_version: str = "0.14.6"
+    mixedlm_reml: bool = True
+    mixedlm_optimizer: tuple[str, ...] = ("lbfgs",)
+    mixedlm_maxiter: int = Field(default=200, ge=1)
+    confidence_level: float = Field(default=0.95, gt=0.0, lt=1.0)
+    alpha: float = Field(default=0.05, gt=0.0, lt=1.0)
+    mixedlm_inference: Literal["wald_z_normal"] = "wald_z_normal"
+    ancova_cov_type: Literal["HC3"] = "HC3"
+    ancova_use_t: Literal[True] = True
+
+
 class CausalDAGRef(ProtocolModel):
     dag_ref: str = Field(min_length=1)
 
@@ -85,6 +122,13 @@ class PreregisteredAnalysisPlan(ProtocolModel):
     effect_size_requirements: list[str] = Field(default_factory=list)
     confidence_interval_requirements: list[str] = Field(default_factory=list)
     exploratory_analysis_policy: str = Field(min_length=1)
+    primary_estimand_ref: str | None = None
+    primary_contrast_ref: str | None = None
+    outcome_operational_definition_refs: list[str] = Field(default_factory=list)
+    inference_contract_ref: str | None = None
+    minimum_group_size: int = Field(default=24, ge=1)
+    minimum_group_sequence_size: int = Field(default=12, ge=1)
+    contract_version: Literal["legacy", "v1.0"] = "legacy"
     status: Literal["candidate", "approved", "frozen"] = "candidate"
     approval_ref: str | None = None
     frozen_at: datetime | None = None
@@ -97,4 +141,14 @@ class PreregisteredAnalysisPlan(ProtocolModel):
             raise ValueError("frozen analysis plans require frozen_at")
         if self.status != "frozen" and self.frozen_at is not None:
             raise ValueError("only frozen analysis plans may have frozen_at")
+        if self.status == "frozen" and self.contract_version == "v1.0":
+            required = {
+                "primary_estimand_ref": self.primary_estimand_ref,
+                "primary_contrast_ref": self.primary_contrast_ref,
+                "inference_contract_ref": self.inference_contract_ref,
+                "outcome_operational_definition_refs": self.outcome_operational_definition_refs,
+            }
+            missing = [name for name, value in required.items() if not value]
+            if missing:
+                raise ValueError("frozen analysis plans require " + ", ".join(missing))
         return self

@@ -50,6 +50,8 @@ class RunStatus(StrEnum):
     FAILED = "FAILED"
     TERMINATED = "TERMINATED"
     BLOCKED = "BLOCKED"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    NOT_STARTED = "NOT_STARTED"
 
 
 class DecisionScope(StrEnum):

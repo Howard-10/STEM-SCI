@@ -4,6 +4,11 @@ from stem_sci.artifacts.decision_store import DecisionStore, SQLiteDecisionStore
 from stem_sci.core.enums import ProjectStage
 from stem_sci.operators.executor import OperatorExecutor
 
+from .analysis_execution import (
+    ResearchAnalysisExecutionRequest,
+    ResearchAnalysisExecutionResult,
+    ResearchAnalysisExecutionService,
+)
 from .data_pipeline import (
     DataAuditReport,
     DataPipelineApproval,
@@ -11,6 +16,12 @@ from .data_pipeline import (
     DataPipelineController,
     DataPipelineStage,
     DataPipelineState,
+)
+from .v1_analysis_pipeline import (
+    V1AnalysisExecutionResult,
+    V1AnalysisPipelineController,
+    V1AnalysisPreparationRequest,
+    V1PreparedAnalysis,
 )
 from .router import (
     AgentDispatcher,
@@ -42,10 +53,17 @@ __all__ = [
     "ProjectStage",
     "ReproducibilityReviewRequest",
     "ReproducibilityReviewRunResult",
+    "ResearchAnalysisExecutionRequest",
+    "ResearchAnalysisExecutionResult",
+    "ResearchAnalysisExecutionService",
     "ResearchController",
     "SQLiteDecisionStore",
     "SQLiteWorkflowStore",
     "WorkflowRunResult",
     "WorkflowSnapshot",
     "WorkflowStore",
+    "V1AnalysisExecutionResult",
+    "V1AnalysisPipelineController",
+    "V1AnalysisPreparationRequest",
+    "V1PreparedAnalysis",
 ]

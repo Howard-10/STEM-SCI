@@ -189,6 +189,8 @@ class CsvPythonAnalysisOperator:
             if reader.fieldnames is None or not required.issubset(reader.fieldnames):
                 raise ValueError("CSV must include group and transfer_score columns")
             for row in reader:
+                if (row.get("task_id") or "").strip() not in {"", "C"}:
+                    continue
                 group = (row.get("group") or "").strip()
                 if not group:
                     raise ValueError("group values must be non-empty")

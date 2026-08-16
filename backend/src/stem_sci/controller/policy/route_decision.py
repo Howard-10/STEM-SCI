@@ -19,6 +19,7 @@ class RouteDecision(DomainModel):
     required_context: list[str] = Field(default_factory=list)
     required_tools: list[str] = Field(default_factory=list)
     decision_scope: DecisionScope
+    blocked_target_ids: list[str] = Field(default_factory=list)
     risk_level: str = "LOW"
     triggered_rules: list[str] = Field(default_factory=list)
     final_decider: str = "controller"

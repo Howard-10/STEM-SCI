@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import csv
 import os
-import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
+from stem_sci.research_data.canonical import canonical_csv_bytes, read_csv_rows
 from stem_sci.research_data.models import FrozenDatasetRef, ProcessedDatasetRef
 from stem_sci.utils.hash_utils import sha256_bytes, sha256_text
 
@@ -36,11 +35,11 @@ class DataFreezeService:
             raise ValueError("MVP data freezing supports CSV only")
         if not source.is_file():
             raise ValueError("processed dataset file does not exist")
-        schema = self._schema_from_csv(source)
-        content = source.read_bytes()
+        fieldnames, rows = read_csv_rows(source.read_bytes())
+        content = canonical_csv_bytes(fieldnames, rows)
         destination_directory.mkdir(parents=True, exist_ok=True)
         frozen_path = destination_directory / f"{processed_dataset.dataset_id}-v{processed_dataset.version}.csv"
-        shutil.copyfile(source, frozen_path)
+        frozen_path.write_bytes(content)
         # Best-effort local protection.  Integrity is always enforced via the
         # recorded hash, including on platforms where ACLs are unavailable.
         os.chmod(frozen_path, 0o444)
@@ -51,10 +50,12 @@ class DataFreezeService:
             version=processed_dataset.version,
             content_uri=str(frozen_path),
             sha256=sha256_bytes(content),
+            raw_bytes_sha256=sha256_bytes(content),
+            canonical_content_sha256=sha256_bytes(content),
             created_at=now,
             source_dataset_ref=processed_dataset.ref,
             freeze_approval_ref=freeze_approval_ref,
-            schema_ref=f"schema://csv/{sha256_text('|'.join(schema))}",
+            schema_ref=f"schema://csv/{sha256_text('|'.join(fieldnames))}",
             frozen_at=now,
         )
 
@@ -62,15 +63,11 @@ class DataFreezeService:
         path = Path(dataset.content_uri)
         if not path.is_file():
             raise FrozenDatasetIntegrityError("frozen dataset file is unavailable")
-        actual_hash = sha256_bytes(path.read_bytes())
-        if actual_hash != dataset.sha256:
-            raise FrozenDatasetIntegrityError("frozen dataset SHA256 does not match")
-
-    @staticmethod
-    def _schema_from_csv(path: Path) -> tuple[str, ...]:
-        with path.open("r", encoding="utf-8", newline="") as source:
-            reader = csv.reader(source)
-            header = next(reader, None)
-        if not header or any(not value.strip() for value in header):
-            raise ValueError("CSV requires a non-empty header")
-        return tuple(header)
+        content = path.read_bytes()
+        actual_hash = sha256_bytes(content)
+        if actual_hash != dataset.raw_bytes_sha256 or actual_hash != dataset.sha256:
+            raise FrozenDatasetIntegrityError("frozen dataset byte SHA256 does not match")
+        fieldnames, rows = read_csv_rows(content)
+        canonical_hash = sha256_bytes(canonical_csv_bytes(fieldnames, rows))
+        if canonical_hash != dataset.canonical_content_sha256:
+            raise FrozenDatasetIntegrityError("frozen dataset canonical SHA256 does not match")

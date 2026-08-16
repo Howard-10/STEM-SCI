@@ -30,7 +30,6 @@ class SingleEngineResultValidator:
         model_integrity_passed = (
             run.status is RunStatus.SUCCEEDED
             and run.operator_id == "python_analysis"
-            and run.operator_version == "mvp-csv-v1"
             and outcome.executable_plan.analysis_mode is AnalysisMode.PYTHON_ONLY
             and outcome.executable_plan.frozen_dataset_ref == outcome.frozen_dataset.ref
             and outcome.executable_plan.frozen_dataset_sha256 == outcome.frozen_dataset.sha256

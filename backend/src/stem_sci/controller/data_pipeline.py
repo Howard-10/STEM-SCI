@@ -17,10 +17,16 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from stem_sci.agents.analysis_contracts import DataAnalysisPreAnalysisOutcome
+from stem_sci.coding.providers import CodeArtifactStore, DeterministicTemplateCodingProvider
 from stem_sci.core.enums import DecisionScope, GateDecision, RunStatus
 from stem_sci.core.models import GateResult
+from stem_sci.controller.analysis_execution import (
+    ResearchAnalysisExecutionRequest,
+    ResearchAnalysisExecutionService,
+)
 from stem_sci.operators.executor import OperatorExecutor
 from stem_sci.research_data.freeze import DataFreezeService
+from stem_sci.research_data.canonical import canonical_csv_bytes, read_csv_rows
 from stem_sci.research_data.models import FrozenDatasetRef, ProcessedDatasetRef, RawDatasetRef
 from stem_sci.research_data.processing import DataProcessingService
 from stem_sci.statistics.models import (
@@ -29,8 +35,6 @@ from stem_sci.statistics.models import (
     ResultValidationReport,
     StatisticalResultCard,
 )
-from stem_sci.statistics.python_operator import PythonAnalysisRequest
-from stem_sci.statistics.validation import SingleEngineResultValidator
 from stem_sci.utils.hash_utils import sha256_bytes, sha256_text
 
 
@@ -78,7 +82,9 @@ class DataPipelineState(BaseModel):
     preregistration_approval_ref: str = Field(min_length=1)
     pre_analysis: DataAnalysisPreAnalysisOutcome
     model_specification: AnalysisModelSpecification
-    code_artifact_ref: str = Field(min_length=1)
+    code_artifact_ref: str | None = None
+    code_specification_ref: str | None = None
+    code_review_ref: str | None = None
     raw_dataset: RawDatasetRef | None = None
     data_audit_report: DataAuditReport | None = None
     processed_dataset: ProcessedDatasetRef | None = None
@@ -100,7 +106,10 @@ class DataPipelineBeginRequest(BaseModel):
     preregistration_approval_ref: str = Field(min_length=1)
     pre_analysis: DataAnalysisPreAnalysisOutcome
     model_specification: AnalysisModelSpecification
-    code_artifact_ref: str = Field(min_length=1)
+    # Kept as a compatibility field for callers compiled before the
+    # Controller-owned CodingProvider path.  A real artifact is created only
+    # after FrozenDataset and ExecutableAnalysisPlan exist.
+    code_artifact_ref: str | None = None
 
 
 T = TypeVar("T")
@@ -114,7 +123,13 @@ class DataPipelineController:
         self.operator_executor = operator_executor
         self.processing_service = DataProcessingService()
         self.freeze_service = DataFreezeService()
-        self.result_validator = SingleEngineResultValidator(freeze_service=self.freeze_service)
+        self.research_execution = ResearchAnalysisExecutionService(
+            coding_provider=DeterministicTemplateCodingProvider(
+                CodeArtifactStore(storage_root / "code-artifacts")
+            ),
+            output_root=storage_root / "research-execution-runs",
+            execution_store=operator_executor.execution_store,
+        )
 
     def begin(self, request: DataPipelineBeginRequest) -> DataPipelineState:
         if request.pre_analysis.readiness_report.status != "READY":
@@ -160,6 +175,8 @@ class DataPipelineController:
             version=1,
             content_uri=str(raw_path),
             sha256=content_hash,
+            raw_bytes_sha256=content_hash,
+            canonical_content_sha256=self._canonical_hash_or_raw_hash(content),
             created_at=now,
         )
         audit = self._audit_raw_csv(state, raw)
@@ -286,8 +303,16 @@ class DataPipelineController:
             type_confirmations=candidate.type_confirmations,
             software_configuration={
                 **candidate.software_configuration,
-                "engine": "python",
-                "validation_mode": "SINGLE_ENGINE",
+                "engine": (
+                    "python"
+                    if candidate.analysis_mode.value == "PYTHON_ONLY"
+                    else "spss_python_dual"
+                ),
+                "validation_mode": (
+                    "SINGLE_ENGINE"
+                    if candidate.analysis_mode.value == "PYTHON_ONLY"
+                    else "CROSS_ENGINE"
+                ),
             },
             analysis_mode=candidate.analysis_mode,
             model_specification_refs=candidate.model_specification_refs,
@@ -314,16 +339,16 @@ class DataPipelineController:
     def _execute_approved_plan(self, state: DataPipelineState) -> DataPipelineState:
         frozen = self._require(state.frozen_dataset, "frozen dataset")
         executable_plan = self._require(state.executable_plan, "executable plan")
-        outcome = self.operator_executor.execute_python_only(
-            PythonAnalysisRequest(
+        execution = self.research_execution.execute_python_only(
+            ResearchAnalysisExecutionRequest(
                 project_id=state.project_id,
                 frozen_dataset=frozen,
                 executable_plan=executable_plan,
                 model_specification=state.model_specification,
-                code_artifact_ref=state.code_artifact_ref,
-            ),
-            self._project_directory(state.project_id) / "execution-runs",
+                execution_approval_ref=self._require(state.pending_approval, "pending approval").request_id,
+            )
         )
+        outcome = execution.sandbox_outcome
         if outcome.execution_run.status is not RunStatus.SUCCEEDED:
             return state.model_copy(
                 update={
@@ -331,10 +356,13 @@ class DataPipelineController:
                     "pending_approval": None,
                     "rework_reason": "Python execution was blocked or failed.",
                     "blocked_target_ids": [outcome.execution_run.operator_run_id],
+                    "code_specification_ref": execution.code_specification.ref,
+                    "code_artifact_ref": execution.code_artifact.ref,
+                    "code_review_ref": execution.code_review.ref,
                 }
             )
-        validation = self.result_validator.validate(outcome, f"validation-{uuid4().hex}")
-        if not validation.passed:
+        validation = execution.validation_report
+        if validation is None or not validation.passed:
             return state.model_copy(
                 update={
                     "stage": DataPipelineStage.BLOCKED,
@@ -342,23 +370,21 @@ class DataPipelineController:
                     "validation_report": validation,
                     "rework_reason": "SINGLE_ENGINE result validation failed.",
                     "blocked_target_ids": [outcome.execution_run.operator_run_id],
+                    "code_specification_ref": execution.code_specification.ref,
+                    "code_artifact_ref": execution.code_artifact.ref,
+                    "code_review_ref": execution.code_review.ref,
                 }
             )
-        result_card = StatisticalResultCard.build_from_validation(
-            result_id=f"result-card-{uuid4().hex}",
-            project_id=state.project_id,
-            execution_run_ref=outcome.execution_run.operator_run_id,
-            analysis_plan_ref=f"executable-plan://{executable_plan.executable_plan_id}",
-            validation_report=validation,
-            parsed_values=outcome.result_values,
-            deterministic_parser_version="python-result-parser-v1",
-        )
+        result_card = self._require(execution.statistical_result_card, "statistical result card")
         return state.model_copy(
             update={
                 "stage": DataPipelineStage.ANALYZED,
                 "pending_approval": None,
                 "validation_report": validation,
                 "statistical_result_card": result_card,
+                "code_specification_ref": execution.code_specification.ref,
+                "code_artifact_ref": execution.code_artifact.ref,
+                "code_review_ref": execution.code_review.ref,
             }
         )
 
@@ -426,6 +452,16 @@ class DataPipelineController:
 
     def _project_directory(self, project_id: str) -> Path:
         return self.storage_root / "data-pipeline" / sha256_text(project_id)[:16]
+
+    @staticmethod
+    def _canonical_hash_or_raw_hash(content: bytes) -> str:
+        """Keep the original bytes even when a malformed CSV must be reworked."""
+
+        try:
+            header, rows = read_csv_rows(content)
+        except (UnicodeDecodeError, ValueError):
+            return sha256_bytes(content)
+        return sha256_bytes(canonical_csv_bytes(header, rows))
 
     @staticmethod
     def _require(value: T | None, label: str) -> T:

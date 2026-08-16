@@ -38,7 +38,7 @@ def test_data_pipeline_api_runs_to_verified_python_only_result() -> None:
             task_ref=f"{project_id}:pre-analysis",
             study_protocol_ref=f"protocol://{project_id}/v1",
             preregistered_plan_ref=f"prereg-plan://{project_id}/v1",
-            preregistered_plan_status="approved",
+            preregistered_plan_status="frozen",
             preregistration_approval_ref=f"approval://{project_id}/prereg-v1",
             data_collection_schema_ref=f"schema://{project_id}/collection-v1",
             variable_dictionary_ref=f"dictionary://{project_id}/v1",
