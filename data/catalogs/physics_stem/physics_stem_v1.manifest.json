@@ -1,0 +1,38 @@
+{
+  "corpus_id": "physics_stem_v1",
+  "corpus_version": "1.0.0",
+  "access_mode": "internal_read_only",
+  "paper_count": 122,
+  "vector_chunk_count": 1788,
+  "embedding_model": "text-embedding-v3",
+  "embedding_dimension": 1024,
+  "sparse_index_type": "BM25",
+  "sparse_index_version": "1.0.0-runtime-rebuild",
+  "graph_artifact_type": "SparsePaperGraph",
+  "graph_paper_count": 122,
+  "graph_triple_count": 944,
+  "graph_prompt_version": "4.2.0",
+  "identity_map": {
+    "relative_path": "data/catalogs/physics_stem/paper_identity_map.json",
+    "sha256": "3cfe13f6bf9672b1ec2efaa74c91a7fa01a3d3f5f4708afc9e59d74661ab84ae",
+    "required": true
+  },
+  "graph_artifact": {
+    "relative_path": "data/derived/physics_stem/sparse_paper_graph_v2.json",
+    "sha256": "0ab83237a786aad72bfc016d8e882ea286bf2cb1b8d56da2adae6a52c0416ff0",
+    "required": false
+  },
+  "vector_metadata": {
+    "relative_path": "data/local/vector_kb/vectordb/metadata.json",
+    "sha256": "3ff75408ad0376d41b9eeb8e686aa7260e9cc4422213f94c009ed1faeabc3328",
+    "required": true
+  },
+  "vector_index": {
+    "relative_path": "data/local/vector_kb/vectordb/index.faiss",
+    "sha256": "5300d69e0e9c5ff28fd3ee60e6af87fdfa537d1051109c5d5efd78bc07b1e492",
+    "required": false
+  },
+  "pdf_root_relative_path": "data/local/literature_pdfs",
+  "locator_index": null,
+  "published_at": "2026-08-09T15:04:13Z"
+}

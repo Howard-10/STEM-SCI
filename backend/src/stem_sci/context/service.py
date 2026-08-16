@@ -484,8 +484,14 @@ class ContextService:
             context_hash=hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
             generated_at=_now(),
         )
+        self.persist_bundle(bundle)
+        return bundle
+
+    def persist_bundle(self, bundle: ContextBundle) -> ContextBundle:
+        """Persist a fully formed ContextBundle without storing raw corpus files in state."""
+
         self.db.execute(
-            "insert into bundles values (?,?,?,?,?)",
+            "insert or replace into bundles values (?,?,?,?,?)",
             (
                 bundle.context_id,
                 bundle.project_id,

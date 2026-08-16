@@ -1,0 +1,237 @@
+{
+  "artifact_type": "RetrievalGoldSet",
+  "artifact_version": "0.1.0-template",
+  "corpus_id": "physics_stem_v1",
+  "status": "ANNOTATION_REQUIRED",
+  "policy": {
+    "minimum_questions": 20,
+    "languages": {
+      "zh": 12,
+      "en": 8
+    },
+    "annotation_rule": "Two independent annotators identify relevant papers, strongly relevant chunks, and acceptable EvidenceQuotes. A third reviewer resolves disagreements before the set is frozen.",
+    "prohibited_shortcut": "Do not use this template to claim retrieval quality before identifiers and relevance labels have been independently verified."
+  },
+  "questions": [
+    {
+      "question_id": "physics-stem-q01",
+      "language": "zh",
+      "query": "生成式AI分层支架如何影响师范生的物理建模表现与无辅助迁移？",
+      "query_type": "generative_ai_scaffolding",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q02",
+      "language": "zh",
+      "query": "物理STEM项目式学习通常如何测量概念理解和建模能力？",
+      "query_type": "learning_outcome",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q03",
+      "language": "zh",
+      "query": "哪些研究比较了静态提示与人工智能反馈或支架？",
+      "query_type": "intervention_comparison",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q04",
+      "language": "zh",
+      "query": "物理教育中项目式学习研究常用哪些研究设计和样本？",
+      "query_type": "research_method",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q05",
+      "language": "zh",
+      "query": "热力学教学中问题式学习或项目式学习与概念理解有什么关系？",
+      "query_type": "physics_domain",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q06",
+      "language": "zh",
+      "query": "使用生成式AI支持物理学习时有哪些过度依赖和认识论风险？",
+      "query_type": "risk_limitation",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q07",
+      "language": "zh",
+      "query": "师范生接受AI教育应用受到哪些技术接受或机构支持因素影响？",
+      "query_type": "teacher_population",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q08",
+      "language": "zh",
+      "query": "远程或虚拟物理实验如何影响学生参与和自我效能？",
+      "query_type": "technology_mediated_lab",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q09",
+      "language": "zh",
+      "query": "STEM整合在高中物理教育中的研究热点和空白是什么？",
+      "query_type": "research_trend",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q10",
+      "language": "zh",
+      "query": "如何在物理建模任务中同时评估学习表现、迁移能力和提示依赖？",
+      "query_type": "study_design",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q11",
+      "language": "zh",
+      "query": "物理教师专业发展项目如何培养STEM教学能力？",
+      "query_type": "teacher_professional_development",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q12",
+      "language": "zh",
+      "query": "有哪些证据支持把编程模拟用于物理教学和师范生培养？",
+      "query_type": "computational_modelling",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q13",
+      "language": "en",
+      "query": "How does generative AI scaffolding affect physics modelling among pre-service teachers?",
+      "query_type": "generative_ai_scaffolding",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q14",
+      "language": "en",
+      "query": "What research methods are used to study STEM project-based learning in physics education?",
+      "query_type": "research_method",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q15",
+      "language": "en",
+      "query": "Which studies report conceptual understanding outcomes in thermodynamics learning?",
+      "query_type": "physics_domain",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q16",
+      "language": "en",
+      "query": "What are the risks of overreliance on generative AI in STEM education?",
+      "query_type": "risk_limitation",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q17",
+      "language": "en",
+      "query": "How are remote physics laboratories associated with participation and self-efficacy?",
+      "query_type": "technology_mediated_lab",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q18",
+      "language": "en",
+      "query": "What supports pre-service teachers' acceptance of AI applications in education?",
+      "query_type": "teacher_population",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q19",
+      "language": "en",
+      "query": "What trends connect STEM integration and high-school physics education?",
+      "query_type": "research_trend",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    },
+    {
+      "question_id": "physics-stem-q20",
+      "language": "en",
+      "query": "Which evidence supports programming simulations for physics teacher education?",
+      "query_type": "computational_modelling",
+      "required_context_mode": "discovery",
+      "relevant_paper_ids": [],
+      "strongly_relevant_chunk_ids": [],
+      "acceptable_evidence_quote_ids": [],
+      "annotation_status": "PENDING"
+    }
+  ]
+}

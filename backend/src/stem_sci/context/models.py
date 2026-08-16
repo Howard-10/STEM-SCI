@@ -35,6 +35,8 @@ class SourceLocation(StrictModel):
     char_start: int
     char_end: int
     heading: str | None = None
+    page_start: int | None = Field(default=None, ge=1)
+    page_end: int | None = Field(default=None, ge=1)
 
 
 class SourceDocument(StrictModel):
@@ -74,6 +76,10 @@ class EvidenceRef(StrictModel):
     excerpt: str
     location: SourceLocation
     verification_status: VerificationStatus
+    corpus_id: str | None = None
+    canonical_paper_id: str | None = None
+    canonical_chunk_id: str | None = None
+    retrieval_modalities: list[str] = Field(default_factory=list)
 
 
 class PaperCard(StrictModel):
@@ -118,6 +124,12 @@ class ContextBundle(StrictModel):
     estimated_tokens: int
     context_hash: str
     generated_at: str
+    context_mode: Literal["local", "discovery", "formal"] = "local"
+    corpus_refs: list[str] = Field(default_factory=list)
+    retrieval_strategy: str = "local_keyword"
+    retrieval_trace_ref: str | None = None
+    retrieval_risk_flags: list[str] = Field(default_factory=list)
+    manifest_refs: list[str] = Field(default_factory=list)
 
 
 class EvidenceSearchRequest(StrictModel):

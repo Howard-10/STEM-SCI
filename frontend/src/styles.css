@@ -8,7 +8,7 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; background: #f7f7f8; }
-button, input, textarea { font: inherit; }
+button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .5; }
 
@@ -45,6 +45,7 @@ h2 { margin-bottom: 8px; font-size: 23px; line-height: 1.1; }
 .form-grid { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: end; }
 label { display: flex; flex-direction: column; gap: 7px; color: #444; font-size: 12px; font-weight: 700; }
 input, textarea { width: 100%; border: 1px solid #97979b; border-radius: 0; background: #fff; padding: 11px 12px; color: #161616; }
+select { width: 100%; border: 1px solid #97979b; border-radius: 0; background: #fff; padding: 11px 12px; color: #161616; }
 input:focus, textarea:focus { outline: 2px solid #002fa7; outline-offset: 1px; }
 .wide-field { grid-column: 1 / -1; }
 .primary-action, .secondary-action { border-radius: 0; padding: 11px 16px; font-size: 12px; font-weight: 700; }
@@ -81,6 +82,7 @@ code { display: block; overflow-wrap: anywhere; border-left: 3px solid #002fa7; 
 .button-row { display: flex; gap: 10px; margin-top: 18px; }
 .empty-state { color: #777; font-size: 13px; }
 .error-text { margin: 16px 0 0; color: #b00020; font-size: 12px; }
+.warning-text { color: #9d3700; line-height: 1.5; }
 
 .agent-directory { margin-top: 16px; }
 .agent-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin: 20px -24px -24px; background: #c9c9cc; }

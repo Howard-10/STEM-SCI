@@ -27,6 +27,147 @@
         }
       }
     },
+    "/api/v1/corpora": {
+      "get": {
+        "summary": "Corpora",
+        "description": "List shared corpora and their safe readiness summaries.",
+        "operationId": "corpora_api_v1_corpora_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SharedCorpusSummary"
+                  },
+                  "type": "array",
+                  "title": "Response Corpora Api V1 Corpora Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/corpora/{corpus_id}/manifest": {
+      "get": {
+        "summary": "Corpus Manifest",
+        "description": "Return a manifest without turning local absolute file paths into API output.",
+        "operationId": "corpus_manifest_api_v1_corpora__corpus_id__manifest_get",
+        "parameters": [
+          {
+            "name": "corpus_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Corpus Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorpusManifest"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/retrieval/search": {
+      "post": {
+        "summary": "Hybrid Search",
+        "description": "Search the read-only corpus; graph triples remain navigation-only.",
+        "operationId": "hybrid_search_api_v1_retrieval_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetrievalSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetrievalSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/context/hybrid-build": {
+      "post": {
+        "summary": "Hybrid Build Context",
+        "description": "Build a discovery or fail-closed formal shared-corpus ContextBundle.",
+        "operationId": "hybrid_build_context_api_v1_context_hybrid_build_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HybridContextBuildRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextBundle"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/workflow/projects": {
       "post": {
         "summary": "Create Workflow Project",
@@ -1326,6 +1467,13 @@
             "type": "array",
             "title": "Candidate Artifact Refs"
           },
+          "candidate_artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateArtifact"
+            },
+            "type": "array",
+            "title": "Candidate Artifacts"
+          },
           "evidence_refs": {
             "items": {
               "type": "string"
@@ -1836,6 +1984,33 @@
         "title": "ArtifactRef",
         "description": "A pointer to a versioned artifact; content stays outside ResearchState."
       },
+      "AssetRef": {
+        "properties": {
+          "relative_path": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Relative Path"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "relative_path",
+          "sha256"
+        ],
+        "title": "AssetRef",
+        "description": "A relative, hash-addressed asset reference without a local absolute path."
+      },
       "Body_import_source_api_v1_sources_import_post": {
         "properties": {
           "project_id": {
@@ -1946,6 +2121,18 @@
             ],
             "title": "Expected Language",
             "default": "python"
+          },
+          "expected_languages": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "python",
+                "spss"
+              ]
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Expected Languages"
           }
         },
         "additionalProperties": false,
@@ -1955,7 +2142,8 @@
           "project_id",
           "executable_plan_candidate_ref",
           "expected_dataset_schema_ref",
-          "required_outputs"
+          "required_outputs",
+          "expected_languages"
         ],
         "title": "CodeSpecificationDraft",
         "description": "A draft input for the coding operator; it contains no source code."
@@ -2092,6 +2280,53 @@
           "generated_at": {
             "type": "string",
             "title": "Generated At"
+          },
+          "context_mode": {
+            "type": "string",
+            "enum": [
+              "local",
+              "discovery",
+              "formal"
+            ],
+            "title": "Context Mode",
+            "default": "local"
+          },
+          "corpus_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Corpus Refs"
+          },
+          "retrieval_strategy": {
+            "type": "string",
+            "title": "Retrieval Strategy",
+            "default": "local_keyword"
+          },
+          "retrieval_trace_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Trace Ref"
+          },
+          "retrieval_risk_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Retrieval Risk Flags"
+          },
+          "manifest_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Manifest Refs"
           }
         },
         "additionalProperties": false,
@@ -2110,6 +2345,15 @@
           "generated_at"
         ],
         "title": "ContextBundle"
+      },
+      "ContextMode": {
+        "type": "string",
+        "enum": [
+          "discovery",
+          "formal"
+        ],
+        "title": "ContextMode",
+        "description": "Permitted use of an assembled retrieval bundle."
       },
       "ControllerWorkflowState": {
         "properties": {
@@ -2182,6 +2426,139 @@
         ],
         "title": "ControllerWorkflowState",
         "description": "Reference-only state owned and changed by the Controller."
+      },
+      "CorpusAccessMode": {
+        "type": "string",
+        "enum": [
+          "internal_read_only",
+          "project_private"
+        ],
+        "title": "CorpusAccessMode",
+        "description": "Runtime mutability of a corpus."
+      },
+      "CorpusManifest": {
+        "properties": {
+          "corpus_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Corpus Id"
+          },
+          "corpus_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Corpus Version"
+          },
+          "access_mode": {
+            "$ref": "#/components/schemas/CorpusAccessMode"
+          },
+          "paper_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Paper Count"
+          },
+          "vector_chunk_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Vector Chunk Count"
+          },
+          "embedding_model": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Embedding Model"
+          },
+          "embedding_dimension": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Embedding Dimension"
+          },
+          "sparse_index_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Sparse Index Type"
+          },
+          "sparse_index_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Sparse Index Version"
+          },
+          "graph_artifact_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Graph Artifact Type"
+          },
+          "graph_paper_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Graph Paper Count"
+          },
+          "graph_triple_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Graph Triple Count"
+          },
+          "graph_prompt_version": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Graph Prompt Version"
+          },
+          "identity_map": {
+            "$ref": "#/components/schemas/AssetRef"
+          },
+          "graph_artifact": {
+            "$ref": "#/components/schemas/AssetRef"
+          },
+          "vector_metadata": {
+            "$ref": "#/components/schemas/AssetRef"
+          },
+          "vector_index": {
+            "$ref": "#/components/schemas/AssetRef"
+          },
+          "pdf_root_relative_path": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Pdf Root Relative Path"
+          },
+          "locator_index": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssetRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "published_at": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Published At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "corpus_id",
+          "corpus_version",
+          "access_mode",
+          "paper_count",
+          "vector_chunk_count",
+          "embedding_model",
+          "embedding_dimension",
+          "sparse_index_type",
+          "sparse_index_version",
+          "graph_artifact_type",
+          "graph_paper_count",
+          "graph_triple_count",
+          "graph_prompt_version",
+          "identity_map",
+          "graph_artifact",
+          "vector_metadata",
+          "vector_index",
+          "pdf_root_relative_path",
+          "published_at"
+        ],
+        "title": "CorpusManifest",
+        "description": "Versioned declaration of all assets needed by a shared corpus."
       },
       "DataAnalysisPreAnalysisOutcome-Input": {
         "properties": {
@@ -2457,8 +2834,14 @@
             "$ref": "#/components/schemas/AnalysisModelSpecification"
           },
           "code_artifact_ref": {
-            "type": "string",
-            "minLength": 1,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Code Artifact Ref"
           }
         },
@@ -2469,8 +2852,7 @@
           "preregistered_plan_ref",
           "preregistration_approval_ref",
           "pre_analysis",
-          "model_specification",
-          "code_artifact_ref"
+          "model_specification"
         ],
         "title": "DataPipelineBeginRequest"
       },
@@ -2514,9 +2896,37 @@
             "$ref": "#/components/schemas/AnalysisModelSpecification"
           },
           "code_artifact_ref": {
-            "type": "string",
-            "minLength": 1,
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Code Artifact Ref"
+          },
+          "code_specification_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Specification Ref"
+          },
+          "code_review_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Review Ref"
           },
           "raw_dataset": {
             "anyOf": [
@@ -2632,8 +3042,7 @@
           "preregistered_plan_ref",
           "preregistration_approval_ref",
           "pre_analysis",
-          "model_specification",
-          "code_artifact_ref"
+          "model_specification"
         ],
         "title": "DataPipelineState",
         "description": "Reference-only state for Controller data operations; no file payloads."
@@ -2733,6 +3142,46 @@
           "verification_status": {
             "$ref": "#/components/schemas/VerificationStatus"
           },
+          "corpus_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corpus Id"
+          },
+          "canonical_paper_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Paper Id"
+          },
+          "canonical_chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Chunk Id"
+          },
+          "retrieval_modalities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Retrieval Modalities"
+          },
           "relation": {
             "$ref": "#/components/schemas/EvidenceRelation"
           },
@@ -2811,6 +3260,46 @@
           },
           "verification_status": {
             "$ref": "#/components/schemas/VerificationStatus"
+          },
+          "corpus_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corpus Id"
+          },
+          "canonical_paper_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Paper Id"
+          },
+          "canonical_chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Chunk Id"
+          },
+          "retrieval_modalities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Retrieval Modalities"
           }
         },
         "additionalProperties": false,
@@ -3223,6 +3712,54 @@
         ],
         "title": "GateResult"
       },
+      "GraphCandidate": {
+        "properties": {
+          "canonical_paper_id": {
+            "type": "string",
+            "title": "Canonical Paper Id"
+          },
+          "graph_paper_id": {
+            "type": "string",
+            "title": "Graph Paper Id"
+          },
+          "navigation_score": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Navigation Score"
+          },
+          "matched_facets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Matched Facets"
+          },
+          "supporting_edge_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Supporting Edge Refs"
+          },
+          "source_status": {
+            "type": "string",
+            "const": "model_generated_unverified",
+            "title": "Source Status",
+            "default": "model_generated_unverified"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "canonical_paper_id",
+          "graph_paper_id",
+          "navigation_score",
+          "matched_facets",
+          "supporting_edge_refs"
+        ],
+        "title": "GraphCandidate",
+        "description": "A paper candidate from unverified, navigation-only graph edges."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3235,6 +3772,48 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HybridContextBuildRequest": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+            "title": "Project Id"
+          },
+          "task_ref": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Task Ref"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Query"
+          },
+          "token_budget": {
+            "type": "integer",
+            "maximum": 20000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Token Budget"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ContextMode",
+            "default": "discovery"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "task_ref",
+          "query",
+          "token_budget"
+        ],
+        "title": "HybridContextBuildRequest",
+        "description": "Explicit build request for the read-only shared hybrid corpus."
       },
       "InterpretationStatus": {
         "type": "string",
@@ -4106,6 +4685,313 @@
         "title": "ResultValidationReport",
         "description": "Deterministic validation result for one or two execution engines."
       },
+      "RetrievalHitSummary": {
+        "properties": {
+          "canonical_chunk_id": {
+            "type": "string",
+            "title": "Canonical Chunk Id"
+          },
+          "canonical_paper_id": {
+            "type": "string",
+            "title": "Canonical Paper Id"
+          },
+          "source_filename": {
+            "type": "string",
+            "title": "Source Filename"
+          },
+          "paper_title": {
+            "type": "string",
+            "title": "Paper Title"
+          },
+          "normalized_doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Doi"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "title": "Chunk Index"
+          },
+          "section_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Hint"
+          },
+          "excerpt": {
+            "type": "string",
+            "title": "Excerpt"
+          },
+          "dense_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dense Rank"
+          },
+          "sparse_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sparse Rank"
+          },
+          "rrf_score": {
+            "type": "number",
+            "title": "Rrf Score",
+            "default": 0
+          },
+          "locator_status": {
+            "type": "string",
+            "enum": [
+              "RESOLVED",
+              "UNRESOLVED"
+            ],
+            "title": "Locator Status"
+          },
+          "retrieval_modalities": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "dense",
+                "sparse",
+                "graph_navigation"
+              ]
+            },
+            "type": "array",
+            "title": "Retrieval Modalities"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "canonical_chunk_id",
+          "canonical_paper_id",
+          "source_filename",
+          "paper_title",
+          "chunk_index",
+          "excerpt",
+          "locator_status"
+        ],
+        "title": "RetrievalHitSummary",
+        "description": "Public, bounded representation of a raw-text hit."
+      },
+      "RetrievalMode": {
+        "type": "string",
+        "enum": [
+          "HYBRID_GRAPH_GUIDED",
+          "HYBRID_DENSE_SPARSE",
+          "SPARSE_ONLY",
+          "DENSE_ONLY",
+          "UNAVAILABLE"
+        ],
+        "title": "RetrievalMode",
+        "description": "Actual retrieval mode, including explicit degradation."
+      },
+      "RetrievalSearchRequest": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+            "title": "Project Id"
+          },
+          "corpus_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Corpus Ids"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Query"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ContextMode",
+            "default": "discovery"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 8
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "query"
+        ],
+        "title": "RetrievalSearchRequest",
+        "description": "API request for a shared-corpus retrieval operation."
+      },
+      "RetrievalSearchResponse": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "corpus_id": {
+            "type": "string",
+            "title": "Corpus Id"
+          },
+          "requested_mode": {
+            "$ref": "#/components/schemas/ContextMode"
+          },
+          "retrieval_status": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "DEGRADED",
+              "UNAVAILABLE"
+            ],
+            "title": "Retrieval Status"
+          },
+          "degraded_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetrievalMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidate_papers": {
+            "items": {
+              "$ref": "#/components/schemas/GraphCandidate"
+            },
+            "type": "array",
+            "title": "Candidate Papers"
+          },
+          "chunk_hits": {
+            "items": {
+              "$ref": "#/components/schemas/RetrievalHitSummary"
+            },
+            "type": "array",
+            "title": "Chunk Hits"
+          },
+          "retrieval_trace": {
+            "$ref": "#/components/schemas/RetrievalTrace"
+          },
+          "risk_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Flags"
+          },
+          "manifest_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Manifest Refs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "corpus_id",
+          "requested_mode",
+          "retrieval_status",
+          "candidate_papers",
+          "chunk_hits",
+          "retrieval_trace",
+          "risk_flags",
+          "manifest_refs"
+        ],
+        "title": "RetrievalSearchResponse",
+        "description": "Public result from graph-guided hybrid retrieval."
+      },
+      "RetrievalTrace": {
+        "properties": {
+          "query_normalized": {
+            "type": "string",
+            "title": "Query Normalized"
+          },
+          "retrieval_mode": {
+            "$ref": "#/components/schemas/RetrievalMode"
+          },
+          "corpus_id": {
+            "type": "string",
+            "title": "Corpus Id"
+          },
+          "manifest_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Manifest Refs"
+          },
+          "graph_candidates": {
+            "items": {
+              "$ref": "#/components/schemas/GraphCandidate"
+            },
+            "type": "array",
+            "title": "Graph Candidates"
+          },
+          "risk_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Flags"
+          },
+          "dense_available": {
+            "type": "boolean",
+            "title": "Dense Available"
+          },
+          "sparse_available": {
+            "type": "boolean",
+            "title": "Sparse Available"
+          },
+          "graph_available": {
+            "type": "boolean",
+            "title": "Graph Available"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query_normalized",
+          "retrieval_mode",
+          "corpus_id",
+          "manifest_refs",
+          "dense_available",
+          "sparse_available",
+          "graph_available"
+        ],
+        "title": "RetrievalTrace",
+        "description": "A reproducible, non-secret trace of a retrieval attempt."
+      },
       "ReviewFinding": {
         "properties": {
           "finding_id": {
@@ -4397,6 +5283,59 @@
         ],
         "title": "RunStatus"
       },
+      "SharedCorpusSummary": {
+        "properties": {
+          "corpus_id": {
+            "type": "string",
+            "title": "Corpus Id"
+          },
+          "corpus_version": {
+            "type": "string",
+            "title": "Corpus Version"
+          },
+          "access_mode": {
+            "$ref": "#/components/schemas/CorpusAccessMode"
+          },
+          "paper_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Paper Count"
+          },
+          "vector_chunk_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Vector Chunk Count"
+          },
+          "discovery_ready": {
+            "type": "boolean",
+            "title": "Discovery Ready"
+          },
+          "formal_evidence_ready": {
+            "type": "boolean",
+            "title": "Formal Evidence Ready"
+          },
+          "risk_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Flags"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "corpus_id",
+          "corpus_version",
+          "access_mode",
+          "paper_count",
+          "vector_chunk_count",
+          "discovery_ready",
+          "formal_evidence_ready"
+        ],
+        "title": "SharedCorpusSummary",
+        "description": "Public, safe status summary for one read-only shared corpus."
+      },
       "SourceChunk": {
         "properties": {
           "chunk_id": {
@@ -4503,6 +5442,30 @@
               }
             ],
             "title": "Heading"
+          },
+          "page_start": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Start"
+          },
+          "page_end": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page End"
           }
         },
         "additionalProperties": false,

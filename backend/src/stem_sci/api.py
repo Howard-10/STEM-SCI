@@ -31,7 +31,7 @@ from .context.models import (
     SourceChunk,
     SourceDocument,
 )
-from .context.provider import LocalContextProvider
+from .context.provider import HybridContextProvider, LocalContextProvider
 from .context.service import ContextInputError, ContextNotFoundError, ContextService
 from .controller import (
     AgentDispatcher,
@@ -56,6 +56,15 @@ from .operators.models import OperatorRun, OperatorSpec
 from .operators.registry import OperatorRegistry
 from .provenance.agent_run_store import SQLiteAgentRunStore
 from .provenance.models import AgentRunRecord
+from .knowledge import (
+    CorpusManifest,
+    HybridContextBuildRequest,
+    HybridKnowledgeService,
+    RetrievalSearchRequest,
+    RetrievalSearchResponse,
+    SharedCorpusSummary,
+)
+from .knowledge.manifest import CorpusRegistry
 
 DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 DEFAULT_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -94,6 +103,7 @@ app.add_middleware(
 )
 storage_root = Path(os.getenv("STEM_SCI_STORAGE_DIR", ".stem_sci"))
 service = ContextService(storage_root, max_upload_bytes=_max_upload_bytes())
+knowledge_service = HybridKnowledgeService(service, CorpusRegistry())
 workflow_database = storage_root / "workflow.db"
 
 
@@ -117,9 +127,18 @@ artifact_store = SQLiteArtifactStore(workflow_database)
 artifact_content_store = SQLiteArtifactContentStore(workflow_database)
 agent_run_store = SQLiteAgentRunStore(workflow_database)
 route_store = SQLiteRouteDecisionStore(workflow_database)
+def _configured_context_provider() -> LocalContextProvider | HybridContextProvider:
+    configured = os.getenv("STEM_SCI_CONTEXT_PROVIDER", "local").strip().lower()
+    if configured == "local":
+        return LocalContextProvider(service)
+    if configured == "hybrid":
+        return HybridContextProvider(knowledge_service)
+    raise ValueError("STEM_SCI_CONTEXT_PROVIDER must be local or hybrid")
+
+
 workflow_controller = ResearchController(
     dispatcher=AgentDispatcher(_configured_agent_registry()),
-    context_provider=LocalContextProvider(service),
+    context_provider=_configured_context_provider(),
     decision_store=SQLiteDecisionStore(workflow_database),
     workflow_store=SQLiteWorkflowStore(workflow_database),
     operator_executor=OperatorExecutor(
@@ -193,6 +212,46 @@ ProjectIdQuery = Annotated[
 @app.get("/api/v1/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/v1/corpora", response_model=list[SharedCorpusSummary])
+def corpora() -> list[SharedCorpusSummary]:
+    """List shared corpora and their safe readiness summaries."""
+    result: list[SharedCorpusSummary] = []
+    for manifest in knowledge_service.list_corpora():
+        readiness = knowledge_service.readiness(manifest.corpus_id)
+        result.append(
+            SharedCorpusSummary(
+                corpus_id=manifest.corpus_id,
+                corpus_version=manifest.corpus_version,
+                access_mode=manifest.access_mode,
+                paper_count=manifest.paper_count,
+                vector_chunk_count=manifest.vector_chunk_count,
+                discovery_ready=readiness.discovery_ready,
+                formal_evidence_ready=readiness.formal_evidence_ready,
+                risk_flags=readiness.risk_flags,
+            )
+        )
+    return result
+
+
+@app.get("/api/v1/corpora/{corpus_id}/manifest", response_model=CorpusManifest)
+def corpus_manifest(corpus_id: str) -> CorpusManifest:
+    """Return a manifest without turning local absolute file paths into API output."""
+    manifest = knowledge_service.manifest(corpus_id)
+    return manifest
+
+
+@app.post("/api/v1/retrieval/search", response_model=RetrievalSearchResponse)
+def hybrid_search(request: RetrievalSearchRequest) -> RetrievalSearchResponse:
+    """Search the read-only corpus; graph triples remain navigation-only."""
+    return knowledge_service.search(request)
+
+
+@app.post("/api/v1/context/hybrid-build")
+def hybrid_build_context(request: HybridContextBuildRequest) -> ContextBundle:
+    """Build a discovery or fail-closed formal shared-corpus ContextBundle."""
+    return knowledge_service.build_from_request(request)
 
 
 @app.post("/api/v1/workflow/projects")

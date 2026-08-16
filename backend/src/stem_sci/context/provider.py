@@ -44,3 +44,32 @@ class LocalContextProvider:
                 ],
             )
         )
+
+
+class HybridContextProvider:
+    """Controller adapter for the read-only shared Physics-STEM corpus.
+
+    The provider uses formal mode because Controller-facing Agent contexts must
+    not silently include unverified graph triples or unresolved excerpts.
+    """
+
+    def __init__(self, knowledge_service: "HybridKnowledgeService") -> None:
+        self.knowledge_service = knowledge_service
+
+    def build_context(
+        self,
+        project_id: str,
+        task_ref: str,
+        query: str,
+        token_budget: int,
+    ) -> ContextBundle:
+        return self.knowledge_service.build_context(
+            project_id=project_id,
+            task_ref=task_ref,
+            query=query,
+            token_budget=token_budget,
+            mode="formal",
+        )
+
+
+from stem_sci.knowledge.service import HybridKnowledgeService  # noqa: E402  # isort: skip

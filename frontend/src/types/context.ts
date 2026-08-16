@@ -62,6 +62,75 @@ export interface Bundle {
   token_budget: number;
   context_hash: string;
   verification_summary: Record<string, number>;
+  context_mode?: "local" | "discovery" | "formal";
+  corpus_refs?: string[];
+  retrieval_strategy?: "local_keyword" | "hybrid";
+  retrieval_trace_ref?: string | null;
+  retrieval_risk_flags?: string[];
+  manifest_refs?: string[];
+}
+
+export type SharedContextMode = "discovery" | "formal";
+export type RetrievalMode =
+  | "HYBRID_GRAPH_GUIDED"
+  | "HYBRID_DENSE_SPARSE"
+  | "SPARSE_ONLY"
+  | "DENSE_ONLY"
+  | "UNAVAILABLE";
+
+export interface SharedCorpusSummary {
+  corpus_id: string;
+  corpus_version: string;
+  access_mode: "internal_read_only" | "project_private";
+  paper_count: number;
+  vector_chunk_count: number;
+  discovery_ready: boolean;
+  formal_evidence_ready: boolean;
+  risk_flags: string[];
+}
+
+export interface GraphCandidate {
+  canonical_paper_id: string;
+  graph_paper_id: string;
+  navigation_score: number;
+  matched_facets: string[];
+  supporting_edge_refs: string[];
+  source_status: "model_generated_unverified";
+}
+
+export interface SharedChunkHit {
+  canonical_chunk_id: string;
+  canonical_paper_id: string;
+  source_filename: string;
+  paper_title: string;
+  normalized_doi?: string | null;
+  chunk_index: number;
+  section_hint?: string | null;
+  excerpt: string;
+  dense_rank?: number | null;
+  sparse_rank?: number | null;
+  rrf_score: number;
+  locator_status: "RESOLVED" | "UNRESOLVED";
+  retrieval_modalities: Array<"dense" | "sparse" | "graph_navigation">;
+}
+
+export interface SharedRetrievalResponse {
+  project_id: string;
+  corpus_id: string;
+  requested_mode: SharedContextMode;
+  retrieval_status: "READY" | "DEGRADED" | "UNAVAILABLE";
+  degraded_mode?: RetrievalMode | null;
+  candidate_papers: GraphCandidate[];
+  chunk_hits: SharedChunkHit[];
+  retrieval_trace: {
+    query_normalized: string;
+    retrieval_mode: RetrievalMode;
+    graph_available: boolean;
+    dense_available: boolean;
+    sparse_available: boolean;
+  };
+  risk_flags: string[];
+  manifest_refs: string[];
 }
 
 interface ApiErrorResponse {

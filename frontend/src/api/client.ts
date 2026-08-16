@@ -4,6 +4,9 @@ import type {
   SearchResult,
   Source,
   SourceChunk,
+  SharedContextMode,
+  SharedCorpusSummary,
+  SharedRetrievalResponse,
 } from "../types/context";
 import { isApiError } from "../types/context";
 
@@ -61,4 +64,28 @@ export const api = {
     }),
   getBundle: (projectId: string, contextId: string) =>
     request<Bundle>(`/context/${contextId}?${query({ project_id: projectId })}`),
+  listSharedCorpora: () => request<SharedCorpusSummary[]>("/corpora"),
+  searchSharedCorpus: (projectId: string, queryText: string, mode: SharedContextMode) =>
+    request<SharedRetrievalResponse>("/retrieval/search", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        project_id: projectId,
+        corpus_ids: ["physics_stem_v1"],
+        query: queryText,
+        mode,
+      }),
+    }),
+  buildSharedBundle: (projectId: string, queryText: string, mode: SharedContextMode) =>
+    request<Bundle>("/context/hybrid-build", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        project_id: projectId,
+        task_ref: "frontend-shared-corpus-task",
+        query: queryText,
+        token_budget: 500,
+        mode,
+      }),
+    }),
 };

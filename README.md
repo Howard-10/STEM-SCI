@@ -8,6 +8,12 @@ Current status: the Phase 1 six-Agent workflow framework is implemented. It incl
 
 The Context MVP accepts Markdown, TXT, JSON, and text-extractable PDF files under a required `project_id`. Its default upload limit is 50 MB and can be changed with `STEM_SCI_MAX_UPLOAD_BYTES`. Scanned or image-only PDFs require a later OCR capability and are rejected clearly in this MVP. Its default CORS allowlist is limited to `http://localhost:5173` and `http://127.0.0.1:5173`; configure `STEM_SCI_CORS_ORIGINS` as a comma-separated allowlist for another local frontend origin. Do not use a wildcard CORS origin. Copy the root `.env.example` for the available local settings.
 
+## Physics-STEM retrieval status
+
+The repository now also contains a bounded, read-only shared-corpus retrieval layer. Its local assets cover 122 Physics-STEM papers, 1,788 paragraph-level text chunks, and a 944-triple paper-level sparse relation graph. The graph only navigates toward candidate papers; paragraph retrievers locate original-text candidates; graph scores do not affect text RRF scores. Every graph triple remains `model_generated_unverified` and cannot be cited as a formal research fact.
+
+The shared corpus is accessed through `/api/v1/corpora`, `/api/v1/retrieval/search`, and `/api/v1/context/hybrid-build`. Discovery mode is usable when declared assets are available. Formal mode is intentionally fail-closed until the project publishes a verified chunk-to-PDF locator index and source-verifies the relevant excerpts. This is a light graph-guided hybrid retrieval implementation, not the full Microsoft GraphRAG community/global-search stack.
+
 ## Repository layout
 
 - `backend/`: Python package, backend tests, and backend development configuration.

@@ -5,7 +5,17 @@ import { ContextBundleView } from "../components/ContextBundleView";
 import { EvidenceDetailView } from "../components/EvidenceDetailView";
 import { EvidenceSearch } from "../components/EvidenceSearch";
 import { SourceLibrary } from "../components/SourceLibrary";
-import type { Bundle, EvidenceDetail, SearchResult, Source, SourceChunk } from "../types/context";
+import { SharedCorpusRetrieval } from "../components/SharedCorpusRetrieval";
+import type {
+  Bundle,
+  EvidenceDetail,
+  SearchResult,
+  SharedContextMode,
+  SharedCorpusSummary,
+  SharedRetrievalResponse,
+  Source,
+  SourceChunk,
+} from "../types/context";
 
 const defaultProjectId = import.meta.env.VITE_PROJECT_ID ?? "demo";
 
@@ -19,6 +29,10 @@ export function ContextWorkspacePage() {
   const [detail, setDetail] = useState<EvidenceDetail | null>(null);
   const [sourceChunk, setSourceChunk] = useState<SourceChunk | null>(null);
   const [bundle, setBundle] = useState<Bundle | null>(null);
+  const [sharedBundle, setSharedBundle] = useState<Bundle | null>(null);
+  const [sharedCorpus, setSharedCorpus] = useState<SharedCorpusSummary | null>(null);
+  const [sharedMode, setSharedMode] = useState<SharedContextMode>("discovery");
+  const [sharedResult, setSharedResult] = useState<SharedRetrievalResponse | null>(null);
   const [error, setError] = useState("");
 
   const run = async (work: () => Promise<void>) => {
@@ -35,6 +49,13 @@ export function ContextWorkspacePage() {
   useEffect(() => {
     void run(refreshSources);
   }, [projectId]);
+
+  useEffect(() => {
+    void run(async () => {
+      const corpora = await api.listSharedCorpora();
+      setSharedCorpus(corpora.find((corpus) => corpus.corpus_id === "physics_stem_v1") ?? null);
+    });
+  }, []);
 
   const selectSource = (sourceId: string) => run(async () => {
     const [source, sourceChunks] = await Promise.all([
@@ -82,6 +103,20 @@ export function ContextWorkspacePage() {
         bundle={bundle}
         onBuild={() => void run(async () => setBundle(await api.buildBundle(projectId, query, 500)))}
         ready={Boolean(query.trim())}
+      />
+      <SharedCorpusRetrieval
+        bundle={sharedBundle}
+        corpus={sharedCorpus}
+        mode={sharedMode}
+        onBuild={() => void run(async () => {
+          setSharedBundle(await api.buildSharedBundle(projectId, query, sharedMode));
+        })}
+        onModeChange={setSharedMode}
+        onSearch={() => void run(async () => {
+          setSharedResult(await api.searchSharedCorpus(projectId, query, sharedMode));
+        })}
+        ready={Boolean(query.trim())}
+        result={sharedResult}
       />
       {error && <p role="alert">{error}</p>}
     </main>
