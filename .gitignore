@@ -2,6 +2,7 @@
 .venv/
 __pycache__/
 .pytest_cache/
+.pytest_tmp/
 .mypy_cache/
 .ruff_cache/
 coverage.xml
@@ -12,6 +13,13 @@ build/
 data/raw/
 data/processed/
 data/frozen/
+data/local/
 runs/
 artifacts/local/
 logs/
+.stem_sci/
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/*.tsbuildinfo
+.worktrees/
