@@ -15,6 +15,14 @@ from .models import (
     RetrievalStrategy,
     SharedCorpusSummary,
 )
+from .graph_schema import (
+    GraphEntityType,
+    GraphExtractionMode,
+    GraphExtractionRequest,
+    GraphExtractionResult,
+    GraphRelationType,
+    GraphTriple,
+)
 from .service import HybridKnowledgeService
 
 __all__ = [
@@ -27,4 +35,10 @@ __all__ = [
     "RetrievalSearchResponse",
     "RetrievalStrategy",
     "SharedCorpusSummary",
+    "GraphEntityType",
+    "GraphExtractionMode",
+    "GraphExtractionRequest",
+    "GraphExtractionResult",
+    "GraphRelationType",
+    "GraphTriple",
 ]
