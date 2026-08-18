@@ -23,6 +23,12 @@ from .graph_schema import (
     GraphRelationType,
     GraphTriple,
 )
+from .graph_extraction import (
+    GraphExtractionOperator,
+    GraphExtractionProvider,
+    GraphExtractionUnavailable,
+    UnavailableGraphExtractionProvider,
+)
 from .service import HybridKnowledgeService
 
 __all__ = [
@@ -41,4 +47,8 @@ __all__ = [
     "GraphExtractionResult",
     "GraphRelationType",
     "GraphTriple",
+    "GraphExtractionOperator",
+    "GraphExtractionProvider",
+    "GraphExtractionUnavailable",
+    "UnavailableGraphExtractionProvider",
 ]
