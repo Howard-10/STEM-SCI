@@ -19,6 +19,7 @@
 - `ResearchState` stores references only and is never directly mutated by an Agent or Tool.
 - Python and other high-risk execution runs in a restricted subprocess or container with no network, no API-key access, project-directory allowlisting, and CPU/memory/disk/time limits.
 - Any cross-project reference, unauthorized Skill/Tool, invalid version, failed Schema check, failed hash check, or missing approval is rejected with a typed result.
+- Expected policy and execution failures return `ToolResult(status=BLOCKED|FAILED, error_code=...)`; only programming errors and invalid registry initialization raise exceptions.
 - CI and default tests use Fake Tools/Fake GPT; no external network call is required.
 - API keys, full prompts, raw provider responses, and sensitive environment values never enter Git, normal logs, or artifact bodies.
 
@@ -295,13 +296,14 @@ git commit -m "feat(skills): add versioned registries and agent bindings"
 
 ```python
 def test_gateway_rejects_cross_project_input() -> None:
-    with pytest.raises(ToolPolicyError, match="project scope"):
-        gateway.execute(
-            project_id="project-a",
-            agent_id="evidence_review",
-            agent_run_id="run-1",
-            request=request_with_input("artifact://project-b/source-1"),
-        )
+    result = gateway.execute(
+        project_id="project-a",
+        agent_id="evidence_review",
+        agent_run_id="run-1",
+        request=request_with_input("artifact://project-b/source-1"),
+    )
+    assert result.status is ToolRunStatus.BLOCKED
+    assert result.error_code == "PROJECT_SCOPE_VIOLATION"
 
 
 def test_gateway_blocks_controlled_write_without_approval() -> None:
@@ -410,8 +412,9 @@ def test_source_verification_checker_rejects_unverified_ref() -> None:
 
 
 def test_artifact_resolve_rejects_cross_project_reference() -> None:
-    with pytest.raises(ToolPolicyError, match="project scope"):
-        artifact_resolve.execute("project-a", "artifact-content://project-b/a/1")
+    result = artifact_resolve.execute("project-a", "artifact-content://project-b/a/1")
+    assert result.status is ToolRunStatus.BLOCKED
+    assert result.error_code == "PROJECT_SCOPE_VIOLATION"
 ```
 
 - [ ] **Step 2: Run tests and confirm they fail**
