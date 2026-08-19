@@ -36,3 +36,10 @@ def test_sqlite_tool_run_store_is_project_scoped(tmp_path) -> None:
     assert store.get("project-a", "tool-b") is None
     assert [item.tool_run_id for item in store.list_project("project-a")] == ["tool-a"]
 
+
+def test_tool_run_stores_find_idempotent_request_only_inside_project(tmp_path) -> None:
+    stores = [InMemoryToolRunStore(), SQLiteToolRunStore(tmp_path / "workflow.db")]
+    for store in stores:
+        store.put(_record("project-a", "tool-a"))
+        assert store.get_by_request("project-a", "request-1") is not None
+        assert store.get_by_request("project-b", "request-1") is None

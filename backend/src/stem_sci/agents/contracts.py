@@ -41,6 +41,9 @@ class ToolRequest(AgentContract):
     capability: str = Field(min_length=1)
     input_refs: list[str] = Field(default_factory=list)
     required_output_types: list[str] = Field(default_factory=list)
+    idempotency_key: str | None = Field(default=None, min_length=1)
+    target_artifact_ref: str | None = Field(default=None, min_length=1)
+    expected_output_hash: str | None = Field(default=None, min_length=64, max_length=64)
     reason: str = Field(min_length=1)
 
 

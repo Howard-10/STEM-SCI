@@ -64,16 +64,43 @@ class ToolResult(StrictModel):
     error_code: str | None = None
     # Optional structured payloads supplied by local Tool implementations.
     # The Gateway is the only component that persists these as candidate content.
-    output_payloads: list[dict[str, JsonValue]] = Field(default_factory=list)
+    output_payloads: list[dict[str, JsonValue]] = Field(
+        default_factory=list, exclude=True, repr=False
+    )
 
 
-class ToolRunRecord(ToolResult):
-    """Auditable tool result with the originating agent and request references."""
+class CandidateOutputPayload(StrictModel):
+    """Transient candidate content accepted only by the Controller Gateway."""
+
+    project_id: str = Field(min_length=1)
+    artifact_id: str = Field(min_length=1)
+    version: int = Field(ge=1)
+    artifact_type: str = Field(min_length=1)
+    schema_ref: str = Field(min_length=1)
+    schema_version: str = Field(min_length=1)
+    body: dict[str, JsonValue]
+    content_hash: str = Field(min_length=64, max_length=64)
+
+
+class ToolRunRecord(StrictModel):
+    """Allowlisted audit projection for one Controller-mediated Tool run."""
+
+    tool_run_id: str = Field(min_length=1)
+    project_id: str = Field(min_length=1)
+    tool_id: str = Field(min_length=1)
+    tool_version: str = Field(min_length=1)
+    status: ToolRunStatus
+    output_artifact_refs: list[str] = Field(default_factory=list)
+    output_content_refs: list[str] = Field(default_factory=list)
+    risk_flags: list[str] = Field(default_factory=list)
+    error_code: str | None = None
 
     agent_id: str = Field(min_length=1)
     agent_run_id: str = Field(min_length=1)
     skill_ref: str = Field(min_length=1)
     request_ref: str = Field(min_length=1)
+    idempotency_key: str | None = None
+    operation_hash: str | None = None
     input_artifact_refs: list[str] = Field(default_factory=list)
     started_at: datetime | None = None
     finished_at: datetime | None = None

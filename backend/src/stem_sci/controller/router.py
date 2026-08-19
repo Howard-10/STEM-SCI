@@ -294,6 +294,7 @@ class ResearchController:
         agent_run_store: AgentRunStore | None = None,
         route_store: RouteDecisionStore | None = None,
         tool_gateway: ToolGateway | None = None,
+        tool_permissions: Iterable[str] = ("controller_dispatch",),
     ) -> None:
         self.dispatcher = dispatcher or AgentDispatcher()
         self.context_provider = context_provider
@@ -305,6 +306,7 @@ class ResearchController:
         self.agent_run_store = agent_run_store or InMemoryAgentRunStore()
         self.route_store = route_store
         self.tool_gateway = tool_gateway
+        self.tool_permissions = tuple(tool_permissions)
         self._states: dict[str, ResearchState] = {}
         self._workflow_states: dict[str, ControllerWorkflowState] = {}
         self._routes: dict[str, RouteDecision] = {}
@@ -346,12 +348,19 @@ class ResearchController:
         if self.tool_gateway is not None:
             execution_refs: list[str] = []
             risk_flags: list[str] = []
+            approval_refs = [
+                decision.approval_id
+                for decision in self.decision_store.list_project(project_id)
+                if decision.decision == "approved"
+            ]
             for request in result.tool_requests:
                 tool_result = self.tool_gateway.execute(
                     project_id=project_id,
                     agent_id=result.agent_id,
                     agent_run_id=result.agent_run_id,
                     request=request,
+                    approval_refs=approval_refs,
+                    granted_permissions=self.tool_permissions,
                 )
                 # Legacy scaffold capabilities remain handled by operators until
                 # their versioned Tools are registered. The Gateway denial is
@@ -369,10 +378,11 @@ class ResearchController:
                     elif legacy_run.status.value == "FAILED":
                         risk_flags.append("OPERATOR_REQUEST_FAILED")
                     continue
-                execution_refs.append(tool_result.tool_run_id)
-                if tool_result.status is ToolRunStatus.BLOCKED:
+                if tool_result.status is ToolRunStatus.SUCCEEDED:
+                    execution_refs.append(tool_result.tool_run_id)
+                elif tool_result.status is ToolRunStatus.BLOCKED:
                     risk_flags.append(tool_result.error_code or "TOOL_EXECUTION_BLOCKED")
-                elif tool_result.status is not ToolRunStatus.SUCCEEDED:
+                else:
                     risk_flags.append(tool_result.error_code or "TOOL_REQUEST_FAILED")
             return execution_refs, list(dict.fromkeys(risk_flags))
         runs = self.operator_executor.execute_tool_requests(

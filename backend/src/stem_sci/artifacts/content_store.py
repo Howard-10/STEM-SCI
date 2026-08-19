@@ -52,6 +52,8 @@ class ArtifactContentStore(Protocol):
 
     def list_project(self, project_id: str) -> list[ArtifactContent]: ...
 
+    def delete(self, project_id: str, artifact_id: str, version: int) -> None: ...
+
 
 class InMemoryArtifactContentStore:
     def __init__(self) -> None:
@@ -89,6 +91,9 @@ class InMemoryArtifactContentStore:
             [item for (item_project, _, _), item in self._items.items() if item_project == project_id],
             key=lambda item: (item.artifact_id, item.version),
         )
+
+    def delete(self, project_id: str, artifact_id: str, version: int) -> None:
+        self._items.pop((project_id, artifact_id, version), None)
 
 
 class SQLiteArtifactContentStore:
@@ -163,6 +168,16 @@ class SQLiteArtifactContentStore:
                 (project_id,),
             ).fetchall()
         return [ArtifactContent.model_validate_json(row[0]) for row in rows]
+
+    def delete(self, project_id: str, artifact_id: str, version: int) -> None:
+        with sqlite3.connect(self.database) as connection:
+            connection.execute(
+                """
+                delete from workflow_artifact_contents
+                where project_id=? and artifact_id=? and version=?
+                """,
+                (project_id, artifact_id, version),
+            )
 
 
 def _body_hash(body: dict[str, JsonValue]) -> str:
