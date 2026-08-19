@@ -87,20 +87,25 @@ class BaseAgent(ABC):
         recommendations = [
             "Controller must validate candidate artifacts with the applicable Gate before progression."
         ]
+        tool_requests: list[ToolRequest] = []
+        for index, tool in enumerate(permitted_tools):
+            payload = self._default_tool_payload(tool, agent_input)
+            if payload is None:
+                continue
+            tool_requests.append(
+                ToolRequest(
+                    request_id=f"{agent_input.agent_run_id}:tool:{index}",
+                    capability=tool,
+                    input_payload=payload,
+                    reason=f"Agent {self.agent_id} requests the {tool} capability.",
+                )
+            )
         return AgentResult(
             agent_run_id=agent_input.agent_run_id,
             agent_id=self.agent_id,
             agent_version=self.agent_version,
             candidate_artifact_refs=refs,
-            tool_requests=[
-                ToolRequest(
-                    request_id=f"{agent_input.agent_run_id}:tool:{index}",
-                    capability=tool,
-                    input_payload=self._default_tool_payload(tool, agent_input),
-                    reason=f"Agent {self.agent_id} requests the {tool} capability.",
-                )
-                for index, tool in enumerate(permitted_tools)
-            ],
+            tool_requests=tool_requests,
             approval_requests=[],
             risk_flags=risk_flags,
             unresolved_questions=unresolved_questions,
@@ -110,24 +115,36 @@ class BaseAgent(ABC):
         )
 
     @staticmethod
-    def _default_tool_payload(tool: str, agent_input: AgentInput) -> dict[str, JsonValue]:
+    def _default_tool_payload(
+        tool: str, agent_input: AgentInput
+    ) -> dict[str, JsonValue] | None:
         """Supply only reference-level defaults until an Agent skill fills inputs."""
+        if tool == "context_bundle_read@v1":
+            if "://" in agent_input.context_bundle_ref:
+                return None
+            return {"context_id": agent_input.context_bundle_ref}
         if tool == "knowledge_base_search@v1":
             return {"query": agent_input.task_ref, "limit": 10}
-        if tool == "source_verification_checker@v1":
-            return {"evidence_refs": []}
+        if tool in {
+            "source_verification_checker@v1",
+            "evidence_ref_validate@v1",
+            "bounded_synthesis_validator@v1",
+            "python_analysis_sandbox@v1",
+            "result_validation_checker@v1",
+        }:
+            return None
         if tool == "research_question_validator@v1":
             return {"question": agent_input.task_ref}
         if tool == "protocol_schema_validator@v1":
             return {"protocol_ref": agent_input.context_bundle_ref}
         if tool in {"dataset_schema_profile@v1", "data_quality_audit@v1"}:
             return {"dataset_ref": agent_input.context_bundle_ref}
-        if tool == "result_validation_checker@v1":
-            return {"execution_ref": agent_input.context_bundle_ref, "validation_refs": []}
         if tool.startswith("manuscript_renderer_"):
             return {"graph_ref": agent_input.context_bundle_ref, "outline_ref": agent_input.context_bundle_ref}
         if tool.endswith("_audit@v1") or tool in {"citation_audit@v1", "evidence_reference_audit@v1"}:
             return {"manuscript_ref": agent_input.context_bundle_ref}
         if tool.endswith(("_validator@v1", "_checker@v1")):
             return {"context_ref": agent_input.context_bundle_ref}
-        return {}
+        if "@" in tool:
+            return {"context_ref": agent_input.context_bundle_ref}
+        return None

@@ -2,7 +2,7 @@
 
 STEM-SCI is a traceable research-agent system for STEM programming education experiments within education research. The repository uses a frontend/backend Monorepo layout.
 
-Current status: the Phase 1 six-Agent workflow framework is implemented. It includes Controller routing, approval gates, REWORK and review-finding feedback, project-scoped Context MVP integration, structured Operator requests, SQLite audit persistence, and a React workflow workspace. Agent internals and real external providers remain intentionally unimplemented.
+Current status: the Phase 1 six-Agent workflow framework is implemented. It includes Controller routing, approval gates, REWORK and review-finding feedback, project-scoped Context MVP integration, executable local Tools, SQLite ToolRun and artifact audit persistence, and a React workflow workspace. Evidence-review and bilingual paper-writing pipelines can use the optional GPT provider; research-design, data-analysis, and independent-review Tools currently remain deterministic candidate adapters rather than production research engines.
 
 ## Context MVP local development
 

@@ -118,7 +118,11 @@ def test_builtin_manifests_cover_the_required_six_agent_bindings() -> None:
             "research_question_formulation@v1",
             "protocol_draft_validation@v1",
         },
-        "data_analysis": {"data_readiness_audit@v1", "result_card_generation@v1"},
+        "data_analysis": {
+            "data_readiness_audit@v1",
+            "statistical_analysis_execution@v1",
+            "result_card_generation@v1",
+        },
         "paper_writing": {
             "atomic_claim_graph_construction@v1",
             "bilingual_manuscript_rendering@v1",

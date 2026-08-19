@@ -22,10 +22,13 @@ class PythonSandbox:
             self._validate_script(request.script)
         except ValueError as error:
             return PythonExecutionResult(status=SandboxStatus.BLOCKED, error_code=str(error))
+        project_roots = (
+            (self.project_root / request.project_id).resolve(),
+            (self.project_root / "uploads" / request.project_id).resolve(),
+        )
         for path in request.input_paths:
-            try:
-                path.resolve().relative_to(self.project_root)
-            except ValueError:
+            resolved = path.resolve()
+            if not any(self._within(resolved, root) for root in project_roots):
                 return PythonExecutionResult(status=SandboxStatus.BLOCKED, error_code="PROJECT_SCOPE_VIOLATION")
             if not path.is_file():
                 return PythonExecutionResult(status=SandboxStatus.BLOCKED, error_code="INPUT_NOT_FOUND")
@@ -35,7 +38,7 @@ class PythonSandbox:
                 destination = work / source.name
                 shutil.copyfile(source, destination)
             script_path = work / "run.py"
-            script_path.write_text(request.script, encoding="utf-8")
+            script_path.write_text(self._runner_source(request.script), encoding="utf-8")
             env = {
                 "PATH": os.environ.get("PATH", ""),
                 "PYTHONIOENCODING": "utf-8",
@@ -56,6 +59,13 @@ class PythonSandbox:
             stdout = completed.stdout[: request.max_output_bytes]
             stderr = completed.stderr[: request.max_output_bytes]
             if completed.returncode != 0:
+                if "PROJECT_SCOPE_VIOLATION" in stderr:
+                    return PythonExecutionResult(
+                        status=SandboxStatus.BLOCKED,
+                        error_code="PROJECT_SCOPE_VIOLATION",
+                        stdout=stdout,
+                        stderr=stderr,
+                    )
                 if "NETWORK_DISABLED" in stderr:
                     return PythonExecutionResult(status=SandboxStatus.BLOCKED, error_code="NETWORK_DISABLED", stdout=stdout, stderr=stderr)
                 return PythonExecutionResult(status=SandboxStatus.FAILED, error_code="EXECUTION_FAILED", stdout=stdout, stderr=stderr)
@@ -66,6 +76,61 @@ class PythonSandbox:
             if not isinstance(value, dict):
                 return PythonExecutionResult(status=SandboxStatus.FAILED, error_code="OUTPUT_SCHEMA_INVALID", stdout=stdout, stderr=stderr)
             return PythonExecutionResult(status=SandboxStatus.SUCCEEDED, json_output=value, stdout=stdout, stderr=stderr)
+
+    @staticmethod
+    def _within(path: Path, root: Path) -> bool:
+        try:
+            path.relative_to(root)
+        except ValueError:
+            return False
+        return True
+
+    @staticmethod
+    def _runner_source(script: str) -> str:
+        """Install a filesystem/network audit hook before executing user code."""
+        return f"""
+import os as _os
+import sys as _sys
+from pathlib import Path as _Path
+
+_WORK = _Path.cwd().resolve()
+_TRUSTED = tuple(_Path(item).resolve() for item in (_sys.base_prefix, _sys.prefix))
+
+def _under(path, root):
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+def _read_only(mode, flags):
+    if isinstance(mode, str):
+        return not any(char in mode for char in "wax+")
+    write_flags = _os.O_WRONLY | _os.O_RDWR | _os.O_APPEND | _os.O_CREAT | _os.O_TRUNC
+    return not isinstance(flags, int) or not flags & write_flags
+
+def _audit(event, args):
+    if event == "open":
+        target = args[0]
+        if isinstance(target, int):
+            return
+        candidate = _Path(target)
+        if not candidate.is_absolute():
+            candidate = _WORK / candidate
+        candidate = candidate.resolve()
+        mode = args[1] if len(args) > 1 else "r"
+        flags = args[2] if len(args) > 2 else 0
+        if _under(candidate, _WORK):
+            return
+        if _read_only(mode, flags) and any(_under(candidate, root) for root in _TRUSTED):
+            return
+        raise PermissionError("PROJECT_SCOPE_VIOLATION")
+    if event.startswith("socket.") or event in {{"subprocess.Popen", "os.system"}}:
+        raise PermissionError("NETWORK_DISABLED")
+
+_sys.addaudithook(_audit)
+exec(compile({script!r}, "<stem-sci-analysis>", "exec"), {{"__name__": "__main__"}})
+"""
 
     @staticmethod
     def _text(value: bytes | str | None) -> str:

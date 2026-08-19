@@ -60,6 +60,7 @@ def test_each_agent_returns_structured_candidate_result(agent_type: type) -> Non
         "official_result",
         "publish",
     }
+    assert all("@" in request.capability for request in result.tool_requests)
 
 
 def test_agent_result_rejects_governance_fields() -> None:
@@ -191,10 +192,14 @@ def test_atomic_claim_has_one_claim_type() -> None:
         )
 
 
-def test_independent_reviewer_has_no_execution_capability() -> None:
-    """The reviewer can report findings but cannot request execution tools."""
+def test_independent_reviewer_only_has_review_tool_capabilities() -> None:
+    """The reviewer can audit candidates but cannot mutate workflow state."""
     capability = IndependentReviewAgent.capability()
-    assert capability.allowed_tool_capabilities == []
+    assert set(capability.allowed_tool_capabilities) == set(capability.tool_ids)
+    assert all(
+        tool.endswith(("_audit@v1", "_checker@v1"))
+        for tool in capability.allowed_tool_capabilities
+    )
     assert capability.read_only_global_state is True
 
 

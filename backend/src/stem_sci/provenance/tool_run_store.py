@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 from typing import Protocol
 
 from stem_sci.tools.models import ToolRunRecord
+
+
+def _load_record(body: str) -> ToolRunRecord:
+    payload: object = json.loads(body)
+    if isinstance(payload, dict):
+        # These runtime-only fields were persisted before ToolRunRecord became
+        # a strict audit projection. They must never be restored or re-exposed.
+        payload.pop("output_payloads", None)
+        payload.pop("output_data", None)
+    return ToolRunRecord.model_validate(payload)
 
 
 class ToolRunStore(Protocol):
@@ -142,7 +153,7 @@ class SQLiteToolRunStore:
                 "select body from workflow_tool_runs where project_id=? and tool_run_id=?",
                 (project_id, tool_run_id),
             ).fetchone()
-        return ToolRunRecord.model_validate_json(row[0]) if row is not None else None
+        return _load_record(row[0]) if row is not None else None
 
     def list_project(self, project_id: str) -> list[ToolRunRecord]:
         with sqlite3.connect(self.database) as connection:
@@ -153,7 +164,7 @@ class SQLiteToolRunStore:
                 """,
                 (project_id,),
             ).fetchall()
-        return [ToolRunRecord.model_validate_json(row[0]) for row in rows]
+        return [_load_record(row[0]) for row in rows]
 
     def get_by_request(self, project_id: str, request_ref: str) -> ToolRunRecord | None:
         with sqlite3.connect(self.database) as connection:
@@ -164,7 +175,7 @@ class SQLiteToolRunStore:
                 """,
                 (project_id, request_ref),
             ).fetchone()
-        return ToolRunRecord.model_validate_json(row[0]) if row is not None else None
+        return _load_record(row[0]) if row is not None else None
 
     def get_by_idempotency(
         self, project_id: str, idempotency_key: str
@@ -177,4 +188,4 @@ class SQLiteToolRunStore:
                 """,
                 (project_id, idempotency_key),
             ).fetchone()
-        return ToolRunRecord.model_validate_json(row[0]) if row is not None else None
+        return _load_record(row[0]) if row is not None else None

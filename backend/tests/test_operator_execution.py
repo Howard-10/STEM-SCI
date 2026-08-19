@@ -66,7 +66,7 @@ def test_sqlite_execution_store_restores_operator_run(tmp_path) -> None:
     assert restored == run
 
 
-def test_controller_merges_operator_run_refs_and_execution_risk() -> None:
+def test_controller_does_not_downgrade_versioned_tools_to_legacy_operators() -> None:
     controller = ResearchController(
         operator_executor=OperatorExecutor(OperatorRegistry.default())
     )
@@ -83,5 +83,5 @@ def test_controller_merges_operator_run_refs_and_execution_risk() -> None:
     assert scoped.current_stage is ProjectStage.SCOPED
     state = next_run.workflow_state.research_state
     assert state is not None
-    assert state.execution_run_refs
-    assert "OPERATOR_EXECUTION_UNAVAILABLE" in state.risk_flags
+    assert state.execution_run_refs == []
+    assert "TOOL_EXECUTOR_UNAVAILABLE" in state.risk_flags

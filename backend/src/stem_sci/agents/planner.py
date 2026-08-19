@@ -12,7 +12,7 @@ class MentorPlanningAgent(BaseAgent):
         "feasibility_checker@v1",
     )
     supported_task_types = ("scope_research", "build_research_roadmap", "assess_feasibility")
-    allowed_tool_capabilities = ("literature_search_request", "research_scope_validator@v1", "feasibility_checker@v1")
+    allowed_tool_capabilities = (*tool_ids, "literature_search_request")
     allowed_output_types = (
         "ResearchContractCandidate",
         "FeasibilityReport",

@@ -163,6 +163,11 @@ class AgentDispatcher:
         context_bundle: ContextBundle | WritingContextBundle | None = None,
     ) -> AgentResult:
         agent = self.registry.get(agent_id)
+        if context_bundle is not None:
+            expected_project = agent_input.task_ref.split(":", maxsplit=1)[0]
+            context_project = getattr(context_bundle, "project_id", None)
+            if context_project != expected_project:
+                raise ValueError("Agent context belongs to another project")
         run_with_context = getattr(agent, "run_with_context", None)
         result = (
             run_with_context(agent_input, context_bundle)
@@ -387,13 +392,21 @@ class ResearchController:
                 else:
                     risk_flags.append(tool_result.error_code or "TOOL_REQUEST_FAILED")
             return execution_refs, list(dict.fromkeys(risk_flags))
+        legacy_requests = [
+            request for request in result.tool_requests if "@" not in request.capability
+        ]
+        versioned_requests = [
+            request for request in result.tool_requests if "@" in request.capability
+        ]
         runs = self.operator_executor.execute_tool_requests(
             project_id=project_id,
             agent_run_id=result.agent_run_id,
-            tool_requests=result.tool_requests,
+            tool_requests=legacy_requests,
         )
         execution_refs = [run.operator_run_id for run in runs]
         risk_flags = []
+        if versioned_requests:
+            risk_flags.append("TOOL_EXECUTOR_UNAVAILABLE")
         if any(run.status.value == "BLOCKED" for run in runs):
             risk_flags.append("OPERATOR_EXECUTION_UNAVAILABLE")
         if any(run.status.value == "FAILED" for run in runs):

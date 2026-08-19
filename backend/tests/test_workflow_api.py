@@ -1,17 +1,21 @@
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
 from stem_sci.api import app
 
 client = TestClient(app)
+PROJECT_ID = f"api-physics-demo-{uuid4().hex[:8]}"
+PLANNING_RUN_ID = f"api-planning-{uuid4().hex[:8]}"
 
 
 def test_workflow_api_exposes_planning_and_next_route() -> None:
     response = client.post(
         "/api/v1/workflow/projects",
         json={
-            "project_id": "api-physics-demo",
+            "project_id": PROJECT_ID,
             "research_intent": "研究分层 AI 支架对 Python 物理建模迁移能力的影响",
-            "run_id": "api-planning-1",
+            "run_id": PLANNING_RUN_ID,
         },
     )
 
@@ -21,23 +25,46 @@ def test_workflow_api_exposes_planning_and_next_route() -> None:
     assert payload["approval_request"]["approval_type"] == "research_scope"
 
     approval = client.post(
-        "/api/v1/workflow/projects/api-physics-demo/approve",
+        f"/api/v1/workflow/projects/{PROJECT_ID}/approve",
         json={"decision": "approved", "decided_by": "researcher"},
     )
     assert approval.status_code == 200
     assert approval.json()["current_stage"] == "SCOPED"
 
-    next_run = client.post("/api/v1/workflow/projects/api-physics-demo/next")
+    next_run = client.post(f"/api/v1/workflow/projects/{PROJECT_ID}/next")
     assert next_run.status_code == 200
     assert next_run.json()["route_decision"]["selected_route"] == "evidence_review"
 
+    tool_runs = client.get(f"/api/v1/workflow/projects/{PROJECT_ID}/tool-runs")
+    assert tool_runs.status_code == 200
+    project_runs = tool_runs.json()
+    assert project_runs
+    assert {run["agent_id"] for run in project_runs} >= {
+        "mentor_planning",
+        "evidence_review",
+    }
+    assert all(run["project_id"] == PROJECT_ID for run in project_runs)
+    current_agent_runs = {
+        payload["agent_result"]["agent_run_id"],
+        next_run.json()["agent_result"]["agent_run_id"],
+    }
+    current_tool_runs = [
+        run for run in project_runs if run["agent_run_id"] in current_agent_runs
+    ]
+    assert current_tool_runs
+    assert all(run["status"] == "SUCCEEDED" for run in current_tool_runs)
+    assert any(
+        run["agent_id"] == "mentor_planning" and run["output_content_refs"]
+        for run in current_tool_runs
+    )
+
     rejected = client.post(
-        "/api/v1/workflow/projects/api-physics-demo/approve",
+        f"/api/v1/workflow/projects/{PROJECT_ID}/approve",
         json={"decision": "rejected", "decided_by": "researcher"},
     )
     assert rejected.status_code == 200
     finding = client.post(
-        "/api/v1/workflow/projects/api-physics-demo/review-findings",
+        f"/api/v1/workflow/projects/{PROJECT_ID}/review-findings",
         json={
             "finding_id": "api-method-finding",
             "reviewer_type": "method_reviewer",
@@ -66,9 +93,9 @@ def test_workflow_api_lists_capabilities() -> None:
     }
 
 
-def test_workflow_api_lists_project_operator_runs() -> None:
-    response = client.get("/api/v1/workflow/projects/api-physics-demo/executions")
+def test_workflow_api_exposes_legacy_operator_audit_endpoint() -> None:
+    response = client.get("/api/v1/workflow/projects/api-empty-operator-audit/executions")
 
     assert response.status_code == 200
-    assert response.json()
+    assert isinstance(response.json(), list)
     assert all("operator_run_id" in run for run in response.json())

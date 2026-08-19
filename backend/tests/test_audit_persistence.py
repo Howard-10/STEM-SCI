@@ -1,3 +1,5 @@
+import json
+import sqlite3
 from datetime import UTC, datetime
 
 from stem_sci.artifacts.artifact_store import SQLiteArtifactStore
@@ -7,6 +9,8 @@ from stem_sci.controller.policy.route_store import SQLiteRouteDecisionStore
 from stem_sci.core.enums import DecisionScope, ProjectStage
 from stem_sci.provenance.agent_run_store import SQLiteAgentRunStore
 from stem_sci.provenance.models import AgentRunRecord
+from stem_sci.provenance.tool_run_store import SQLiteToolRunStore
+from stem_sci.tools.models import ToolRunRecord, ToolRunStatus
 
 
 def test_sqlite_audit_stores_restore_artifact_agent_run_and_route(tmp_path) -> None:
@@ -81,3 +85,40 @@ def test_controller_writes_audit_records_for_planning_run(tmp_path) -> None:
     assert artifact_store.list_project("controller-audit")
     assert agent_store.get("controller-audit", result.agent_result.agent_run_id) is not None
     assert route_store.get("controller-audit", result.route_decision.decision_id) is not None
+
+
+def test_tool_run_store_reads_records_from_pre_projection_schema(tmp_path) -> None:
+    database = tmp_path / "workflow.db"
+    SQLiteToolRunStore(database)
+    record = ToolRunRecord(
+        tool_run_id="tool-legacy",
+        project_id="audit-demo",
+        tool_id="knowledge_base_search",
+        tool_version="v1",
+        status=ToolRunStatus.SUCCEEDED,
+        agent_id="evidence_review",
+        agent_run_id="agent-run-legacy",
+        skill_ref="bounded_corpus_review@v1",
+        request_ref="request-legacy",
+    )
+    legacy_body = record.model_dump(mode="json")
+    legacy_body["output_payloads"] = []
+    legacy_body["output_data"] = {"must_not_be_restored": True}
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            insert into workflow_tool_runs(
+                project_id, tool_run_id, request_ref, idempotency_key, body
+            ) values (?, ?, ?, ?, ?)
+            """,
+            (
+                record.project_id,
+                record.tool_run_id,
+                record.request_ref,
+                None,
+                json.dumps(legacy_body),
+            ),
+        )
+
+    assert SQLiteToolRunStore(database).get("audit-demo", "tool-legacy") == record
+    assert SQLiteToolRunStore(database).list_project("audit-demo") == [record]

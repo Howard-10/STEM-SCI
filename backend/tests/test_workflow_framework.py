@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from stem_sci.agents import AgentInput, EvidenceReviewAgent
 from stem_sci.artifacts.artifact_store import InMemoryArtifactStore
 from stem_sci.artifacts.decision_store import InMemoryDecisionStore
 from stem_sci.artifacts.models import ArtifactRef
@@ -11,7 +12,7 @@ from stem_sci.context.models import (
     SourceLocation,
     VerificationStatus,
 )
-from stem_sci.controller import PlanningRequest, ResearchController
+from stem_sci.controller import AgentDispatcher, AgentRegistry, PlanningRequest, ResearchController
 from stem_sci.core.enums import ProjectStage, TaskStatus
 from stem_sci.core.models import ApprovalRecord
 from stem_sci.core.reducers import merge_references
@@ -188,6 +189,41 @@ def test_evidence_agent_preserves_context_evidence_refs() -> None:
     assert "candidate://evidence_review/physics-demo:evidence/EvidenceMatrixCandidate" in result.candidate_artifact_refs
     assert "INSUFFICIENT_VERIFIED_EVIDENCE" not in result.risk_flags
     assert "需要确认迁移测量指标" in result.unresolved_questions
+
+
+def test_dispatcher_rejects_cross_project_agent_context() -> None:
+    from stem_sci.context.models import ContextBundle
+
+    bundle = ContextBundle(
+        context_id="ctx-other-project",
+        project_id="project-b",
+        task_ref="project-b:evidence",
+        query="query",
+        evidence_refs=[],
+        source_refs=[],
+        unresolved_questions=[],
+        risk_flags=[],
+        verification_summary={},
+        token_budget=100,
+        estimated_tokens=0,
+        context_hash="d" * 64,
+        generated_at="2026-08-04T00:00:00Z",
+    )
+    agent = EvidenceReviewAgent()
+    with pytest.raises(ValueError, match="another project"):
+        AgentDispatcher(AgentRegistry({agent.agent_id: agent})).dispatch(
+            agent.agent_id,
+            AgentInput(
+                agent_run_id="cross-project-run",
+                task_ref="project-a:evidence",
+                context_bundle_ref="ctx-other-project",
+                allowed_tool_capabilities=[],
+                allowed_output_types=list(agent.allowed_output_types),
+                policy_version="policy-v1",
+                prompt_template_version="evidence-v1",
+            ),
+            bundle,
+        )
 
 
 def test_controller_builds_context_before_evidence_review() -> None:

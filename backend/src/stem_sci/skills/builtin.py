@@ -104,6 +104,14 @@ BUILTIN_SKILLS: tuple[SkillManifest, ...] = (
         risk=RiskLevel.HIGH,
     ),
     _manifest(
+        "statistical_analysis_execution",
+        "data_analysis",
+        ["audit_data", "draft_analysis_specification"],
+        ["python_analysis_sandbox@v1"],
+        "schema://PythonExecutionCandidate",
+        risk=RiskLevel.HIGH,
+    ),
+    _manifest(
         "atomic_claim_graph_construction",
         "paper_writing",
         ["draft_manuscript", "map_claims_to_evidence"],

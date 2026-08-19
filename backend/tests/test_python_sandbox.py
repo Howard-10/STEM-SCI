@@ -49,3 +49,35 @@ def test_sandbox_rejects_input_outside_project(tmp_path: Path) -> None:
     )
     assert result.status is SandboxStatus.BLOCKED
     assert result.error_code == "PROJECT_SCOPE_VIOLATION"
+
+
+def test_sandbox_rejects_input_owned_by_another_project(tmp_path: Path) -> None:
+    other_project = tmp_path / "uploads" / "project-b"
+    other_project.mkdir(parents=True)
+    secret = other_project / "secret.csv"
+    secret.write_text("secret-sentinel", encoding="utf-8")
+
+    result = PythonSandbox(tmp_path).run(
+        _request("print('{}')").model_copy(update={"input_paths": [secret]})
+    )
+
+    assert result.status is SandboxStatus.BLOCKED
+    assert result.error_code == "PROJECT_SCOPE_VIOLATION"
+
+
+def test_sandbox_blocks_script_read_of_undeclared_host_file(tmp_path: Path) -> None:
+    other_project = tmp_path / "uploads" / "project-b"
+    other_project.mkdir(parents=True)
+    secret = other_project / "secret.txt"
+    secret.write_text("secret-sentinel", encoding="utf-8")
+    script = (
+        "import json\n"
+        f"value = open({str(secret)!r}, encoding='utf-8').read()\n"
+        "print(json.dumps({'value': value}))"
+    )
+
+    result = PythonSandbox(tmp_path).run(_request(script))
+
+    assert result.status is SandboxStatus.BLOCKED
+    assert result.error_code == "PROJECT_SCOPE_VIOLATION"
+    assert "secret-sentinel" not in result.stdout

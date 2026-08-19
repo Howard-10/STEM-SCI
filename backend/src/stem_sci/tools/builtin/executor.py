@@ -1,6 +1,8 @@
 """Controller executor that dispatches structured requests to local Tools."""
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -13,11 +15,12 @@ from stem_sci.artifacts.artifact_store import ArtifactStore, InMemoryArtifactSto
 from stem_sci.artifacts.content_store import ArtifactContentStore, InMemoryArtifactContentStore
 from stem_sci.context.models import SourceChunk
 from stem_sci.context.service import ContextService
-from stem_sci.tools.models import ToolResult, ToolRunStatus, ToolSpec
+from stem_sci.tools.models import ToolExecutionMode, ToolResult, ToolRunStatus, ToolSpec
 from stem_sci.tools.sandbox import PythonExecutionRequest, PythonSandbox
 
 from .analysis import PythonAnalysisSandboxTool
 from .artifacts import ArtifactIntegrityCheckTool, ArtifactResolveTool
+from .common import blocked
 from .context import ContextBundleReadTool, EvidenceRefValidateTool
 from .evidence import (
     BoundedSynthesisValidatorTool,
@@ -111,6 +114,25 @@ class BuiltinToolExecutor:
         else:
             status, error_code, payload = ToolRunStatus.SUCCEEDED, None, value
         output_data = self._dump(payload)
+        output_payloads = []
+        if (
+            status is ToolRunStatus.SUCCEEDED
+            and spec.execution_mode is ToolExecutionMode.CANDIDATE_OUTPUT
+            and output_data is not None
+        ):
+            try:
+                output_payloads = [
+                    self._candidate_payload(spec, project_id, request, output_data)
+                ]
+            except ValueError as error:
+                return ToolResult(
+                    tool_run_id="builtin-result",
+                    project_id=project_id,
+                    tool_id=spec.tool_id,
+                    tool_version=spec.tool_version,
+                    status=ToolRunStatus.BLOCKED,
+                    error_code=str(error) if str(error) == "PROJECT_SCOPE_VIOLATION" else "EXECUTION_FAILED",
+                )
         return ToolResult(
             tool_run_id="builtin-result",
             project_id=project_id,
@@ -119,13 +141,62 @@ class BuiltinToolExecutor:
             status=status,
             error_code=error_code,
             output_data=output_data,
+            output_payloads=output_payloads,
         )
+
+    @staticmethod
+    def _candidate_payload(
+        spec: ToolSpec,
+        project_id: str,
+        request: ToolRequest,
+        body: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        BuiltinToolExecutor._validate_embedded_project_scope(project_id, body)
+        canonical = json.dumps(
+            body, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        artifact_type = body.get("output_type")
+        return {
+            "project_id": project_id,
+            "artifact_id": (
+                f"tool-{spec.tool_id}-"
+                f"{hashlib.sha256(request.request_id.encode()).hexdigest()[:16]}"
+            ),
+            "version": 1,
+            "artifact_type": (
+                artifact_type if isinstance(artifact_type, str) else f"{spec.tool_id}Candidate"
+            ),
+            "schema_ref": spec.output_schema_ref,
+            "schema_version": spec.tool_version,
+            "body": body,
+            "content_hash": hashlib.sha256(canonical.encode()).hexdigest(),
+        }
+
+    @staticmethod
+    def _validate_embedded_project_scope(project_id: str, value: Any) -> None:
+        if isinstance(value, dict):
+            embedded = value.get("project_id")
+            if embedded is not None and embedded != project_id:
+                raise ValueError("PROJECT_SCOPE_VIOLATION")
+            for item in value.values():
+                BuiltinToolExecutor._validate_embedded_project_scope(project_id, item)
+        elif isinstance(value, list):
+            for item in value:
+                BuiltinToolExecutor._validate_embedded_project_scope(project_id, item)
 
     def _call(
         self, tool: Callable[..., Any], project_id: str, payload: dict[str, JsonValue], request: ToolRequest
     ) -> Any:
         data = dict(payload)
         name = getattr(tool, "__qualname__", "")
+        if "PythonAnalysisSandboxTool" in name:
+            raw_request = data.get("request")
+            if not isinstance(raw_request, dict):
+                raise TypeError("INVALID_INPUT")
+            execution_request = PythonExecutionRequest.model_validate(raw_request)
+            if execution_request.project_id != project_id:
+                return blocked("PROJECT_SCOPE_VIOLATION")
+            return tool(execution_request)
         if "ContextBundleReadTool" in name:
             return tool(project_id, self._string(data.get("context_id")))
         if "ArtifactResolveTool" in name or "ArtifactIntegrityCheckTool" in name:
@@ -148,8 +219,6 @@ class BuiltinToolExecutor:
             return tool(project_id, self._list(data.get("paper_cards")))
         if "BoundedSynthesisValidatorTool" in name:
             return tool(project_id, BoundedEvidenceSynthesis.model_validate(data["synthesis"]))
-        if isinstance(data.get("request"), dict):
-            return tool(PythonExecutionRequest.model_validate(data["request"]))
         return tool(project_id, **data)
 
     @staticmethod

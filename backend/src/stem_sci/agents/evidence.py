@@ -9,7 +9,7 @@ from pydantic import JsonValue
 from stem_sci.context.models import ContextBundle
 
 from .base import BaseAgent
-from .contracts import AgentInput, AgentResult, CandidateArtifact
+from .contracts import AgentInput, AgentResult, CandidateArtifact, ToolRequest
 from .evidence_pipeline import EvidenceReviewContext, EvidenceReviewPackage, EvidenceReviewPipeline
 
 
@@ -21,6 +21,7 @@ class EvidenceReviewAgent(BaseAgent):
         "knowledge_base_search@v1",
         "source_verification_checker@v1",
         "evidence_ref_validate@v1",
+        "bounded_synthesis_validator@v1",
     )
     supported_task_types = ("design_search_protocol", "screen_evidence", "synthesize_evidence")
     allowed_tool_capabilities = (
@@ -28,8 +29,7 @@ class EvidenceReviewAgent(BaseAgent):
         "paper_screening",
         "paper_extraction",
         "source_verification",
-        "knowledge_base_search@v1",
-        "source_verification_checker@v1",
+        *tool_ids,
     )
     allowed_output_types = (
         "SearchProtocolCandidate",
@@ -59,13 +59,15 @@ class EvidenceReviewAgent(BaseAgent):
                 source_refs=context.source_refs,
                 context_hash=context.context_hash,
             )
-            return self.run_pipeline(agent_input, pipeline_context)
+            return self._attach_context_tool_requests(
+                self.run_pipeline(agent_input, pipeline_context), agent_input, context
+            )
         result = self.run(agent_input)
         risk_flags = list(result.risk_flags)
         unresolved_questions = [*result.unresolved_questions, *context.unresolved_questions]
         if not context.evidence_refs:
             risk_flags.append("INSUFFICIENT_VERIFIED_EVIDENCE")
-        return result.model_copy(
+        contextualized = result.model_copy(
             update={
                 "evidence_refs": [evidence.evidence_id for evidence in context.evidence_refs],
                 "risk_flags": list(dict.fromkeys([*risk_flags, *context.risk_flags])),
@@ -76,6 +78,69 @@ class EvidenceReviewAgent(BaseAgent):
                 ],
             }
         )
+        return self._attach_context_tool_requests(contextualized, agent_input, context)
+
+    def _attach_context_tool_requests(
+        self,
+        result: AgentResult,
+        agent_input: AgentInput,
+        context: ContextBundle,
+    ) -> AgentResult:
+        managed_tools = set(self.tool_ids)
+        requests = [
+            request
+            for request in result.tool_requests
+            if request.capability not in managed_tools
+        ]
+        authorized = set(agent_input.allowed_tool_capabilities)
+
+        def add(capability: str, payload: dict[str, JsonValue], suffix: str) -> None:
+            if capability not in authorized:
+                return
+            requests.append(
+                ToolRequest(
+                    request_id=f"{agent_input.agent_run_id}:tool:{suffix}",
+                    capability=capability,
+                    input_payload=payload,
+                    reason=f"Evidence context supplies inputs for {capability}.",
+                )
+            )
+
+        add("context_bundle_read@v1", {"context_id": context.context_id}, "context")
+        add(
+            "knowledge_base_search@v1",
+            {"query": context.query, "limit": 10},
+            "search",
+        )
+        evidence_ids = [evidence.evidence_id for evidence in context.evidence_refs]
+        if evidence_ids:
+            json_evidence_ids: list[JsonValue] = [*evidence_ids]
+            add(
+                "source_verification_checker@v1",
+                {"evidence_refs": json_evidence_ids},
+                "verify",
+            )
+            for index, evidence_id in enumerate(evidence_ids):
+                add(
+                    "evidence_ref_validate@v1",
+                    {"evidence_id": evidence_id},
+                    f"evidence-{index}",
+                )
+        synthesis = next(
+            (
+                artifact.body
+                for artifact in result.candidate_artifacts
+                if artifact.artifact_type == "BoundedEvidenceSynthesis"
+            ),
+            None,
+        )
+        if synthesis is not None:
+            add(
+                "bounded_synthesis_validator@v1",
+                {"synthesis": synthesis},
+                "synthesis",
+            )
+        return result.model_copy(update={"tool_requests": requests})
 
     def run_pipeline(
         self, agent_input: AgentInput, context: EvidenceReviewContext

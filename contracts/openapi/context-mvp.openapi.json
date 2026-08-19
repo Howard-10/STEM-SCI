@@ -2723,6 +2723,13 @@
             "type": "array",
             "title": "Required Output Types"
           },
+          "input_payload": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Input Payload"
+          },
           "idempotency_key": {
             "anyOf": [
               {

@@ -38,6 +38,8 @@ class _Validator:
             return BuiltinResult(status=ToolRunStatus.BLOCKED, error_code="INVALID_ESTIMAND")
         return result
 
+research_scope_validator = _Validator("research_scope_validator", "ResearchScopeValidationReport")
+feasibility_checker = _Validator("feasibility_checker", "FeasibilityReport")
 research_question_validator = _Validator("research_question_validator")
 hypothesis_structure_checker = _Validator("hypothesis_structure_checker")
 estimand_validator = _Validator("estimand_validator")
@@ -49,4 +51,4 @@ preregistration_consistency_checker = _Validator("preregistration_consistency_ch
 intervention_protocol_linter = _Validator("intervention_protocol_linter")
 quality_gate_plan_builder = _Validator("quality_gate_plan_builder")
 
-__all__ = ["DesignReport", "causal_dag_checker", "estimand_validator", "hypothesis_structure_checker", "intervention_protocol_linter", "measurement_plan_checker", "preregistration_consistency_checker", "protocol_schema_validator", "quality_gate_plan_builder", "research_question_validator", "sampling_plan_checker"]
+__all__ = ["DesignReport", "causal_dag_checker", "estimand_validator", "feasibility_checker", "hypothesis_structure_checker", "intervention_protocol_linter", "measurement_plan_checker", "preregistration_consistency_checker", "protocol_schema_validator", "quality_gate_plan_builder", "research_question_validator", "research_scope_validator", "sampling_plan_checker"]

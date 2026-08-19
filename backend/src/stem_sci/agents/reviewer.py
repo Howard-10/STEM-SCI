@@ -19,5 +19,5 @@ class IndependentReviewAgent(BaseAgent):
         "bilingual_draft_audit@v1",
     )
     supported_task_types = ("review_citations", "review_method", "review_reproducibility")
-    allowed_tool_capabilities = ()
+    allowed_tool_capabilities = tool_ids
     allowed_output_types = ("ReviewFinding", "RevisionRequest", "ReviewReport", "OverallRecommendation")
