@@ -19,6 +19,8 @@ export interface AgentCapability {
   agent_id: string;
   supported_task_types: string[];
   allowed_tool_capabilities: string[];
+  skill_ids: string[];
+  tool_ids: string[];
   allowed_output_types: string[];
   forbidden_actions: string[];
   read_only_global_state: boolean;
@@ -68,7 +70,27 @@ export interface ToolRequest {
   capability: string;
   input_refs: string[];
   required_output_types: string[];
+  input_payload: Record<string, unknown>;
   reason: string;
+}
+
+export interface ToolRun {
+  tool_run_id: string;
+  project_id: string;
+  tool_id: string;
+  tool_version: string;
+  status: "SUCCEEDED" | "BLOCKED" | "FAILED" | "TIMED_OUT" | "CANCELLED";
+  output_artifact_refs: string[];
+  output_content_refs: string[];
+  risk_flags: string[];
+  error_code: string | null;
+  agent_id: string;
+  agent_run_id: string;
+  skill_ref: string;
+  request_ref: string;
+  input_artifact_refs: string[];
+  started_at: string | null;
+  finished_at: string | null;
 }
 
 export interface ResearchState {
@@ -158,5 +180,8 @@ export const workflowApi = {
   },
   listAgents() {
     return request<AgentCapability[]>("/workflow/agents");
+  },
+  listToolRuns(projectId: string) {
+    return request<ToolRun[]>(`/workflow/projects/${encodeURIComponent(projectId)}/tool-runs`);
   },
 };

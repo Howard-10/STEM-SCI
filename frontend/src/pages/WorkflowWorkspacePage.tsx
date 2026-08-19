@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { workflowApi, type AgentCapability, type AgentResult, type ApprovalRequest, type ProjectStage, type RouteDecision, type WorkflowState } from "../api/workflow";
+import { workflowApi, type AgentCapability, type AgentResult, type ApprovalRequest, type ProjectStage, type RouteDecision, type ToolRun, type WorkflowState } from "../api/workflow";
 
 const stages: ProjectStage[] = [
   "INTAKE",
@@ -48,6 +48,7 @@ export function WorkflowWorkspacePage() {
   const [lastApproval, setLastApproval] = useState<ApprovalRequest | null>(null);
   const [lastRoute, setLastRoute] = useState<RouteDecision | null>(null);
   const [agents, setAgents] = useState<AgentCapability[]>([]);
+  const [toolRuns, setToolRuns] = useState<ToolRun[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -59,6 +60,10 @@ export function WorkflowWorkspacePage() {
   useEffect(() => {
     workflowApi.listAgents().then(setAgents).catch((caught) => setError(caught instanceof Error ? caught.message : "无法读取 Agent 能力"));
   }, []);
+
+  const refreshToolRuns = async (id: string) => {
+    setToolRuns(await workflowApi.listToolRuns(id));
+  };
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -78,6 +83,7 @@ export function WorkflowWorkspacePage() {
     setLastAgentResult(result.agent_result);
     setLastApproval(result.approval_request);
     setLastRoute(result.route_decision);
+    await refreshToolRuns(projectId);
   });
 
   const approve = (decision: "approved" | "rejected") => run(async () => {
@@ -85,6 +91,7 @@ export function WorkflowWorkspacePage() {
     const next = await workflowApi.getProject(projectId);
     setWorkflow(next);
     setLastApproval(null);
+    await refreshToolRuns(projectId);
   });
 
   const routeNext = () => run(async () => {
@@ -93,6 +100,7 @@ export function WorkflowWorkspacePage() {
     setLastAgentResult(result.agent_result);
     setLastApproval(result.approval_request);
     setLastRoute(result.route_decision);
+    await refreshToolRuns(projectId);
   });
 
   const routeDescription = useMemo(() => {
@@ -222,10 +230,35 @@ export function WorkflowWorkspacePage() {
         </section>
       </div>
 
+      <section className="grid-panel tool-runs-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">05 / Tool audit</p>
+            <h2>Agent 工具运行记录</h2>
+          </div>
+          <span className="stage-code">{toolRuns.length} runs</span>
+        </div>
+        {toolRuns.length > 0 ? (
+          <div className="tool-run-table" role="table" aria-label="Tool execution audit">
+            <div className="tool-run-head" role="row">
+              <span>Agent / Skill</span><span>Tool</span><span>状态</span><span>审计信息</span>
+            </div>
+            {toolRuns.map((run) => (
+              <div className="tool-run-row" role="row" key={run.tool_run_id}>
+                <span><strong>{run.agent_id}</strong><small>{run.skill_ref}</small></span>
+                <span><strong>{run.tool_id}</strong><small>{run.tool_version}</small></span>
+                <span className={`tool-status tool-status-${run.status.toLowerCase()}`}>{run.status}</span>
+                <span><small>{run.error_code ?? `${run.output_content_refs.length + run.output_artifact_refs.length} output refs`}</small></span>
+              </div>
+            ))}
+          </div>
+        ) : <p className="empty-state">项目运行后，经过 Controller Gateway 的 Tool 审计会显示在这里。</p>}
+      </section>
+
       <section className="grid-panel agent-directory">
         <div className="panel-heading">
           <div>
-            <p className="section-kicker">05 / Capability registry</p>
+          <p className="section-kicker">06 / Capability registry</p>
             <h2>六类专业 Agent</h2>
           </div>
           <span className="stage-code">{agents.length} roles</span>
@@ -235,7 +268,7 @@ export function WorkflowWorkspacePage() {
             <article className="agent-card" key={agent.agent_id}>
               <div className="agent-card-heading"><strong>{agent.agent_id}</strong><span>READ ONLY</span></div>
               <p>{agent.supported_task_types.join(" · ")}</p>
-              <small>输出 {agent.allowed_output_types.length} 类候选工件</small>
+              <small>{agent.skill_ids.length} 个 Skill · {agent.tool_ids.length} 个 Tool</small>
             </article>
           ))}
         </div>
