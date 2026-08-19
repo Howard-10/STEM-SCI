@@ -52,6 +52,11 @@ from .operators.models import OperatorRun, OperatorSpec
 from .operators.registry import OperatorRegistry
 from .provenance.agent_run_store import SQLiteAgentRunStore
 from .provenance.models import AgentRunRecord
+from .provenance.tool_run_store import SQLiteToolRunStore
+from .skills.registry import SkillRegistry
+from .tools.gateway import ToolGateway
+from .tools.models import ToolRunRecord
+from .tools.registry import ToolRegistry
 
 DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 DEFAULT_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -112,6 +117,7 @@ execution_store = SQLiteExecutionStore(workflow_database)
 artifact_store = SQLiteArtifactStore(workflow_database)
 artifact_content_store = SQLiteArtifactContentStore(workflow_database)
 agent_run_store = SQLiteAgentRunStore(workflow_database)
+tool_run_store = SQLiteToolRunStore(workflow_database)
 route_store = SQLiteRouteDecisionStore(workflow_database)
 workflow_controller = ResearchController(
     dispatcher=AgentDispatcher(_configured_agent_registry()),
@@ -126,6 +132,14 @@ workflow_controller = ResearchController(
     artifact_content_store=artifact_content_store,
     agent_run_store=agent_run_store,
     route_store=route_store,
+    tool_gateway=ToolGateway(
+        tool_registry=ToolRegistry(),
+        skill_registry=SkillRegistry(),
+        tool_run_store=tool_run_store,
+        artifact_store=artifact_store,
+        artifact_content_store=artifact_content_store,
+        decision_store=SQLiteDecisionStore(workflow_database),
+    ),
 )
 
 
@@ -247,6 +261,11 @@ def workflow_artifact_contents(project_id: str) -> list[ArtifactContent]:
 @app.get("/api/v1/workflow/projects/{project_id}/agent-runs")
 def workflow_agent_runs(project_id: str) -> list[AgentRunRecord]:
     return agent_run_store.list_project(project_id)
+
+
+@app.get("/api/v1/workflow/projects/{project_id}/tool-runs")
+def workflow_tool_runs(project_id: str) -> list[ToolRunRecord]:
+    return tool_run_store.list_project(project_id)
 
 
 @app.get("/api/v1/workflow/projects/{project_id}/routes")

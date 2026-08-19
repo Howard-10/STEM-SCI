@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, JsonValue
 
 from stem_sci.context.models import StrictModel
 
@@ -62,6 +62,9 @@ class ToolResult(StrictModel):
     output_content_refs: list[str] = Field(default_factory=list)
     risk_flags: list[str] = Field(default_factory=list)
     error_code: str | None = None
+    # Optional structured payloads supplied by local Tool implementations.
+    # The Gateway is the only component that persists these as candidate content.
+    output_payloads: list[dict[str, JsonValue]] = Field(default_factory=list)
 
 
 class ToolRunRecord(ToolResult):

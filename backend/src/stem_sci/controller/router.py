@@ -54,6 +54,8 @@ from stem_sci.core.state import ResearchState
 from stem_sci.operators.executor import OperatorExecutor
 from stem_sci.provenance.agent_run_store import AgentRunStore, InMemoryAgentRunStore
 from stem_sci.provenance.models import AgentRunRecord
+from stem_sci.tools.gateway import ToolGateway
+from stem_sci.tools.models import ToolRunStatus
 
 from .merger import validate_agent_result
 from .policy.route_store import RouteDecisionStore
@@ -291,6 +293,7 @@ class ResearchController:
         artifact_content_store: ArtifactContentStore | None = None,
         agent_run_store: AgentRunStore | None = None,
         route_store: RouteDecisionStore | None = None,
+        tool_gateway: ToolGateway | None = None,
     ) -> None:
         self.dispatcher = dispatcher or AgentDispatcher()
         self.context_provider = context_provider
@@ -301,6 +304,7 @@ class ResearchController:
         self.artifact_content_store = artifact_content_store or InMemoryArtifactContentStore()
         self.agent_run_store = agent_run_store or InMemoryAgentRunStore()
         self.route_store = route_store
+        self.tool_gateway = tool_gateway
         self._states: dict[str, ResearchState] = {}
         self._workflow_states: dict[str, ControllerWorkflowState] = {}
         self._routes: dict[str, RouteDecision] = {}
@@ -339,13 +343,45 @@ class ResearchController:
     def _execute_agent_tools(
         self, project_id: str, result: AgentResult
     ) -> tuple[list[str], list[str]]:
+        if self.tool_gateway is not None:
+            execution_refs: list[str] = []
+            risk_flags: list[str] = []
+            for request in result.tool_requests:
+                tool_result = self.tool_gateway.execute(
+                    project_id=project_id,
+                    agent_id=result.agent_id,
+                    agent_run_id=result.agent_run_id,
+                    request=request,
+                )
+                # Legacy scaffold capabilities remain handled by operators until
+                # their versioned Tools are registered. The Gateway denial is
+                # retained in its audit store; the operator run preserves the
+                # existing workflow contract.
+                if (
+                    tool_result.status is ToolRunStatus.BLOCKED
+                    and tool_result.error_code == "TOOL_NOT_AUTHORIZED"
+                    and "@" not in request.capability
+                ):
+                    legacy_run = self.operator_executor.execute(project_id, request)
+                    execution_refs.append(legacy_run.operator_run_id)
+                    if legacy_run.status.value == "BLOCKED":
+                        risk_flags.append("OPERATOR_EXECUTION_UNAVAILABLE")
+                    elif legacy_run.status.value == "FAILED":
+                        risk_flags.append("OPERATOR_REQUEST_FAILED")
+                    continue
+                execution_refs.append(tool_result.tool_run_id)
+                if tool_result.status is ToolRunStatus.BLOCKED:
+                    risk_flags.append(tool_result.error_code or "TOOL_EXECUTION_BLOCKED")
+                elif tool_result.status is not ToolRunStatus.SUCCEEDED:
+                    risk_flags.append(tool_result.error_code or "TOOL_REQUEST_FAILED")
+            return execution_refs, list(dict.fromkeys(risk_flags))
         runs = self.operator_executor.execute_tool_requests(
             project_id=project_id,
             agent_run_id=result.agent_run_id,
             tool_requests=result.tool_requests,
         )
         execution_refs = [run.operator_run_id for run in runs]
-        risk_flags: list[str] = []
+        risk_flags = []
         if any(run.status.value == "BLOCKED" for run in runs):
             risk_flags.append("OPERATOR_EXECUTION_UNAVAILABLE")
         if any(run.status.value == "FAILED" for run in runs):

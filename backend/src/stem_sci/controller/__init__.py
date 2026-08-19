@@ -3,6 +3,7 @@
 from stem_sci.artifacts.decision_store import DecisionStore, SQLiteDecisionStore
 from stem_sci.core.enums import ProjectStage
 from stem_sci.operators.executor import OperatorExecutor
+from stem_sci.tools.gateway import ToolExecutor, ToolGateway, ToolPolicyError
 
 from .router import (
     AgentDispatcher,
@@ -27,6 +28,9 @@ __all__ = [
     "ResearchController",
     "SQLiteDecisionStore",
     "SQLiteWorkflowStore",
+    "ToolExecutor",
+    "ToolGateway",
+    "ToolPolicyError",
     "WorkflowRunResult",
     "WorkflowSnapshot",
     "WorkflowStore",
