@@ -41,6 +41,7 @@ class ToolRegistry:
             "corpus_coverage_calculator": ("schema://EvidenceMatrixCandidate", "schema://CorpusCoverageReport"),
         }
         design = {name: ("schema://DesignInput", "schema://ValidationReport") for name in (
+            "research_scope_validator", "feasibility_checker",
             "research_question_validator", "hypothesis_structure_checker", "estimand_validator", "causal_dag_checker", "sampling_plan_checker", "measurement_plan_checker", "protocol_schema_validator", "preregistration_consistency_checker", "intervention_protocol_linter", "quality_gate_plan_builder")}
         analysis = {name: ("schema://AnalysisInput", "schema://AnalysisCandidate") for name in (
             "dataset_catalog_read", "dataset_schema_profile", "data_quality_audit", "missingness_and_outlier_report", "data_processing_executor", "model_diagnostic_runner", "statistical_result_card_builder", "result_validation_checker", "data_freeze_request_builder")}

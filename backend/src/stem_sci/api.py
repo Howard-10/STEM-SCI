@@ -53,6 +53,7 @@ from .operators.registry import OperatorRegistry
 from .provenance.agent_run_store import SQLiteAgentRunStore
 from .provenance.models import AgentRunRecord
 from .provenance.tool_run_store import SQLiteToolRunStore
+from .skills.builtin import BUILTIN_SKILLS
 from .skills.registry import SkillRegistry
 from .tools.gateway import ToolGateway
 from .tools.models import ToolRunRecord
@@ -133,8 +134,8 @@ workflow_controller = ResearchController(
     agent_run_store=agent_run_store,
     route_store=route_store,
     tool_gateway=ToolGateway(
-        tool_registry=ToolRegistry(),
-        skill_registry=SkillRegistry(),
+        tool_registry=ToolRegistry.default(),
+        skill_registry=SkillRegistry(BUILTIN_SKILLS),
         tool_run_store=tool_run_store,
         artifact_store=artifact_store,
         artifact_content_store=artifact_content_store,
