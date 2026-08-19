@@ -8,7 +8,7 @@ class ResearchDesignAgent(BaseAgent):
     skill_ids = ("research_question_formulation@v1", "protocol_draft_validation@v1")
     tool_ids = ("research_question_validator@v1", "protocol_schema_validator@v1")
     supported_task_types = ("draft_study_protocol", "define_estimand", "draft_preregistration")
-    allowed_tool_capabilities = ()
+    allowed_tool_capabilities = ("research_question_validator@v1", "protocol_schema_validator@v1")
     allowed_output_types = (
         "ResearchQuestionCandidate",
         "HypothesisCandidate",

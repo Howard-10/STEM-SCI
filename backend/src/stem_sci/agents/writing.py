@@ -22,7 +22,13 @@ class PaperWritingAgent(BaseAgent):
         "bilingual_consistency_checker@v1",
     )
     supported_task_types = ("draft_manuscript", "map_claims_to_evidence", "draft_reproducibility_statement")
-    allowed_tool_capabilities = ()
+    allowed_tool_capabilities = (
+        "atomic_claim_validator@v1",
+        "claim_evidence_mapper@v1",
+        "manuscript_renderer_zh@v1",
+        "manuscript_renderer_en@v1",
+        "bilingual_consistency_checker@v1",
+    )
     allowed_output_types = (
         "AtomicClaimCandidate",
         "ClaimEvidenceMap",

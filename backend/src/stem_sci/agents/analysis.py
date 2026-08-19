@@ -21,6 +21,9 @@ class DataAnalysisAgent(BaseAgent):
         "python_analysis",
         "spss_analysis",
         "result_validation",
+        "dataset_schema_profile@v1",
+        "data_quality_audit@v1",
+        "result_validation_checker@v1",
     )
     allowed_output_types = (
         "DataIssueReport",
