@@ -27,6 +27,8 @@ class AgentInput(AgentContract):
     task_ref: str = Field(min_length=1)
     context_bundle_ref: str = Field(min_length=1)
     allowed_tool_capabilities: list[str] = Field(default_factory=list)
+    allowed_skill_refs: list[str] = Field(default_factory=list)
+    allowed_tool_versions: dict[str, str] = Field(default_factory=dict)
     allowed_output_types: list[str] = Field(default_factory=list)
     policy_version: str = Field(min_length=1)
     prompt_template_version: str = Field(min_length=1)
@@ -76,6 +78,8 @@ class AgentCapability(AgentContract):
     agent_id: str = Field(min_length=1)
     supported_task_types: list[str] = Field(default_factory=list)
     allowed_tool_capabilities: list[str] = Field(default_factory=list)
+    skill_ids: list[str] = Field(default_factory=list)
+    tool_ids: list[str] = Field(default_factory=list)
     allowed_output_types: list[str] = Field(default_factory=list)
     forbidden_actions: list[str] = Field(default_factory=list)
     read_only_global_state: bool = True
