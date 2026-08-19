@@ -30,7 +30,6 @@ class EvidenceReviewAgent(BaseAgent):
         "source_verification",
         "knowledge_base_search@v1",
         "source_verification_checker@v1",
-        "bounded_synthesis_validator@v1",
     )
     allowed_output_types = (
         "SearchProtocolCandidate",
