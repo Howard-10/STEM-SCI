@@ -1,7 +1,7 @@
 # STEM-SCI Agent Tools and Skills Design
 
-**日期：** 2026-08-18  
-**状态：** 设计已确认，待用户审阅后编写实施计划  
+**日期：** 2026-08-18
+**状态：** 设计已确认，待用户审阅后编写实施计划
 **适用分支：** `feature/literature-writing-agents`
 
 ## 1. Design Goal

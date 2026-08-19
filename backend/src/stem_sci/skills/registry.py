@@ -53,4 +53,3 @@ class SkillRegistry:
         return sorted(
             self._manifests.values(), key=lambda manifest: (manifest.skill_id, manifest.skill_version)
         )
-

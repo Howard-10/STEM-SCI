@@ -25,6 +25,17 @@ Run the backend checks from `backend/` with `python -m pytest -q`, `python -m ru
 
 The root-level planning materials are retained as project references and are not application source code.
 
+## Skill and Tool governance
+
+The six Agents emit structured `ToolRequest` objects. The Controller resolves
+versioned Skills and Tools, enforces project scope, permissions, approvals,
+budgets, idempotency, and persists reference-only ToolRun audit records. Local
+context/evidence, design, analysis, writing, review, and restricted Python
+Tools are offline by default. CI uses Fake GPT/Fake Tools; no provider network
+call is required. Keep `STEM_SCI_LLM_API_KEY` in an ignored `.env.local` or the
+process environment; prompts, raw provider responses, API keys, and sandbox
+stdout are never written to Git, formal artifacts, or ToolRun audit records.
+
 ## Optional GPT runtime
 
 The evidence-review and paper-writing pipelines use a provider interface and default to offline `FakeLLMProvider` in CI. For a local GPT run, set `STEM_SCI_LLM_PROVIDER=gpt`, `STEM_SCI_LLM_BASE_URL`, `STEM_SCI_LLM_MODEL`, `STEM_SCI_LLM_TIMEOUT_SECONDS`, and `STEM_SCI_MAX_LLM_CALLS` from the root `.env.example`. Set `STEM_SCI_LLM_API_KEY` only in the local shell or an ignored `.env.local`; never commit it or place it in prompts, logs, or artifact bodies.

@@ -87,4 +87,3 @@ class PythonSandbox:
                     raise ValueError("NETWORK_DISABLED")
             if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in blocked_modules:
                 raise ValueError("NETWORK_DISABLED")
-

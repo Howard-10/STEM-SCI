@@ -2723,6 +2723,43 @@
             "type": "array",
             "title": "Required Output Types"
           },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "target_artifact_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Artifact Ref"
+          },
+          "expected_output_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Output Hash"
+          },
           "reason": {
             "type": "string",
             "minLength": 1,
@@ -2796,16 +2833,6 @@
             ],
             "title": "Error Code"
           },
-          "output_payloads": {
-            "items": {
-              "additionalProperties": {
-                "$ref": "#/components/schemas/JsonValue"
-              },
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Output Payloads"
-          },
           "agent_id": {
             "type": "string",
             "minLength": 1,
@@ -2825,6 +2852,28 @@
             "type": "string",
             "minLength": 1,
             "title": "Request Ref"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "operation_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operation Hash"
           },
           "input_artifact_refs": {
             "items": {
@@ -2872,7 +2921,7 @@
           "request_ref"
         ],
         "title": "ToolRunRecord",
-        "description": "Auditable tool result with the originating agent and request references."
+        "description": "Allowlisted audit projection for one Controller-mediated Tool run."
       },
       "ToolRunStatus": {
         "type": "string",

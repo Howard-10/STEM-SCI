@@ -176,4 +176,3 @@ BUILTIN_TOOL_REFS: dict[str, tuple[str, ...]] = {
 
 
 __all__ = ["BUILTIN_SKILLS", "BUILTIN_SKILL_REFS", "BUILTIN_TOOL_REFS"]
-

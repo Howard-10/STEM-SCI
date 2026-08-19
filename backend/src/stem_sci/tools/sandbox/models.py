@@ -31,4 +31,3 @@ class PythonExecutionResult(BaseModel):
     stdout: str = ""
     stderr: str = ""
     error_code: str | None = None
-
