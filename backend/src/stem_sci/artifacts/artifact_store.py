@@ -30,6 +30,13 @@ class InMemoryArtifactStore:
         self._items[key] = artifact
         return artifact
 
+    def put_if_absent(self, artifact: ArtifactRef) -> ArtifactRef:
+        key = (artifact.project_id, artifact.artifact_id, artifact.version)
+        if key in self._items:
+            raise FileExistsError("artifact version already exists")
+        self._items[key] = artifact
+        return artifact
+
     def get(self, project_id: str, artifact_id: str, version: int | None = None) -> ArtifactRef | None:
         matches = [
             item
@@ -90,6 +97,25 @@ class SQLiteArtifactStore:
                     artifact.model_dump_json(),
                 ),
             )
+        return artifact
+
+    def put_if_absent(self, artifact: ArtifactRef) -> ArtifactRef:
+        with sqlite3.connect(self.database) as connection:
+            try:
+                connection.execute(
+                    """
+                    insert into workflow_artifacts(project_id, artifact_id, version, body)
+                    values (?, ?, ?, ?)
+                    """,
+                    (
+                        artifact.project_id,
+                        artifact.artifact_id,
+                        artifact.version,
+                        artifact.model_dump_json(),
+                    ),
+                )
+            except sqlite3.IntegrityError as error:
+                raise FileExistsError("artifact version already exists") from error
         return artifact
 
     def get(self, project_id: str, artifact_id: str, version: int | None = None) -> ArtifactRef | None:

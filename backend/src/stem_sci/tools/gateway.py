@@ -538,11 +538,21 @@ class ToolGateway:
         inserted_refs: list[ArtifactRef] = []
         try:
             for content in contents:
-                self.artifact_content_store.put(content)
+                put_content = getattr(
+                    self.artifact_content_store,
+                    "put_if_absent",
+                    self.artifact_content_store.put,
+                )
+                put_content(content)
                 inserted_contents.append(content)
             if self.artifact_store is not None:
                 for artifact_ref in refs:
-                    self.artifact_store.put(artifact_ref)
+                    put_artifact = getattr(
+                        self.artifact_store,
+                        "put_if_absent",
+                        self.artifact_store.put,
+                    )
+                    put_artifact(artifact_ref)
                     inserted_refs.append(artifact_ref)
         except Exception:
             if self.artifact_store is not None:

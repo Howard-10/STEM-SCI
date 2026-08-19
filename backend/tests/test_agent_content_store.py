@@ -75,3 +75,28 @@ def test_in_memory_content_store_rejects_hash_changed_after_copy() -> None:
 
     with pytest.raises(ValueError, match="content_hash"):
         store.put(tampered)
+
+
+def test_sqlite_content_store_put_if_absent_never_overwrites(tmp_path: Path) -> None:
+    store = SQLiteArtifactContentStore(tmp_path / "workflow.db")
+    first = ArtifactContent(
+        project_id="physics-demo",
+        artifact_id="candidate-1",
+        version=1,
+        artifact_type="Candidate",
+        schema_version="v1",
+        body={"value": "first"},
+    )
+    second = ArtifactContent(
+        project_id="physics-demo",
+        artifact_id="candidate-1",
+        version=1,
+        artifact_type="Candidate",
+        schema_version="v1",
+        body={"value": "second"},
+    )
+
+    store.put_if_absent(first)
+    with pytest.raises(FileExistsError):
+        store.put_if_absent(second)
+    assert store.get("physics-demo", "candidate-1", 1) == first

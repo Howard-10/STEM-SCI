@@ -64,6 +64,14 @@ class InMemoryArtifactContentStore:
         self._items[(content.project_id, content.artifact_id, content.version)] = content
         return content
 
+    def put_if_absent(self, content: ArtifactContent) -> ArtifactContent:
+        content.validate_integrity()
+        key = (content.project_id, content.artifact_id, content.version)
+        if key in self._items:
+            raise FileExistsError("artifact content version already exists")
+        self._items[key] = content
+        return content
+
     def get(
         self, project_id: str, artifact_id: str, version: int | None = None
     ) -> ArtifactContent | None:
@@ -131,6 +139,26 @@ class SQLiteArtifactContentStore:
                     content.model_dump_json(),
                 ),
             )
+        return content
+
+    def put_if_absent(self, content: ArtifactContent) -> ArtifactContent:
+        content.validate_integrity()
+        with sqlite3.connect(self.database) as connection:
+            try:
+                connection.execute(
+                    """
+                    insert into workflow_artifact_contents(project_id, artifact_id, version, body)
+                    values (?, ?, ?, ?)
+                    """,
+                    (
+                        content.project_id,
+                        content.artifact_id,
+                        content.version,
+                        content.model_dump_json(),
+                    ),
+                )
+            except sqlite3.IntegrityError as error:
+                raise FileExistsError("artifact content version already exists") from error
         return content
 
     def get(

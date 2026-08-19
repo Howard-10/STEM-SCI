@@ -248,6 +248,9 @@ class FailingArtifactStore(InMemoryArtifactStore):
     def put(self, artifact):
         raise OSError("artifact store unavailable")
 
+    def put_if_absent(self, artifact):
+        raise OSError("artifact store unavailable")
+
 
 def test_candidate_write_rolls_back_content_when_reference_write_fails() -> None:
     contents = InMemoryArtifactContentStore()
