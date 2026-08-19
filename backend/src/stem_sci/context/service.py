@@ -515,3 +515,24 @@ class ContextService:
         """Return ownership metadata without exposing evidence content."""
         row = self.db.execute("select project_id from evidence where id=?", (evidence_id,)).fetchone()
         return None if row is None else str(row["project_id"])
+
+    def evidence_for_source(self, project_id: str, source_id: str) -> list[EvidenceRef]:
+        self.get_source(project_id, source_id)
+        rows = self.db.execute(
+            """select e.*, c.idx, c.start, c.finish, c.heading, c.text
+               from evidence e join chunks c on e.chunk_id=c.id
+               where e.project_id=? and e.source_id=? order by c.idx""",
+            (project_id, source_id),
+        ).fetchall()
+        return [self.evidence_ref(row) for row in rows]
+
+    def evidence_for_chunk(self, project_id: str, chunk_id: str) -> EvidenceRef:
+        row = self.db.execute(
+            """select e.*, c.idx, c.start, c.finish, c.heading, c.text
+               from evidence e join chunks c on e.chunk_id=c.id
+               where e.project_id=? and e.chunk_id=?""",
+            (project_id, chunk_id),
+        ).fetchone()
+        if row is None:
+            raise ContextNotFoundError("evidence")
+        return self.evidence_ref(row)

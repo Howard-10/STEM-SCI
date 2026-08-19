@@ -29,7 +29,7 @@ from stem_sci.context.models import (
     SourceChunk,
     VerificationStatus,
 )
-from stem_sci.context.service import ContextService
+from stem_sci.context.service import ContextNotFoundError, ContextService
 from stem_sci.tools.models import ToolRunStatus
 from stem_sci.tools.policies import ToolPolicyError
 
@@ -90,6 +90,27 @@ def _project_check(project_id: str, refs: Iterable[EvidenceRef]) -> None:
 
 def _result(value: Any) -> BuiltinResult[Any]:
     return BuiltinResult(value=value)
+
+
+def _resolve_verified_ids(
+    project_id: str, evidence_ids: Iterable[str], service: ContextService | None
+) -> tuple[list[EvidenceRef], BuiltinResult[Any] | None]:
+    if service is None:
+        return [], failed("PERSISTENCE_UNAVAILABLE")
+    refs: list[EvidenceRef] = []
+    try:
+        for evidence_id in evidence_ids:
+            detail = service.get_evidence(project_id, evidence_id)
+            if detail.verification_status not in {
+                VerificationStatus.SOURCE_VERIFIED,
+                VerificationStatus.HUMAN_VERIFIED,
+            }:
+                return [], blocked("UNVERIFIED_EVIDENCE")
+            refs.append(detail)
+    except ContextNotFoundError:
+        owner = service.evidence_project(evidence_id)
+        return [], blocked("PROJECT_SCOPE_VIOLATION" if owner and owner != project_id else "REFERENCE_NOT_FOUND")
+    return refs, None
 
 
 class KnowledgeBaseSearchTool:
@@ -154,12 +175,11 @@ class SourceVerificationCheckerTool:
             _project_check(project_id, refs)
         except ToolPolicyError as error:
             return blocked(error.error_code)
-        unverified = [
-            ref.evidence_id
-            for ref in refs
-            if ref.verification_status not in {VerificationStatus.SOURCE_VERIFIED, VerificationStatus.HUMAN_VERIFIED}
-        ]
-        verified = [ref.evidence_id for ref in refs if ref.evidence_id not in unverified]
+        stored_refs, failure = _resolve_verified_ids(project_id, [ref.evidence_id for ref in refs], self.service)
+        if failure is not None:
+            return failure
+        unverified: list[str] = []
+        verified = [ref.evidence_id for ref in stored_refs]
         if unverified:
             return BuiltinResult(
                 status=ToolRunStatus.BLOCKED,
@@ -190,8 +210,7 @@ class PaperScreeningExecutorTool:
         def screen() -> ScreeningLedger:
             decisions: list[ScreeningDecision] = []
             for source_ref in sorted(set(source_refs)):
-                evidence = service.search(EvidenceSearchRequest(project_id=project_id, query=source_ref, limit=50))
-                refs = [item.evidence.evidence_id for item in evidence if item.evidence.source_id == source_ref]
+                refs = [item.evidence_id for item in service.evidence_for_source(project_id, source_ref)]
                 decisions.append(
                     ScreeningDecision(
                         source_ref=source_ref,
@@ -208,6 +227,9 @@ class PaperScreeningExecutorTool:
 class PaperCardExtractorTool:
     tool_id = "paper_card_extractor"
 
+    def __init__(self, service: ContextService | None = None) -> None:
+        self.service = service
+
     def execute(self, project_id: str, source_chunks: Sequence[SourceChunk]) -> BuiltinResult[Any]:
         try:
             if any(chunk.project_id != project_id for chunk in source_chunks):
@@ -215,6 +237,8 @@ class PaperCardExtractorTool:
             grouped: dict[str, list[SourceChunk]] = defaultdict(list)
             for chunk in source_chunks:
                 grouped[chunk.source_id].append(chunk)
+            if self.service is None:
+                return failed("PERSISTENCE_UNAVAILABLE")
             cards = [
                 PaperCard(
                     paper_card_id=f"paper-card-{source_id}",
@@ -222,7 +246,7 @@ class PaperCardExtractorTool:
                     source_ref=source_id,
                     title=next((chunk.location.heading for chunk in chunks if chunk.location.heading), source_id),
                     main_findings=[chunks[0].text[:280]],
-                    evidence_refs=[chunk.chunk_id for chunk in chunks],
+                    evidence_refs=[self.service.evidence_for_chunk(project_id, chunk.chunk_id).evidence_id for chunk in chunks],
                 )
                 for source_id, chunks in sorted(grouped.items())
             ]
@@ -236,10 +260,19 @@ class PaperCardExtractorTool:
 class EvidenceMatrixBuilderTool:
     tool_id = "evidence_matrix_builder"
 
+    def __init__(self, service: ContextService | None = None) -> None:
+        self.service = service
+
     def execute(self, project_id: str, paper_cards: Sequence[PaperCard]) -> BuiltinResult[Any]:
         try:
             if any(card.project_id != project_id for card in paper_cards):
                 raise ToolPolicyError("PROJECT_SCOPE_VIOLATION")
+            if self.service is None:
+                return failed("PERSISTENCE_UNAVAILABLE")
+            for card in paper_cards:
+                _, failure = _resolve_verified_ids(project_id, card.evidence_refs, self.service)
+                if failure is not None:
+                    return failure
             rows = [
                 EvidenceMatrixRow(
                     row_id=f"matrix-{card.paper_card_id}",
@@ -273,11 +306,20 @@ class CitationDeduplicatorTool:
 class EvidenceConflictDetectorTool:
     tool_id = "evidence_conflict_detector"
 
+    def __init__(self, service: ContextService | None = None) -> None:
+        self.service = service
+
     def execute(self, project_id: str, matrix: EvidenceMatrixCandidate | Sequence[EvidenceMatrixRow]) -> BuiltinResult[Any]:
         rows = matrix.rows if isinstance(matrix, EvidenceMatrixCandidate) else list(matrix)
         try:
             if any(row.project_id != project_id for row in rows):
                 raise ToolPolicyError("PROJECT_SCOPE_VIOLATION")
+            if self.service is None:
+                return failed("PERSISTENCE_UNAVAILABLE")
+            for row in rows:
+                _, failure = _resolve_verified_ids(project_id, row.evidence_refs, self.service)
+                if failure is not None:
+                    return failure
             groups: dict[str, list[EvidenceMatrixRow]] = defaultdict(list)
             for row in rows:
                 groups[row.research_question].append(row)
@@ -295,11 +337,20 @@ class EvidenceConflictDetectorTool:
 class CorpusCoverageCalculatorTool:
     tool_id = "corpus_coverage_calculator"
 
+    def __init__(self, service: ContextService | None = None) -> None:
+        self.service = service
+
     def execute(self, project_id: str, matrix: EvidenceMatrixCandidate | Sequence[EvidenceMatrixRow]) -> BuiltinResult[Any]:
         rows = matrix.rows if isinstance(matrix, EvidenceMatrixCandidate) else list(matrix)
         try:
             if any(row.project_id != project_id for row in rows):
                 raise ToolPolicyError("PROJECT_SCOPE_VIOLATION")
+            if self.service is None:
+                return failed("PERSISTENCE_UNAVAILABLE")
+            for row in rows:
+                _, failure = _resolve_verified_ids(project_id, row.evidence_refs, self.service)
+                if failure is not None:
+                    return failure
             topics = sorted({row.research_question for row in rows})
             return _result(CorpusCoverageReport(report_id=f"coverage-{project_id}", project_id=project_id, source_count=len({row.source_ref for row in rows}), evidence_count=len({ref for row in rows for ref in row.evidence_refs}), covered_topics=topics, missing_topics=[] if topics else ["bounded corpus coverage"]))
         except ToolPolicyError as error:
@@ -308,6 +359,9 @@ class CorpusCoverageCalculatorTool:
 
 class BoundedSynthesisValidatorTool:
     tool_id = "bounded_synthesis_validator"
+
+    def __init__(self, service: ContextService | None = None) -> None:
+        self.service = service
 
     def execute(self, project_id: str, synthesis: BoundedEvidenceSynthesis) -> BuiltinResult[Any]:
         try:
@@ -318,7 +372,10 @@ class BoundedSynthesisValidatorTool:
             if not synthesis.evidence_refs:
                 risks.append("INSUFFICIENT_VERIFIED_EVIDENCE")
             else:
-                checks.append("evidence references present")
+                _, failure = _resolve_verified_ids(project_id, synthesis.evidence_refs, self.service)
+                if failure is not None:
+                    return failure
+                checks.append("evidence references resolve to verified project records")
             if not synthesis.corpus_limit.strip():
                 risks.append("MISSING_CORPUS_LIMIT")
             else:

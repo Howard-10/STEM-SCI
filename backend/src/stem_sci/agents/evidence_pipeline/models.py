@@ -52,6 +52,7 @@ class CorpusCoverageReport(EvidenceModel):
     evidence_count: int = Field(ge=0)
     covered_topics: list[str] = Field(default_factory=list)
     missing_topics: list[str] = Field(default_factory=list)
+    corpus_limit: str = "Coverage is limited to the supplied bounded corpus."
 
 
 class ScreeningDecision(EvidenceModel):
@@ -101,6 +102,7 @@ class EvidenceConflictMap(EvidenceModel):
     map_id: str = Field(min_length=1)
     project_id: str = Field(min_length=1)
     conflicts: list[EvidenceConflict] = Field(default_factory=list)
+    corpus_limit: str = "Conflicts are limited to the supplied bounded corpus."
 
 
 class ResearchGap(EvidenceModel):

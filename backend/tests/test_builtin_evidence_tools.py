@@ -49,7 +49,7 @@ def test_evidence_tools_preserve_references_and_corpus_limit(tmp_path: Path) -> 
         evidence_refs=[verified.evidence_id],
         corpus_limit="Only the imported project corpus was used.",
     )
-    report = BoundedSynthesisValidatorTool().execute("project-a", synthesis)
+    report = BoundedSynthesisValidatorTool(service).execute("project-a", synthesis)
     assert report.status is ToolRunStatus.SUCCEEDED
     assert report.approved
 

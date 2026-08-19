@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from stem_sci.artifacts.content_store import ArtifactContent, ArtifactContentStore
+from stem_sci.tools.models import ToolRunStatus
 from stem_sci.tools.policies import ToolPolicyError
 
-from .common import BuiltinResult, blocked, execute_wrapped, project_ref
+from .common import BuiltinResult, blocked, execute_wrapped, failed, project_ref
 
 
 class ArtifactResolveTool:
@@ -43,9 +44,15 @@ class ArtifactIntegrityCheckTool:
     def execute(self, project_id: str, artifact_ref: str) -> bool | BuiltinResult[None]:
         resolved = ArtifactResolveTool(self.content_store).execute(project_id, artifact_ref)
         if isinstance(resolved, BuiltinResult):
-            return resolved
+            if resolved.status is not ToolRunStatus.SUCCEEDED:
+                return resolved
+            content = resolved.value
+        else:
+            content = resolved
         try:
-            resolved.validate_integrity()
+            if content is None:
+                return failed("REFERENCE_NOT_FOUND")
+            content.validate_integrity()
         except ValueError:
             return blocked("HASH_MISMATCH")
         return True

@@ -7,7 +7,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -54,8 +54,10 @@ from stem_sci.core.state import ResearchState
 from stem_sci.operators.executor import OperatorExecutor
 from stem_sci.provenance.agent_run_store import AgentRunStore, InMemoryAgentRunStore
 from stem_sci.provenance.models import AgentRunRecord
-from stem_sci.tools.gateway import ToolGateway
 from stem_sci.tools.models import ToolRunStatus
+
+if TYPE_CHECKING:
+    from stem_sci.tools.gateway import ToolGateway
 
 from .merger import validate_agent_result
 from .policy.route_store import RouteDecisionStore
