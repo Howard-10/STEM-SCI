@@ -203,3 +203,21 @@ def test_gateway_blocks_cross_project_python_payload(tmp_path: Path) -> None:
 
     assert result.status is ToolRunStatus.BLOCKED
     assert result.error_code == "PROJECT_SCOPE_VIOLATION"
+
+
+def test_gateway_blocks_cross_project_uri_in_candidate_body(tmp_path: Path) -> None:
+    gateway, _ = _gateway(tmp_path)
+    result = gateway.execute(
+        project_id="project-a",
+        agent_id="paper_writing",
+        agent_run_id="run-writing",
+        request=ToolRequest(
+            request_id="request-cross-project-uri",
+            capability="manuscript_renderer_en@v1",
+            input_payload={"graph_ref": "artifact-content://project-b/secret/1"},
+            reason="candidate must remain project scoped",
+        ),
+    )
+
+    assert result.status is ToolRunStatus.BLOCKED
+    assert result.error_code == "PROJECT_SCOPE_VIOLATION"

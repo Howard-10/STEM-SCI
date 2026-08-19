@@ -350,7 +350,10 @@ class ResearchController:
         return state
 
     def _execute_agent_tools(
-        self, project_id: str, result: AgentResult
+        self,
+        project_id: str,
+        result: AgentResult,
+        allowed_skill_refs: Iterable[str] = (),
     ) -> tuple[list[str], list[str]]:
         if self.tool_gateway is not None:
             execution_refs: list[str] = []
@@ -368,6 +371,7 @@ class ResearchController:
                     request=request,
                     approval_refs=approval_refs,
                     granted_permissions=self.tool_permissions,
+                    allowed_skill_refs=tuple(allowed_skill_refs),
                 )
                 # Legacy scaffold capabilities remain handled by operators until
                 # their versioned Tools are registered. The Gateway denial is
@@ -412,6 +416,17 @@ class ResearchController:
         if any(run.status.value == "FAILED" for run in runs):
             risk_flags.append("OPERATOR_REQUEST_FAILED")
         return execution_refs, risk_flags
+
+    def _task_capabilities(
+        self, agent_id: str, task_type: str, agent: BaseAgent
+    ) -> tuple[list[str], list[str]]:
+        """Resolve the task's Skills and their Tool union at the Controller boundary."""
+        if self.tool_gateway is None:
+            return [], list(agent.allowed_tool_capabilities)
+        manifests = self.tool_gateway.skill_registry.list_for_agent(agent_id, task_type)
+        skill_refs = [f"{item.skill_id}@{item.skill_version}" for item in manifests]
+        tools = sorted({tool for item in manifests for tool in item.required_tool_ids})
+        return skill_refs, tools
 
     def _record_audit(
         self,
@@ -609,11 +624,15 @@ class ResearchController:
     def start_planning(self, request: PlanningRequest) -> PlanningRunResult:
         """Call only the planner and pause before any formal scope approval."""
         planner = self.dispatcher.registry.get("mentor_planning")
+        skill_refs, task_tools = self._task_capabilities(
+            planner.agent_id, "scope_research", planner
+        )
         agent_input = AgentInput(
             agent_run_id=request.run_id,
             task_ref=f"{request.project_id}:planning",
             context_bundle_ref=request.context_bundle_ref,
-            allowed_tool_capabilities=list(planner.allowed_tool_capabilities),
+            allowed_tool_capabilities=task_tools,
+            allowed_skill_refs=skill_refs,
             allowed_output_types=list(planner.allowed_output_types),
             policy_version="controller-policy-v1",
             prompt_template_version="planner-scaffold-v1",
@@ -621,7 +640,9 @@ class ResearchController:
         result = self.dispatcher.dispatch("mentor_planning", agent_input)
         if not result.candidate_artifact_refs:
             raise ValueError("planning Agent produced no candidate artifacts")
-        execution_refs, operator_risk_flags = self._execute_agent_tools(request.project_id, result)
+        execution_refs, operator_risk_flags = self._execute_agent_tools(
+            request.project_id, result, allowed_skill_refs=skill_refs
+        )
 
         approval = ApprovalRequest(
             request_id=f"approval-{request.run_id}",
@@ -648,7 +669,7 @@ class ResearchController:
             selected_route="mentor_planning",
             reason="Initial research intent requires scope and feasibility planning.",
             required_context=[request.context_bundle_ref],
-            required_tools=list(planner.allowed_tool_capabilities),
+            required_tools=task_tools,
             decision_scope=DecisionScope.PROJECT,
             triggered_rules=["INTAKE_REQUIRES_SCOPE"],
             created_at=datetime.now(UTC),
@@ -730,6 +751,7 @@ class ResearchController:
             except KeyError as exc:
                 raise ValueError(f"no route is defined for stage {state.current_stage}") from exc
         agent = self.dispatcher.registry.get(agent_id)
+        skill_refs, task_tools = self._task_capabilities(agent_id, task_type, agent)
         run_id = f"{agent_id}-{uuid4().hex}"
         context_bundle: ContextBundle | WritingContextBundle | None = None
         writing_context: WritingContextBundle | None = None
@@ -761,7 +783,7 @@ class ResearchController:
                 else f"Current stage requires {task_type}."
             ),
             required_context=[context_ref],
-            required_tools=list(agent.allowed_tool_capabilities),
+            required_tools=task_tools,
             decision_scope=DecisionScope.TASK,
             triggered_rules=[
                 f"REWORK_TO_{agent_id.upper()}"
@@ -774,7 +796,8 @@ class ResearchController:
             agent_run_id=run_id,
             task_ref=f"{project_id}:{task_type}",
             context_bundle_ref=context_ref,
-            allowed_tool_capabilities=list(agent.allowed_tool_capabilities),
+            allowed_tool_capabilities=task_tools,
+            allowed_skill_refs=skill_refs,
             allowed_output_types=list(agent.allowed_output_types),
             policy_version=route.policy_version,
             prompt_template_version=f"{agent_id}-scaffold-v1",
@@ -782,7 +805,9 @@ class ResearchController:
         result = self.dispatcher.dispatch(agent_id, agent_input, context_bundle)
         if not result.candidate_artifact_refs:
             raise ValueError(f"{agent_id} produced no candidate artifacts")
-        execution_refs, operator_risk_flags = self._execute_agent_tools(project_id, result)
+        execution_refs, operator_risk_flags = self._execute_agent_tools(
+            project_id, result, allowed_skill_refs=skill_refs
+        )
         self._record_audit(agent_input, result, route, execution_refs)
         approval = ApprovalRequest(
             request_id=f"approval-{run_id}",

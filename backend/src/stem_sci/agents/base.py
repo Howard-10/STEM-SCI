@@ -88,9 +88,11 @@ class BaseAgent(ABC):
             "Controller must validate candidate artifacts with the applicable Gate before progression."
         ]
         tool_requests: list[ToolRequest] = []
+        missing_tool_inputs: list[str] = []
         for index, tool in enumerate(permitted_tools):
             payload = self._default_tool_payload(tool, agent_input)
             if payload is None:
+                missing_tool_inputs.append(tool)
                 continue
             tool_requests.append(
                 ToolRequest(
@@ -107,8 +109,17 @@ class BaseAgent(ABC):
             candidate_artifact_refs=refs,
             tool_requests=tool_requests,
             approval_requests=[],
-            risk_flags=risk_flags,
-            unresolved_questions=unresolved_questions,
+            risk_flags=[
+                *risk_flags,
+                *(["TOOL_INPUT_NOT_READY"] if missing_tool_inputs else []),
+            ],
+            unresolved_questions=[
+                *unresolved_questions,
+                *[
+                    f"Provide structured inputs before invoking {tool}."
+                    for tool in missing_tool_inputs
+                ],
+            ],
             recommendations=recommendations,
             confidence=0.5 if refs else 0.0,
             created_at=datetime.now(UTC),

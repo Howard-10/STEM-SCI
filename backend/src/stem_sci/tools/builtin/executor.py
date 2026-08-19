@@ -16,6 +16,7 @@ from stem_sci.artifacts.content_store import ArtifactContentStore, InMemoryArtif
 from stem_sci.context.models import SourceChunk
 from stem_sci.context.service import ContextService
 from stem_sci.tools.models import ToolExecutionMode, ToolResult, ToolRunStatus, ToolSpec
+from stem_sci.tools.policies import ToolPolicyError, validate_project_scope
 from stem_sci.tools.sandbox import PythonExecutionRequest, PythonSandbox
 
 from .analysis import PythonAnalysisSandboxTool
@@ -105,7 +106,12 @@ class BuiltinToolExecutor:
                 tool_id=spec.tool_id,
                 tool_version=spec.tool_version,
                 status=ToolRunStatus.FAILED,
-                error_code=str(error) if str(error) in {"INVALID_INPUT", "REFERENCE_NOT_FOUND"} else "EXECUTION_FAILED",
+                error_code=(
+                    str(error)
+                    if str(error)
+                    in {"INVALID_INPUT", "REFERENCE_NOT_FOUND", "PROJECT_SCOPE_VIOLATION"}
+                    else "EXECUTION_FAILED"
+                ),
             )
         if hasattr(value, "status"):
             status = value.status
@@ -124,6 +130,15 @@ class BuiltinToolExecutor:
                 output_payloads = [
                     self._candidate_payload(spec, project_id, request, output_data)
                 ]
+            except ToolPolicyError as error:
+                return ToolResult(
+                    tool_run_id="builtin-result",
+                    project_id=project_id,
+                    tool_id=spec.tool_id,
+                    tool_version=spec.tool_version,
+                    status=ToolRunStatus.BLOCKED,
+                    error_code=error.error_code,
+                )
             except ValueError as error:
                 return ToolResult(
                     tool_run_id="builtin-result",
@@ -183,6 +198,10 @@ class BuiltinToolExecutor:
         elif isinstance(value, list):
             for item in value:
                 BuiltinToolExecutor._validate_embedded_project_scope(project_id, item)
+        elif isinstance(value, str) and value.startswith(
+            ("artifact://", "artifact-content://", "source://", "context://", "evidence://")
+        ):
+            validate_project_scope(project_id, [value], allow_initial_context=True)
 
     def _call(
         self, tool: Callable[..., Any], project_id: str, payload: dict[str, JsonValue], request: ToolRequest

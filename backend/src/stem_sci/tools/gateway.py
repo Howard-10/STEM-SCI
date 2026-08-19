@@ -6,6 +6,7 @@ import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from threading import RLock
 from typing import TYPE_CHECKING, Protocol
 from uuid import uuid4
 
@@ -137,6 +138,7 @@ class ToolGateway:
         self.budget_manager = budget_manager or BudgetManager()
         self.executor = executor or UnavailableToolExecutor()
         self.model_backed_tool_ids = frozenset(model_backed_tool_ids)
+        self._candidate_lock = RLock()
 
     def execute(
         self,
@@ -147,6 +149,7 @@ class ToolGateway:
         request: ToolRequest,
         approval_refs: Sequence[str] = (),
         granted_permissions: Sequence[str] = (),
+        allowed_skill_refs: Sequence[str] = (),
     ) -> ToolResult:
         tool_run_id = f"tool-{uuid4().hex}"
         started_at = datetime.now(UTC)
@@ -165,7 +168,7 @@ class ToolGateway:
                     allow_initial_context=False,
                 )
             spec = self._resolve_spec(request.capability)
-            skill_ref = self._resolve_skill_ref(agent_id, spec)
+            skill_ref = self._resolve_skill_ref(agent_id, spec, allowed_skill_refs)
             validate_spec_policy(spec)
             validate_permissions(spec, granted_permissions)
             idempotency_key = self._idempotency_key(spec, request)
@@ -302,13 +305,22 @@ class ToolGateway:
             )
         return matches[0]
 
-    def _resolve_skill_ref(self, agent_id: str, spec: ToolSpec) -> str:
+    def _resolve_skill_ref(
+        self,
+        agent_id: str,
+        spec: ToolSpec,
+        allowed_skill_refs: Sequence[str] = (),
+    ) -> str:
         required_ref = f"{spec.tool_id}@{spec.tool_version}"
         matches = [
             manifest
             for manifest in self.skill_registry.list()
             if agent_id in manifest.agent_ids
             and required_ref in manifest.required_tool_ids
+            and (
+                not allowed_skill_refs
+                or f"{manifest.skill_id}@{manifest.skill_version}" in allowed_skill_refs
+            )
         ]
         if not matches:
             if self.skill_registry.list():
@@ -417,15 +429,16 @@ class ToolGateway:
                     "EXECUTION_MODE_VIOLATION",
                     "only CANDIDATE_OUTPUT Tools may return persistable payloads",
                 )
-            content_refs.extend(
-                self._persist_candidates(
-                    raw.output_payloads,
-                    spec,
-                    project_id,
-                    created_at,
-                    expected_hash=request.expected_output_hash,
+            with self._candidate_lock:
+                content_refs.extend(
+                    self._persist_candidates(
+                        raw.output_payloads,
+                        spec,
+                        project_id,
+                        created_at,
+                        expected_hash=request.expected_output_hash,
+                    )
                 )
-            )
         return ToolResult(
             tool_run_id=tool_run_id,
             project_id=project_id,

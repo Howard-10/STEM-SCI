@@ -81,3 +81,10 @@ def test_sandbox_blocks_script_read_of_undeclared_host_file(tmp_path: Path) -> N
     assert result.status is SandboxStatus.BLOCKED
     assert result.error_code == "PROJECT_SCOPE_VIOLATION"
     assert "secret-sentinel" not in result.stdout
+
+
+def test_sandbox_rejects_native_file_access_modules(tmp_path: Path) -> None:
+    result = PythonSandbox(tmp_path).run(_request("import ctypes; print('{}')"))
+
+    assert result.status is SandboxStatus.BLOCKED
+    assert result.error_code == "SCRIPT_UNSAFE"

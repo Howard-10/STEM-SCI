@@ -203,6 +203,27 @@ def test_independent_reviewer_only_has_review_tool_capabilities() -> None:
     assert capability.read_only_global_state is True
 
 
+def test_data_analysis_reports_missing_high_risk_tool_input() -> None:
+    agent = DataAnalysisAgent()
+    result = agent.run(
+        AgentInput(
+            agent_run_id="analysis-input-not-ready",
+            task_ref="project-a:draft_analysis_specification",
+            context_bundle_ref="approved study protocol",
+            allowed_tool_capabilities=["python_analysis_sandbox@v1"],
+            allowed_skill_refs=["statistical_analysis_execution@v1"],
+            allowed_tool_versions={"python_analysis_sandbox": "v1"},
+            allowed_output_types=list(agent.allowed_output_types),
+            policy_version="policy-v1",
+            prompt_template_version="analysis-v1",
+        )
+    )
+
+    assert result.tool_requests == []
+    assert "TOOL_INPUT_NOT_READY" in result.risk_flags
+    assert any("python_analysis_sandbox@v1" in item for item in result.unresolved_questions)
+
+
 @pytest.mark.parametrize("agent_type", AGENT_TYPES)
 def test_agent_capability_advertises_versioned_skill_and_tool_ids(agent_type: type) -> None:
     capability = agent_type.capability()

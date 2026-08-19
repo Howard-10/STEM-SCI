@@ -471,10 +471,12 @@ class RecordingGateway:
     def __init__(self) -> None:
         self.approval_refs: tuple[str, ...] = ()
         self.granted_permissions: tuple[str, ...] = ()
+        self.allowed_skill_refs: tuple[str, ...] = ()
 
     def execute(self, **kwargs) -> ToolResult:
         self.approval_refs = tuple(kwargs["approval_refs"])
         self.granted_permissions = tuple(kwargs["granted_permissions"])
+        self.allowed_skill_refs = tuple(kwargs["allowed_skill_refs"])
         request = kwargs["request"]
         return ToolResult(
             tool_run_id="tool-success",
@@ -515,11 +517,14 @@ def test_controller_passes_approved_refs_and_explicit_permissions_to_gateway() -
         tool_requests=[_request("context_read")],
         created_at=datetime.now(UTC),
     )
-    refs, risks = controller._execute_agent_tools("project-a", result)
+    refs, risks = controller._execute_agent_tools(
+        "project-a", result, allowed_skill_refs=["bounded_corpus_review@v1"]
+    )
     assert refs == ["tool-success"]
     assert risks == []
     assert gateway.approval_refs == ("approval-1",)
     assert gateway.granted_permissions == ("controller_dispatch",)
+    assert gateway.allowed_skill_refs == ("bounded_corpus_review@v1",)
 
 
 class BlockedGateway(RecordingGateway):

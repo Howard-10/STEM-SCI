@@ -23,6 +23,14 @@ def test_workflow_api_exposes_planning_and_next_route() -> None:
     payload = response.json()
     assert payload["workflow_state"]["current_stage"] == "WAITING_HUMAN"
     assert payload["approval_request"]["approval_type"] == "research_scope"
+    assert payload["agent_result"]["tool_requests"]
+    assert {
+        request["capability"] for request in payload["agent_result"]["tool_requests"]
+    } == {"research_scope_validator@v1"}
+    assert payload["route_decision"]["required_tools"] == [
+        "context_bundle_read@v1",
+        "research_scope_validator@v1",
+    ]
 
     approval = client.post(
         f"/api/v1/workflow/projects/{PROJECT_ID}/approve",
@@ -34,6 +42,10 @@ def test_workflow_api_exposes_planning_and_next_route() -> None:
     next_run = client.post(f"/api/v1/workflow/projects/{PROJECT_ID}/next")
     assert next_run.status_code == 200
     assert next_run.json()["route_decision"]["selected_route"] == "evidence_review"
+    assert {
+        request["capability"]
+        for request in next_run.json()["agent_result"]["tool_requests"]
+    } == {"context_bundle_read@v1", "knowledge_base_search@v1"}
 
     tool_runs = client.get(f"/api/v1/workflow/projects/{PROJECT_ID}/tool-runs")
     assert tool_runs.status_code == 200
