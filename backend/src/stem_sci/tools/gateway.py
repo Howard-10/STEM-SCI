@@ -406,6 +406,7 @@ class ToolGateway:
                 output_content_refs=list(raw.output_content_refs),
                 risk_flags=self._audit_risk_codes(raw.risk_flags),
                 error_code=self._safe_error_code(raw.status, raw.error_code),
+                output_data=raw.output_data,
             )
         if raw.error_code is not None:
             raise ToolOutputError("SCHEMA_INVALID", "successful result included an error")
@@ -434,6 +435,7 @@ class ToolGateway:
             output_artifact_refs=list(raw.output_artifact_refs),
             output_content_refs=content_refs,
             risk_flags=self._audit_risk_codes(raw.risk_flags),
+            output_data=raw.output_data,
         )
 
     def _persist_candidates(

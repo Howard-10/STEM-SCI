@@ -6,6 +6,8 @@ from abc import ABC
 from datetime import UTC, datetime
 from typing import ClassVar
 
+from pydantic import JsonValue
+
 from .contracts import AgentCapability, AgentInput, AgentResult, ToolRequest
 
 FORBIDDEN_AGENT_ACTIONS: tuple[str, ...] = (
@@ -94,6 +96,7 @@ class BaseAgent(ABC):
                 ToolRequest(
                     request_id=f"{agent_input.agent_run_id}:tool:{index}",
                     capability=tool,
+                    input_payload=self._default_tool_payload(tool, agent_input),
                     reason=f"Agent {self.agent_id} requests the {tool} capability.",
                 )
                 for index, tool in enumerate(permitted_tools)
@@ -105,3 +108,26 @@ class BaseAgent(ABC):
             confidence=0.5 if refs else 0.0,
             created_at=datetime.now(UTC),
         )
+
+    @staticmethod
+    def _default_tool_payload(tool: str, agent_input: AgentInput) -> dict[str, JsonValue]:
+        """Supply only reference-level defaults until an Agent skill fills inputs."""
+        if tool == "knowledge_base_search@v1":
+            return {"query": agent_input.task_ref, "limit": 10}
+        if tool == "source_verification_checker@v1":
+            return {"evidence_refs": []}
+        if tool == "research_question_validator@v1":
+            return {"question": agent_input.task_ref}
+        if tool == "protocol_schema_validator@v1":
+            return {"protocol_ref": agent_input.context_bundle_ref}
+        if tool in {"dataset_schema_profile@v1", "data_quality_audit@v1"}:
+            return {"dataset_ref": agent_input.context_bundle_ref}
+        if tool == "result_validation_checker@v1":
+            return {"execution_ref": agent_input.context_bundle_ref, "validation_refs": []}
+        if tool.startswith("manuscript_renderer_"):
+            return {"graph_ref": agent_input.context_bundle_ref, "outline_ref": agent_input.context_bundle_ref}
+        if tool.endswith("_audit@v1") or tool in {"citation_audit@v1", "evidence_reference_audit@v1"}:
+            return {"manuscript_ref": agent_input.context_bundle_ref}
+        if tool.endswith(("_validator@v1", "_checker@v1")):
+            return {"context_ref": agent_input.context_bundle_ref}
+        return {}

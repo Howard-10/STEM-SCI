@@ -62,6 +62,8 @@ class ToolResult(StrictModel):
     output_content_refs: list[str] = Field(default_factory=list)
     risk_flags: list[str] = Field(default_factory=list)
     error_code: str | None = None
+    # Runtime-only structured output. The Gateway never copies this into ToolRunRecord.
+    output_data: dict[str, JsonValue] | None = Field(default=None, exclude=True, repr=False)
     # Optional structured payloads supplied by local Tool implementations.
     # The Gateway is the only component that persists these as candidate content.
     output_payloads: list[dict[str, JsonValue]] = Field(

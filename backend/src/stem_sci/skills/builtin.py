@@ -52,7 +52,7 @@ BUILTIN_SKILLS: tuple[SkillManifest, ...] = (
         "bounded_corpus_review",
         "evidence_review",
         ["synthesize_evidence"],
-        ["context_bundle_read@v1", "knowledge_base_search@v1"],
+        ["context_bundle_read@v1", "knowledge_base_search@v1", "bounded_synthesis_validator@v1"],
         "schema://BoundedEvidenceSynthesis",
         risk=RiskLevel.MEDIUM,
     ),

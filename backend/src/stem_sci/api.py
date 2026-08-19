@@ -55,6 +55,7 @@ from .provenance.models import AgentRunRecord
 from .provenance.tool_run_store import SQLiteToolRunStore
 from .skills.builtin import BUILTIN_SKILLS
 from .skills.registry import SkillRegistry
+from .tools.builtin.executor import BuiltinToolExecutor
 from .tools.gateway import ToolGateway
 from .tools.models import ToolRunRecord
 from .tools.registry import ToolRegistry
@@ -140,6 +141,12 @@ workflow_controller = ResearchController(
         artifact_store=artifact_store,
         artifact_content_store=artifact_content_store,
         decision_store=SQLiteDecisionStore(workflow_database),
+        executor=BuiltinToolExecutor(
+            service=service,
+            project_root=storage_root,
+            artifact_store=artifact_store,
+            artifact_content_store=artifact_content_store,
+        ),
     ),
 )
 
