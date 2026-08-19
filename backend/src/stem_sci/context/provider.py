@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from .models import ContextBuildRequest, ContextBundle, VerificationStatus
+from .models import (
+    ContextBuildRequest,
+    ContextBundle,
+    EvidenceDetail,
+    EvidenceSearchRequest,
+    EvidenceSearchResult,
+    SourceChunk,
+    VerificationStatus,
+)
 from .service import ContextService
 
 
@@ -16,6 +24,14 @@ class ContextProvider(Protocol):
         query: str,
         token_budget: int,
     ) -> ContextBundle: ...
+
+    def get_bundle(self, project_id: str, context_id: str) -> ContextBundle: ...
+
+    def get_evidence(self, project_id: str, evidence_id: str) -> EvidenceDetail: ...
+
+    def search(self, request: EvidenceSearchRequest) -> list[EvidenceSearchResult]: ...
+
+    def chunks(self, project_id: str, source_id: str) -> list[SourceChunk]: ...
 
 
 class LocalContextProvider:
@@ -44,3 +60,15 @@ class LocalContextProvider:
                 ],
             )
         )
+
+    def get_bundle(self, project_id: str, context_id: str) -> ContextBundle:
+        return self.service.get_bundle(project_id, context_id)
+
+    def get_evidence(self, project_id: str, evidence_id: str) -> EvidenceDetail:
+        return self.service.get_evidence(project_id, evidence_id)
+
+    def search(self, request: EvidenceSearchRequest) -> list[EvidenceSearchResult]:
+        return self.service.search(request)
+
+    def chunks(self, project_id: str, source_id: str) -> list[SourceChunk]:
+        return self.service.chunks(project_id, source_id)

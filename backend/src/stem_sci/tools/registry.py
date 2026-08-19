@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from .models import ToolSpec
+from .models import ToolExecutionMode, ToolSpec
 
 
 def _key(identifier: str, version: str) -> tuple[str, str]:
@@ -18,6 +18,57 @@ class ToolRegistry:
         self._specs: dict[tuple[str, str], ToolSpec] = {}
         for spec in specs:
             self.register(spec)
+
+    @classmethod
+    def default(cls) -> ToolRegistry:
+        """Return the local, network-disabled Task 4 Tool catalog."""
+        read_only = {
+            "context_bundle_read": ("schema://ContextRef", "schema://ContextBundle"),
+            "artifact_resolve": ("schema://ArtifactRef", "schema://ArtifactContent"),
+            "artifact_integrity_check": ("schema://ArtifactRef", "schema://IntegrityReport"),
+            "evidence_ref_validate": ("schema://EvidenceId", "schema://EvidenceRef"),
+            "knowledge_base_search": ("schema://EvidenceSearchRequest", "schema://EvidenceSearchResultSet"),
+            "source_chunk_reader": ("schema://SourceChunkRequest", "schema://SourceChunkCollection"),
+            "source_verification_checker": ("schema://EvidenceRefCollection", "schema://VerificationReport"),
+            "citation_deduplicator": ("schema://EvidenceRefCollection", "schema://EvidenceRefCollection"),
+            "bounded_synthesis_validator": ("schema://BoundedEvidenceSynthesis", "schema://ValidationReport"),
+        }
+        candidate = {
+            "paper_screening_executor": ("schema://ScreeningRequest", "schema://ScreeningLedger"),
+            "paper_card_extractor": ("schema://SourceChunkCollection", "schema://PaperCardCollection"),
+            "evidence_matrix_builder": ("schema://PaperCardCollection", "schema://EvidenceMatrixCandidate"),
+            "evidence_conflict_detector": ("schema://EvidenceMatrixCandidate", "schema://EvidenceConflictMap"),
+            "corpus_coverage_calculator": ("schema://EvidenceMatrixCandidate", "schema://CorpusCoverageReport"),
+        }
+        specs = [
+            ToolSpec(
+                tool_id=tool_id,
+                tool_version="v1",
+                capability=tool_id,
+                execution_mode=ToolExecutionMode.READ_ONLY,
+                input_schema_ref=schemas[0],
+                output_schema_ref=schemas[1],
+                project_scope_required=True,
+                network_policy="disabled",
+                timeout_seconds=30,
+            )
+            for tool_id, schemas in read_only.items()
+        ]
+        specs.extend(
+            ToolSpec(
+                tool_id=tool_id,
+                tool_version="v1",
+                capability=tool_id,
+                execution_mode=ToolExecutionMode.CANDIDATE_OUTPUT,
+                input_schema_ref=schemas[0],
+                output_schema_ref=schemas[1],
+                project_scope_required=True,
+                network_policy="disabled",
+                timeout_seconds=60,
+            )
+            for tool_id, schemas in candidate.items()
+        )
+        return cls(specs)
 
     def register(self, spec: ToolSpec) -> None:
         key = _key(spec.tool_id, spec.tool_version)
@@ -49,4 +100,3 @@ class ToolRegistry:
     def list(self) -> list[ToolSpec]:
         """Return every registered Tool in stable identifier/version order."""
         return sorted(self._specs.values(), key=lambda spec: (spec.tool_id, spec.tool_version))
-

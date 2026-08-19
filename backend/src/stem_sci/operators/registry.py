@@ -58,3 +58,23 @@ class OperatorRegistry:
 
     def list(self) -> list[OperatorSpec]:
         return sorted(self._specs.values(), key=lambda spec: spec.operator_id)
+
+    @staticmethod
+    def builtin_tool_capabilities() -> tuple[str, ...]:
+        """Names of local Agent Tools kept separate from legacy operators."""
+        return (
+            "context_bundle_read",
+            "artifact_resolve",
+            "artifact_integrity_check",
+            "evidence_ref_validate",
+            "knowledge_base_search",
+            "source_chunk_reader",
+            "source_verification_checker",
+            "paper_screening_executor",
+            "paper_card_extractor",
+            "evidence_matrix_builder",
+            "citation_deduplicator",
+            "evidence_conflict_detector",
+            "corpus_coverage_calculator",
+            "bounded_synthesis_validator",
+        )

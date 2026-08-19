@@ -505,3 +505,13 @@ class ContextService:
         if row is None:
             raise ContextNotFoundError("context bundle")
         return ContextBundle.model_validate_json(row["body"])
+
+    def bundle_project(self, context_id: str) -> str | None:
+        """Return ownership metadata without exposing the bundle body."""
+        row = self.db.execute("select project_id from bundles where id=?", (context_id,)).fetchone()
+        return None if row is None else str(row["project_id"])
+
+    def evidence_project(self, evidence_id: str) -> str | None:
+        """Return ownership metadata without exposing evidence content."""
+        row = self.db.execute("select project_id from evidence where id=?", (evidence_id,)).fetchone()
+        return None if row is None else str(row["project_id"])
