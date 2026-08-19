@@ -13,6 +13,14 @@ from .writing_pipeline import PaperWritingPipeline, WritingContextBundle
 
 class PaperWritingAgent(BaseAgent):
     agent_id = "paper_writing"
+    skill_ids = ("atomic_claim_graph_construction@v1", "bilingual_manuscript_rendering@v1")
+    tool_ids = (
+        "atomic_claim_validator@v1",
+        "claim_evidence_mapper@v1",
+        "manuscript_renderer_zh@v1",
+        "manuscript_renderer_en@v1",
+        "bilingual_consistency_checker@v1",
+    )
     supported_task_types = ("draft_manuscript", "map_claims_to_evidence", "draft_reproducibility_statement")
     allowed_tool_capabilities = ()
     allowed_output_types = (

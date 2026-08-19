@@ -196,3 +196,12 @@ def test_independent_reviewer_has_no_execution_capability() -> None:
     capability = IndependentReviewAgent.capability()
     assert capability.allowed_tool_capabilities == []
     assert capability.read_only_global_state is True
+
+
+@pytest.mark.parametrize("agent_type", AGENT_TYPES)
+def test_agent_capability_advertises_versioned_skill_and_tool_ids(agent_type: type) -> None:
+    capability = agent_type.capability()
+
+    assert capability.skill_ids
+    assert capability.tool_ids
+    assert all("@v1" in ref for ref in [*capability.skill_ids, *capability.tool_ids])

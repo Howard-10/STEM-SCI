@@ -15,6 +15,13 @@ from .evidence_pipeline import EvidenceReviewContext, EvidenceReviewPackage, Evi
 
 class EvidenceReviewAgent(BaseAgent):
     agent_id = "evidence_review"
+    skill_ids = ("bounded_corpus_review@v1", "source_screening@v1", "citation_grounding@v1")
+    tool_ids = (
+        "context_bundle_read@v1",
+        "knowledge_base_search@v1",
+        "source_verification_checker@v1",
+        "evidence_ref_validate@v1",
+    )
     supported_task_types = ("design_search_protocol", "screen_evidence", "synthesize_evidence")
     allowed_tool_capabilities = (
         "literature_search",

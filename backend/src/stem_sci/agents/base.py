@@ -29,6 +29,8 @@ class BaseAgent(ABC):
     agent_version: ClassVar[str] = "phase1-scaffold"
     supported_task_types: ClassVar[tuple[str, ...]] = ()
     allowed_tool_capabilities: ClassVar[tuple[str, ...]] = ()
+    skill_ids: ClassVar[tuple[str, ...]] = ()
+    tool_ids: ClassVar[tuple[str, ...]] = ()
     allowed_output_types: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
@@ -37,6 +39,8 @@ class BaseAgent(ABC):
             agent_id=cls.agent_id,
             supported_task_types=list(cls.supported_task_types),
             allowed_tool_capabilities=list(cls.allowed_tool_capabilities),
+            skill_ids=list(cls.skill_ids),
+            tool_ids=list(cls.tool_ids),
             allowed_output_types=list(cls.allowed_output_types),
             forbidden_actions=list(FORBIDDEN_AGENT_ACTIONS),
             read_only_global_state=True,
