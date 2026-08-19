@@ -79,7 +79,7 @@ class PythonSandbox:
             tree = ast.parse(script)
         except SyntaxError as error:
             raise ValueError("SCRIPT_INVALID") from error
-        blocked_modules = {"socket", "urllib", "http", "requests", "ftplib", "subprocess"}
+        blocked_modules = {"socket", "urllib", "http", "requests", "ftplib", "subprocess", "importlib"}
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 names = {alias.name.split(".")[0] for alias in node.names}
@@ -87,3 +87,5 @@ class PythonSandbox:
                     raise ValueError("NETWORK_DISABLED")
             if isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] in blocked_modules:
                 raise ValueError("NETWORK_DISABLED")
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in {"__import__", "eval", "exec", "compile"}:
+                raise ValueError("SCRIPT_UNSAFE")
