@@ -39,6 +39,7 @@ from .router import (
     ResearchController,
     WorkflowRunResult,
 )
+from .langgraph_workflow import LangGraphWorkflow, LangGraphWorkflowState
 from .store import SQLiteWorkflowStore, WorkflowSnapshot, WorkflowStore
 
 __all__ = [
@@ -55,6 +56,8 @@ __all__ = [
     "DualEngineExecutionResult",
     "DualEngineExecutionService",
     "DecisionStore",
+    "LangGraphWorkflow",
+    "LangGraphWorkflowState",
     "OperatorExecutor",
     "PlanningRequest",
     "PlanningRunResult",
