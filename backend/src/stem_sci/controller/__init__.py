@@ -9,6 +9,11 @@ from .analysis_execution import (
     ResearchAnalysisExecutionResult,
     ResearchAnalysisExecutionService,
 )
+from .dual_engine_execution import (
+    DualEngineExecutionRequest,
+    DualEngineExecutionResult,
+    DualEngineExecutionService,
+)
 from .data_pipeline import (
     DataAuditReport,
     DataPipelineApproval,
@@ -46,6 +51,9 @@ __all__ = [
     "DataPipelineController",
     "DataPipelineStage",
     "DataPipelineState",
+    "DualEngineExecutionRequest",
+    "DualEngineExecutionResult",
+    "DualEngineExecutionService",
     "DecisionStore",
     "OperatorExecutor",
     "PlanningRequest",

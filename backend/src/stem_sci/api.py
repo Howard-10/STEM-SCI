@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from dotenv import load_dotenv
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .agents import AgentCapability, ReviewFinding
@@ -68,6 +69,11 @@ from .knowledge.manifest import CorpusRegistry
 
 DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 DEFAULT_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+# Load repository-local switches before constructing Controller services.
+_repository_root = Path(__file__).resolve().parents[3]
+for _dotenv_path in (_repository_root / ".env", _repository_root / ".env.local"):
+    load_dotenv(_dotenv_path, override=False)
 
 
 def _cors_origins() -> list[str]:
@@ -296,6 +302,25 @@ def workflow_agents() -> list[AgentCapability]:
 @app.get("/api/v1/workflow/operators")
 def workflow_operators() -> list[OperatorSpec]:
     return operator_registry.list()
+
+
+@app.get("/api/v1/workflow/runtime")
+def workflow_runtime() -> dict[str, object]:
+    """Expose safe local capability status without returning executable paths."""
+    pipeline = workflow_controller.data_pipeline
+    provider = pipeline.research_execution.coding_provider
+    health_reason = getattr(provider, "health_reason", None)
+    codex_reason = health_reason() if callable(health_reason) else None
+    spss = pipeline.dual_engine_execution.spss_adapter.detect()
+    provider_name = os.getenv("STEM_SCI_CODING_PROVIDER", "deterministic").strip().lower()
+    codex_available = provider_name == "codex" and codex_reason is None
+    return {
+        "coding_provider": provider_name,
+        "codex_available": codex_available,
+        "codex_reason": (codex_reason if provider_name == "codex" else "CODEX_PROVIDER_NOT_SELECTED"),
+        "spss_available": spss.available,
+        "spss_reason": spss.reason_code,
+    }
 
 
 @app.get("/api/v1/workflow/projects/{project_id}/executions")

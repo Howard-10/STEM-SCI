@@ -39,6 +39,7 @@ class ResearchAnalysisExecutionRequest(DomainModel):
     executable_plan: ExecutableAnalysisPlan
     model_specification: AnalysisModelSpecification
     execution_approval_ref: str = Field(min_length=1)
+    code_human_approval_ref: str | None = None
 
 
 class ResearchAnalysisExecutionResult(DomainModel):
@@ -107,6 +108,7 @@ class ResearchAnalysisExecutionService:
             artifact=artifact,
             review=review,
             output_root=self.output_root,
+            human_approval_ref=request.code_human_approval_ref,
         )
         self.execution_store.put(sandbox_outcome.execution_run)
         if sandbox_outcome.execution_run.status is not RunStatus.SUCCEEDED:

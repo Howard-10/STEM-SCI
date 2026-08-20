@@ -103,7 +103,14 @@ class CodeReviewGate:
                 artifact.provider_id == "deterministic_research_template"
                 and artifact.provider_version == "v1"
             )
-            findings.extend(self._static_findings(content, allow_open=controller_template))
+            codex_candidate = artifact.provider_id == "codex_cli"
+            findings.extend(
+                self._static_findings(
+                    content,
+                    allow_open=controller_template or codex_candidate,
+                    require_controlled_open=codex_candidate,
+                )
+            )
 
         blocking = bool(findings)
         requires_human = not blocking and artifact.provider_id != "deterministic_research_template"
@@ -159,7 +166,13 @@ class CodeReviewGate:
             findings.append("CODE_ARTIFACT_NOT_UTF8")
             return ""
 
-    def _static_findings(self, source: str, *, allow_open: bool = False) -> list[str]:
+    def _static_findings(
+        self,
+        source: str,
+        *,
+        allow_open: bool = False,
+        require_controlled_open: bool = False,
+    ) -> list[str]:
         try:
             tree = ast.parse(source)
         except SyntaxError:
@@ -178,6 +191,38 @@ class CodeReviewGate:
             elif isinstance(node, ast.Name) and node.id in self._forbidden_names:
                 if node.id != "open" or not allow_open:
                     findings.add("PROHIBITED_OPERATION")
+            elif require_controlled_open and isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id == "open" and not self._is_controlled_open(node):
+                    findings.add("UNCONTROLLED_FILE_ACCESS")
             elif isinstance(node, ast.Attribute) and node.attr in {"system", "popen", "run"}:
                 findings.add("PROHIBITED_OPERATION")
         return sorted(findings)
+
+    @staticmethod
+    def _is_controlled_open(node: ast.Call) -> bool:
+        """Allow Codex candidates to use only the two sandbox argv paths."""
+        if not node.args or len(node.args) > 3:
+            return False
+        path = node.args[0]
+        if not (
+            isinstance(path, ast.Subscript)
+            and isinstance(path.value, ast.Attribute)
+            and isinstance(path.value.value, ast.Name)
+            and path.value.value.id == "sys"
+            and path.value.attr == "argv"
+            and isinstance(path.slice, ast.Constant)
+            and path.slice.value in {1, 2}
+        ):
+            return False
+        if len(node.args) >= 2 and not (
+            isinstance(node.args[1], ast.Constant)
+            and node.args[1].value in {"r", "rb", "w", "wb"}
+        ):
+            return False
+        allowed_keywords = {"encoding", "newline", "errors"}
+        return all(
+            keyword.arg in allowed_keywords
+            and isinstance(keyword.value, ast.Constant)
+            and isinstance(keyword.value.value, str)
+            for keyword in node.keywords
+        )

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { workflowApi, type AgentCapability, type AgentResult, type ApprovalRequest, type ProjectStage, type RouteDecision, type WorkflowState } from "../api/workflow";
+import type { RuntimeStatus } from "../api/workflow";
 
 const stages: ProjectStage[] = [
   "INTAKE",
@@ -50,6 +51,7 @@ export function WorkflowWorkspacePage() {
   const [agents, setAgents] = useState<AgentCapability[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
 
   const currentStage = workflow?.current_stage ?? "INTAKE";
   const currentLabel = stageLabels[currentStage];
@@ -58,6 +60,7 @@ export function WorkflowWorkspacePage() {
 
   useEffect(() => {
     workflowApi.listAgents().then(setAgents).catch((caught) => setError(caught instanceof Error ? caught.message : "无法读取 Agent 能力"));
+    workflowApi.getRuntime().then(setRuntime).catch((caught) => setError(caught instanceof Error ? caught.message : "无法读取运行时状态"));
   }, []);
 
   const run = async (action: () => Promise<void>) => {
@@ -113,6 +116,18 @@ export function WorkflowWorkspacePage() {
           <span>{currentLabel}</span>
         </div>
       </header>
+
+      {runtime && (
+        <section className="runtime-strip" aria-label="运行时状态">
+          <span>代码提供者：{runtime.coding_provider}</span>
+          <span className={runtime.codex_available ? "runtime-ready" : "runtime-blocked"}>
+            Codex：{runtime.codex_available ? "可用" : runtime.codex_reason}
+          </span>
+          <span className={runtime.spss_available ? "runtime-ready" : "runtime-blocked"}>
+            SPSS：{runtime.spss_available ? "可用" : runtime.spss_reason ?? "不可用"}
+          </span>
+        </section>
+      )}
 
       <section className="project-intake grid-panel">
         <div>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,6 +23,10 @@ from stem_sci.coding import (
 from stem_sci.controller.analysis_execution import (
     ResearchAnalysisExecutionRequest,
     ResearchAnalysisExecutionService,
+)
+from stem_sci.controller.dual_engine_execution import (
+    DualEngineExecutionRequest,
+    DualEngineExecutionService,
 )
 from stem_sci.core.enums import RunStatus
 from stem_sci.operators.models import OperatorRun
@@ -231,6 +236,28 @@ def test_codex_provider_is_fail_closed_when_cli_cannot_be_resolved(tmp_path: Pat
         provider.generate(CodeGenerationRequest(project_id=frozen.project_id, specification=specification))
 
 
+def test_codex_provider_distinguishes_desktop_binary_from_cli(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    provider = CodexCliCodingProvider(CodeArtifactStore(tmp_path / "code"), command="codex")
+    monkeypatch.setattr(
+        "stem_sci.coding.providers.shutil.which",
+        lambda _: "C:/WindowsApps/OpenAI.Codex/app/resources/codex.exe",
+    )
+
+    assert provider.health_reason() == "CODEX_DESKTOP_BINARY_NOT_CLI"
+
+
+def test_codex_provider_can_invoke_windows_npm_cmd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    provider = CodexCliCodingProvider(CodeArtifactStore(tmp_path / "code"), command="codex")
+    cmd = tmp_path / "codex.cmd"
+    cmd.write_text("@echo codex-cli 0.148.0\n", encoding="utf-8")
+    monkeypatch.setattr(shutil, "which", lambda _: str(cmd))
+    assert provider._command_args(str(cmd), ["--version"])[0].lower().endswith("cmd.exe")
+
+
 def test_non_template_codex_candidate_requires_human_code_approval(tmp_path: Path) -> None:
     frozen, plan, model = _frozen_from_raw(tmp_path)
     specification = CodeSpecificationCompiler().compile_python(
@@ -255,6 +282,56 @@ def test_non_template_codex_candidate_requires_human_code_approval(tmp_path: Pat
     assert review.passed is True
     assert review.requires_human_approval is True
     assert review.gate_result.decision == "WAITING_HUMAN"
+
+
+def test_codex_candidate_only_allows_controlled_argv_file_access(tmp_path: Path) -> None:
+    frozen, plan, model = _frozen_from_raw(tmp_path)
+    specification = CodeSpecificationCompiler().compile_python(
+        specification_id="code-spec-controlled-candidate",
+        executable_plan=plan,
+        frozen_dataset=frozen,
+        model_specification=model,
+    )
+    artifact = CodeArtifactStore(tmp_path / "code").put(
+        project_id=frozen.project_id,
+        specification=specification,
+        content=(
+            "import sys\nimport json\n"
+            "with open(sys.argv[1], 'r') as source: rows = source.read()\n"
+            "with open(sys.argv[2], 'w') as target: json.dump({}, target)\n"
+        ),
+        language="python",
+        provider_id="codex_cli",
+        provider_version="v1",
+    )
+    review = CodeReviewGate().review(
+        review_id="review-codex-controlled", specification=specification, artifact=artifact
+    )
+    assert review.passed is True
+    assert review.requires_human_approval is True
+
+
+def test_codex_candidate_rejects_uncontrolled_file_access(tmp_path: Path) -> None:
+    frozen, plan, model = _frozen_from_raw(tmp_path)
+    specification = CodeSpecificationCompiler().compile_python(
+        specification_id="code-spec-uncontrolled-candidate",
+        executable_plan=plan,
+        frozen_dataset=frozen,
+        model_specification=model,
+    )
+    artifact = CodeArtifactStore(tmp_path / "code").put(
+        project_id=frozen.project_id,
+        specification=specification,
+        content="import sys\nopen('secret.txt', 'r')\n",
+        language="python",
+        provider_id="codex_cli",
+        provider_version="v1",
+    )
+    review = CodeReviewGate().review(
+        review_id="review-codex-uncontrolled", specification=specification, artifact=artifact
+    )
+    assert review.passed is False
+    assert "UNCONTROLLED_FILE_ACCESS" in review.finding_codes
 
 
 def test_spss_adapter_blocks_dual_run_when_runtime_is_not_available(tmp_path: Path) -> None:
@@ -288,6 +365,27 @@ def test_spss_adapter_blocks_dual_run_when_runtime_is_not_available(tmp_path: Pa
     assert outcome.execution_run.error_ref == "error://spss/SPSS_EXECUTABLE_NOT_FOUND"
 
 
+def test_spss_output_parser_matches_python_result_contract(tmp_path: Path) -> None:
+    output = tmp_path / "spss_aggregate.csv"
+    output.write_text(
+        "group,n,mean,sd\nai_scaffold,3,77.0,2.0\nstatic_prompt,3,62.0,4.0\n",
+        encoding="utf-8",
+    )
+
+    values = SpssAdapter._parse_aggregate_output(output)
+
+    assert values == {
+        "analysis_sample_size": 6.0,
+        "group_1_n": 3.0,
+        "group_1_transfer_mean": 77.0,
+        "group_1_transfer_sd": 2.0,
+        "group_2_n": 3.0,
+        "group_2_transfer_mean": 62.0,
+        "group_2_transfer_sd": 4.0,
+        "transfer_mean_difference_group_2_minus_group_1": -15.0,
+    }
+
+
 def test_dual_validator_requires_identical_result_key_set_and_numbers(tmp_path: Path) -> None:
     frozen, plan, model = _frozen_from_raw(tmp_path, AnalysisMode.SPSS_PYTHON_DUAL)
     python_run = OperatorRun(
@@ -312,3 +410,29 @@ def test_dual_validator_requires_identical_result_key_set_and_numbers(tmp_path: 
     assert outcome.consistency_report.passed is True
     assert outcome.validation_report.validation_mode == "CROSS_ENGINE"
     assert outcome.validation_report.execution_status == "cross_engine_verified"
+
+
+def test_dual_engine_service_fails_closed_without_spss(tmp_path: Path) -> None:
+    frozen, plan, model = _frozen_from_raw(tmp_path, AnalysisMode.SPSS_PYTHON_DUAL)
+    service = DualEngineExecutionService(
+        artifact_root=tmp_path / "artifacts",
+        output_root=tmp_path / "runs",
+        spss_adapter=SpssAdapter(executable=tmp_path / "missing-stats.exe"),
+    )
+
+    result = service.execute(
+        DualEngineExecutionRequest(
+            project_id=frozen.project_id,
+            frozen_dataset=frozen,
+            executable_plan=plan,
+            model_specification=model,
+            execution_approval_ref="approval://physics/dual-v1",
+        )
+    )
+
+    assert result.python_execution is not None
+    assert result.python_execution.execution_run.status is RunStatus.SUCCEEDED
+    assert result.spss_execution is not None
+    assert result.spss_execution.execution_run.status is RunStatus.BLOCKED
+    assert result.validation_report is None
+    assert result.statistical_result_card is None

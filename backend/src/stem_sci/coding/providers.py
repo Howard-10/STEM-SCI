@@ -253,20 +253,46 @@ class CodexCliCodingProvider:
         self.timeout_seconds = timeout_seconds
 
     def health_reason(self) -> str | None:
-        resolved = shutil.which(self.command)
+        resolved = self._resolve_command()
         if resolved is None:
             return "CODEX_CLI_NOT_FOUND"
+        normalized = str(resolved).replace("\\", "/").lower()
+        if "/windowsapps/" in normalized and normalized.endswith("/resources/codex.exe"):
+            return "CODEX_DESKTOP_BINARY_NOT_CLI"
         try:
             completed = subprocess.run(
-                [resolved, "--version"],
+                self._command_args(resolved, ["--version"]),
                 capture_output=True,
                 text=True,
                 timeout=10,
                 check=False,
             )
+        except PermissionError:
+            return "CODEX_CLI_ACCESS_DENIED"
         except (OSError, subprocess.TimeoutExpired):
             return "CODEX_CLI_NOT_EXECUTABLE"
         return None if completed.returncode == 0 else "CODEX_CLI_UNAVAILABLE_OR_UNAUTHENTICATED"
+
+    def _resolve_command(self) -> str | None:
+        """Resolve npm's CLI before accepting Codex Desktop's internal binary."""
+        resolved = shutil.which(self.command)
+        if resolved is not None:
+            normalized = resolved.replace("\\", "/").lower()
+            if not ("/windowsapps/" in normalized and normalized.endswith("/resources/codex.exe")):
+                return resolved
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            for name in ("codex.cmd", "codex.exe", "codex"):
+                candidate = Path(appdata) / "npm" / name
+                if candidate.is_file():
+                    return str(candidate)
+        return resolved
+
+    @staticmethod
+    def _command_args(resolved: str, args: list[str]) -> list[str]:
+        if Path(resolved).suffix.lower() in {".cmd", ".bat"}:
+            return [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", resolved, *args]
+        return [resolved, *args]
 
     def generate(self, request: CodeGenerationRequest) -> CodeArtifact:
         request.validate_project_scope()
@@ -275,21 +301,23 @@ class CodexCliCodingProvider:
         health_reason = self.health_reason()
         if health_reason is not None:
             raise CodingProviderUnavailable(health_reason)
-        resolved = shutil.which(self.command)
+        resolved = self._resolve_command()
         if resolved is None:  # Narrow the type after the health check for mypy.
             raise CodingProviderUnavailable("CODEX_CLI_NOT_FOUND")
         prompt = self._prompt(request.specification)
         try:
             completed = subprocess.run(
-                [
+                self._command_args(
                     resolved,
-                    "exec",
-                    "--sandbox",
-                    "read-only",
-                    "--ask-for-approval",
-                    "never",
-                    prompt,
-                ],
+                    [
+                        "exec",
+                        "--sandbox",
+                        "read-only",
+                        "--ask-for-approval",
+                        "never",
+                        prompt,
+                    ],
+                ),
                 capture_output=True,
                 text=True,
                 timeout=self.timeout_seconds,

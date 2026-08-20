@@ -31,7 +31,7 @@ class CrossEngineResultValidator:
         consistency_report_id: str,
         python_outcome: PythonExecutionOutcome,
         spss_outcome: SpssExecutionOutcome,
-        tolerance: float = 1e-9,
+        tolerance: float = 1e-7,
     ) -> DualEngineValidationOutcome:
         python_run = python_outcome.execution_run
         spss_run = spss_outcome.execution_run

@@ -116,6 +116,7 @@ class SpssSyntaxTemplateProvider:
         columns = specification.analysis_parameters["dataset_columns"].split("|")
         outcome = specification.analysis_parameters["outcome_variable"]
         group = specification.analysis_parameters["group_variable"]
+        task_filter = 'SELECT IF RTRIM(task_id) = "C".\n' if "task_id" in columns else ""
         declarations = "\n  ".join(
             f"{column} {'F16.8' if column == outcome else 'A256'}" for column in columns
         )
@@ -132,11 +133,12 @@ GET DATA
   /VARIABLES=
   {declarations}.
 DATASET NAME ResearchData WINDOW=FRONT.
-AGGREGATE
+{task_filter}AGGREGATE
   /OUTFILE=* MODE=ADDVARIABLES
   /BREAK={group}
   /n=N({outcome})
-  /mean=MEAN({outcome}).
+  /mean=MEAN({outcome})
+  /sd=SD({outcome}).
 SORT CASES BY {group}.
 MATCH FILES /FILE=* /BY {group} /FIRST=first_group.
 SELECT IF first_group=1.

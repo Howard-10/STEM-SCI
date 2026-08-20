@@ -39,6 +39,10 @@ h2 { margin-bottom: 8px; font-size: 23px; line-height: 1.1; }
 .lede, .muted { color: #666; line-height: 1.5; }
 .status-block { display: flex; align-items: center; gap: 9px; border: 1px solid #161616; padding: 10px 13px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #002fa7; }
+.runtime-strip { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 16px; border: 1px solid #c9c9cc; background: #fff; padding: 10px 14px; color: #555; font-size: 12px; }
+.runtime-ready, .runtime-blocked { font-weight: 700; }
+.runtime-ready { color: #157347; }
+.runtime-blocked { color: #a33a2b; }
 
 .grid-panel { border: 1px solid #c9c9cc; background: #fff; padding: 24px; }
 .project-intake { display: grid; grid-template-columns: minmax(220px, .8fr) minmax(300px, 1.2fr); gap: 36px; margin-top: 28px; }

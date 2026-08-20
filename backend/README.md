@@ -43,6 +43,12 @@ Real GPT calls are opt-in for mentor planning, research design, evidence review,
 
 ## Research-code execution configuration
 
-`STEM_SCI_CODEX_COMMAND` defaults to `codex`. The Codex provider uses non-interactive read-only generation and accepts only a schema/plan specification, never the frozen-data rows. Its output remains a candidate until CodeReviewGate and human approval allow it to execute.
+The API loads the repository root `.env` (and `.env.local`) before constructing
+the Controller, so these settings also apply when uvicorn is started from
+`backend`. `STEM_SCI_CODEX_COMMAND` defaults to `codex`. `STEM_SCI_CODING_PROVIDER` defaults to
+`deterministic`; set it to `codex` only after a locally executable and authenticated
+Codex CLI is available. The Codex provider uses non-interactive read-only generation
+and accepts only a schema/plan specification, never the frozen-data rows. Its output
+remains a candidate until CodeReviewGate and human approval allow it to execute.
 
-Set `STEM_SCI_SPSS_EXECUTABLE` to the licensed IBM SPSS Statistics batch executable when it is available. Without it, the adapter reports a blocked SPSS Run; a Python-only result remains `SINGLE_ENGINE` and cannot be represented as cross-engine verified. See `docs/reports/RESEARCH_EXECUTION_MVP_STATUS.md` for the current execution evidence and development-sandbox limitations.
+Set `STEM_SCI_SPSS_EXECUTABLE` to the licensed IBM SPSS Statistics batch executable when it is available. A `SPSS_PYTHON_DUAL` data-pipeline run now invokes Python and the SPSS adapter and compares their normalized outputs. Without SPSS, the adapter reports a blocked SPSS Run; it never silently downgrades to Python-only. A Python-only result remains `SINGLE_ENGINE` and cannot be represented as cross-engine verified. The read-only `/api/v1/workflow/runtime` endpoint reports provider availability without exposing executable paths. See `docs/reports/RESEARCH_EXECUTION_MVP_STATUS.md` for the current execution evidence and development-sandbox limitations.

@@ -123,6 +123,14 @@ export interface WorkflowRun {
   route_decision: RouteDecision;
 }
 
+export interface RuntimeStatus {
+  coding_provider: string;
+  codex_available: boolean;
+  codex_reason: string | null;
+  spss_available: boolean;
+  spss_reason: string | null;
+}
+
 const base = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -141,6 +149,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const workflowApi = {
+  getRuntime() {
+    return request<RuntimeStatus>("/workflow/runtime");
+  },
   startProject(input: { project_id: string; research_intent: string; run_id?: string }) {
     return request<PlanningRun>("/workflow/projects", { method: "POST", body: JSON.stringify(input) });
   },

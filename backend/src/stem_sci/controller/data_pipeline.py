@@ -8,6 +8,7 @@ state transitions.
 from __future__ import annotations
 
 import csv
+import os
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -17,12 +18,22 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from stem_sci.agents.analysis_contracts import DataAnalysisPreAnalysisOutcome
-from stem_sci.coding.providers import CodeArtifactStore, DeterministicTemplateCodingProvider
+from stem_sci.coding.providers import (
+    CodeArtifactStore,
+    CodingProvider,
+    CodexCliCodingProvider,
+    CodingProviderUnavailable,
+    DeterministicTemplateCodingProvider,
+)
 from stem_sci.core.enums import DecisionScope, GateDecision, RunStatus
 from stem_sci.core.models import GateResult
 from stem_sci.controller.analysis_execution import (
     ResearchAnalysisExecutionRequest,
     ResearchAnalysisExecutionService,
+)
+from stem_sci.controller.dual_engine_execution import (
+    DualEngineExecutionRequest,
+    DualEngineExecutionService,
 )
 from stem_sci.operators.executor import OperatorExecutor
 from stem_sci.research_data.freeze import DataFreezeService
@@ -85,6 +96,9 @@ class DataPipelineState(BaseModel):
     code_artifact_ref: str | None = None
     code_specification_ref: str | None = None
     code_review_ref: str | None = None
+    spss_code_artifact_ref: str | None = None
+    spss_execution_run_ref: str | None = None
+    result_consistency_report_ref: str | None = None
     raw_dataset: RawDatasetRef | None = None
     data_audit_report: DataAuditReport | None = None
     processed_dataset: ProcessedDatasetRef | None = None
@@ -123,13 +137,27 @@ class DataPipelineController:
         self.operator_executor = operator_executor
         self.processing_service = DataProcessingService()
         self.freeze_service = DataFreezeService()
+        coding_provider = self._coding_provider(storage_root)
         self.research_execution = ResearchAnalysisExecutionService(
-            coding_provider=DeterministicTemplateCodingProvider(
-                CodeArtifactStore(storage_root / "code-artifacts")
-            ),
+            coding_provider=coding_provider,
             output_root=storage_root / "research-execution-runs",
             execution_store=operator_executor.execution_store,
         )
+        self.dual_engine_execution = DualEngineExecutionService(
+            artifact_root=storage_root / "dual-engine-artifacts",
+            output_root=storage_root / "dual-engine-runs",
+            coding_provider=coding_provider,
+            execution_store=operator_executor.execution_store,
+        )
+
+    @staticmethod
+    def _coding_provider(storage_root: Path) -> CodingProvider:
+        configured = os.getenv("STEM_SCI_CODING_PROVIDER", "deterministic").strip().lower()
+        if configured == "deterministic":
+            return DeterministicTemplateCodingProvider(CodeArtifactStore(storage_root / "code-artifacts"))
+        if configured == "codex":
+            return CodexCliCodingProvider(CodeArtifactStore(storage_root / "code-artifacts"))
+        raise ValueError("STEM_SCI_CODING_PROVIDER must be deterministic or codex")
 
     def begin(self, request: DataPipelineBeginRequest) -> DataPipelineState:
         if request.pre_analysis.readiness_report.status != "READY":
@@ -339,15 +367,81 @@ class DataPipelineController:
     def _execute_approved_plan(self, state: DataPipelineState) -> DataPipelineState:
         frozen = self._require(state.frozen_dataset, "frozen dataset")
         executable_plan = self._require(state.executable_plan, "executable plan")
-        execution = self.research_execution.execute_python_only(
-            ResearchAnalysisExecutionRequest(
-                project_id=state.project_id,
-                frozen_dataset=frozen,
-                executable_plan=executable_plan,
-                model_specification=state.model_specification,
-                execution_approval_ref=self._require(state.pending_approval, "pending approval").request_id,
+        approval_ref = self._require(state.pending_approval, "pending approval").request_id
+        try:
+            if executable_plan.analysis_mode.value == "SPSS_PYTHON_DUAL":
+                dual = self.dual_engine_execution.execute(
+                    DualEngineExecutionRequest(
+                        project_id=state.project_id,
+                        frozen_dataset=frozen,
+                        executable_plan=executable_plan,
+                        model_specification=state.model_specification,
+                        execution_approval_ref=approval_ref,
+                        code_human_approval_ref=approval_ref,
+                    )
+                )
+                if dual.spss_execution is None:
+                    return state.model_copy(
+                        update={
+                            "stage": DataPipelineStage.BLOCKED,
+                            "pending_approval": None,
+                            "rework_reason": "Python execution failed before SPSS execution.",
+                            "blocked_target_ids": [dual.python_execution.execution_run.operator_run_id]
+                            if dual.python_execution is not None
+                            else [],
+                            "code_specification_ref": dual.python_code_specification.ref,
+                            "code_artifact_ref": dual.python_code_artifact.ref,
+                            "code_review_ref": dual.python_code_review.ref,
+                        }
+                    )
+                if dual.validation_report is None or not dual.validation_report.passed:
+                    return state.model_copy(
+                        update={
+                            "stage": DataPipelineStage.BLOCKED,
+                            "pending_approval": None,
+                            "validation_report": dual.validation_report,
+                            "rework_reason": "SPSS/Python cross-engine validation failed or was blocked.",
+                            "blocked_target_ids": [dual.spss_execution.execution_run.operator_run_id],
+                            "code_specification_ref": dual.python_code_specification.ref,
+                            "code_artifact_ref": dual.python_code_artifact.ref,
+                            "code_review_ref": dual.python_code_review.ref,
+                            "spss_code_artifact_ref": dual.spss_code_artifact.ref if dual.spss_code_artifact else None,
+                            "spss_execution_run_ref": dual.spss_execution.execution_run.operator_run_id,
+                            "result_consistency_report_ref": dual.consistency.consistency_report.ref if dual.consistency else None,
+                        }
+                    )
+                return state.model_copy(
+                    update={
+                        "stage": DataPipelineStage.ANALYZED,
+                        "pending_approval": None,
+                        "validation_report": dual.validation_report,
+                        "statistical_result_card": dual.statistical_result_card,
+                        "code_specification_ref": dual.python_code_specification.ref,
+                        "code_artifact_ref": dual.python_code_artifact.ref,
+                        "code_review_ref": dual.python_code_review.ref,
+                        "spss_code_artifact_ref": dual.spss_code_artifact.ref if dual.spss_code_artifact else None,
+                        "spss_execution_run_ref": dual.spss_execution.execution_run.operator_run_id,
+                        "result_consistency_report_ref": dual.consistency.consistency_report.ref if dual.consistency else None,
+                    }
+                )
+            execution = self.research_execution.execute_python_only(
+                ResearchAnalysisExecutionRequest(
+                    project_id=state.project_id,
+                    frozen_dataset=frozen,
+                    executable_plan=executable_plan,
+                    model_specification=state.model_specification,
+                    execution_approval_ref=approval_ref,
+                    code_human_approval_ref=approval_ref,
+                )
             )
-        )
+        except CodingProviderUnavailable as error:
+            return state.model_copy(
+                update={
+                    "stage": DataPipelineStage.BLOCKED,
+                    "pending_approval": None,
+                    "rework_reason": f"Coding provider unavailable: {error}",
+                }
+            )
         outcome = execution.sandbox_outcome
         if outcome.execution_run.status is not RunStatus.SUCCEEDED:
             return state.model_copy(

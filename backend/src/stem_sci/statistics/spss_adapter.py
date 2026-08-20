@@ -115,7 +115,7 @@ class SpssAdapter:
                 timeout=self.timeout_seconds,
                 check=False,
             )
-        except (OSError, UnicodeDecodeError, subprocess.TimeoutExpired):
+        except (OSError, UnicodeDecodeError, ValueError, subprocess.TimeoutExpired):
             log_path.write_text("SPSS execution could not be started or completed.\n", encoding="utf-8")
             return SpssExecutionOutcome(
                 execution_run=self._run(
@@ -222,18 +222,19 @@ class SpssAdapter:
     def _configured_executable() -> Path | None:
         configured = os.environ.get("STEM_SCI_SPSS_EXECUTABLE")
         if configured:
-            return Path(configured)
+            return Path(os.path.expandvars(configured.strip().strip('"')))
         command = shutil.which("stats")
         if command:
             return Path(command)
-        for root in (
-            Path("C:/Program Files/IBM/SPSS/Statistics"),
-            Path("C:/Program Files (x86)/IBM/SPSS/Statistics"),
-        ):
-            if root.is_dir():
-                candidates = sorted(root.glob("*/stats.exe"), reverse=True)
-                if candidates:
-                    return candidates[0]
+        for ibm_root in (Path("C:/Program Files/IBM"), Path("C:/Program Files (x86)/IBM")):
+            if not ibm_root.is_dir():
+                continue
+            candidates = sorted(
+                (candidate for candidate in ibm_root.glob("SPSS*/**/stats.exe") if candidate.is_file()),
+                reverse=True,
+            )
+            if candidates:
+                return candidates[0]
         return None
 
     @staticmethod
@@ -256,11 +257,14 @@ class SpssAdapter:
         first, second = ordered
         first_n, second_n = float(first["n"]), float(second["n"])
         first_mean, second_mean = float(first["mean"]), float(second["mean"])
+        first_sd, second_sd = float(first["sd"]), float(second["sd"])
         return {
             "analysis_sample_size": first_n + second_n,
             "group_1_n": first_n,
             "group_1_transfer_mean": first_mean,
+            "group_1_transfer_sd": first_sd,
             "group_2_n": second_n,
             "group_2_transfer_mean": second_mean,
+            "group_2_transfer_sd": second_sd,
             "transfer_mean_difference_group_2_minus_group_1": second_mean - first_mean,
         }
