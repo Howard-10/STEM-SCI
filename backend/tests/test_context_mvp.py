@@ -288,4 +288,5 @@ def test_request_models_reject_extra_fields_and_internal_errors_are_safe(
     response = safe_client.get("/api/v1/sources", params={"project_id": PROJECT_A})
     assert response.status_code == 500
     assert response.json() == {"error": {"code": "internal_error", "message": "An internal error occurred"}}
+    assert response.headers["content-type"] == "application/json; charset=utf-8"
     assert "C:\\Users" not in response.text

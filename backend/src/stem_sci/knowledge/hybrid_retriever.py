@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from neo4j.exceptions import Neo4jError, ServiceUnavailable
+
 from .models import GraphCandidate, RetrievalHit, RetrievalMode, RetrievalTrace
 from .normalization import expanded_query
 from .retrievers import RetrievalUnavailable
@@ -36,7 +38,12 @@ class HybridRetriever:
         if self._graph_retriever is not None:
             try:
                 graph_candidates = self._graph_retriever.search(query, limit=20)
-            except (OSError, ValueError) as error:
+            except (
+                OSError,
+                ValueError,
+                Neo4jError,
+                ServiceUnavailable,
+            ) as error:
                 graph_available = False
                 risks.append(f"graph_navigation_unavailable:{type(error).__name__}")
         else:
@@ -59,6 +66,18 @@ class HybridRetriever:
         if mode is RetrievalMode.UNAVAILABLE:
             return [], trace
         return self._fuse(dense_hits, sparse_hits, graph_candidates, limit), trace
+
+    @staticmethod
+    def strict_failure(trace: RetrievalTrace) -> str | None:
+        """Return a risk when a full-chain run is missing a core modality."""
+
+        if not trace.graph_available:
+            return "graph_retrieval_required_but_unavailable"
+        if not trace.dense_available:
+            return "dense_retrieval_required_but_unavailable"
+        if not trace.sparse_available:
+            return "sparse_retrieval_required_but_unavailable"
+        return None
 
     @staticmethod
     def _search(

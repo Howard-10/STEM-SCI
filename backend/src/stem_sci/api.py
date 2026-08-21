@@ -99,14 +99,24 @@ def _max_upload_bytes() -> int:
     return value if value > 0 else DEFAULT_MAX_UPLOAD_BYTES
 
 
-def _error(status_code: int, code: str, message: str) -> JSONResponse:
-    return JSONResponse(
+class UTF8JSONResponse(JSONResponse):
+    """JSON response with an explicit charset for legacy HTTP clients."""
+
+    media_type = "application/json; charset=utf-8"
+
+
+def _error(status_code: int, code: str, message: str) -> UTF8JSONResponse:
+    return UTF8JSONResponse(
         status_code=status_code,
         content=ApiErrorResponse(error=ApiError(code=code, message=message)).model_dump(),
     )
 
 
-app = FastAPI(title="STEM-SCI Research Workflow Platform", version="0.2.0")
+app = FastAPI(
+    title="STEM-SCI Research Workflow Platform",
+    version="0.2.0",
+    default_response_class=UTF8JSONResponse,
+)
 configuration_report = validate_environment()
 app.add_middleware(
     CORSMiddleware,

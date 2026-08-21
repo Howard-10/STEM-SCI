@@ -8,7 +8,7 @@ import os
 from datetime import UTC, datetime
 from typing import Literal
 
-from neo4j.exceptions import Neo4jError
+from neo4j.exceptions import Neo4jError, ServiceUnavailable
 from uuid import uuid4
 
 from stem_sci.context.models import ContextBundle, EvidenceRef, SourceLocation, VerificationStatus
@@ -94,6 +94,23 @@ class HybridKnowledgeService:
             trace = trace.model_copy(
                 update={"risk_flags": [*trace.risk_flags, graph_issue], "graph_available": False}
             )
+        strict_full_chain = (
+            os.getenv("STEM_SCI_REQUIRE_FULL_CHAIN", "false").strip().lower()
+            in {"1", "true", "yes", "on"}
+        )
+        if strict_full_chain:
+            strict_issue = HybridRetriever.strict_failure(trace)
+            if strict_issue is not None:
+                trace = trace.model_copy(
+                    update={"risk_flags": [*trace.risk_flags, strict_issue]}
+                )
+                return self._unavailable(
+                    request,
+                    manifest,
+                    manifest_refs,
+                    sorted(set([*readiness.risk_flags, *trace.risk_flags])),
+                    trace=trace,
+                )
         status: Literal["READY", "DEGRADED", "UNAVAILABLE"] = (
             "READY" if trace.retrieval_mode is RetrievalMode.HYBRID_GRAPH_GUIDED else "DEGRADED"
         )
@@ -150,7 +167,13 @@ class HybridKnowledgeService:
                 retriever = Neo4jGraphRetriever(resolver)
                 self._graph_cache[cache_key] = retriever
                 return retriever, None
-            except (OSError, RuntimeError, ValueError, Neo4jError) as error:
+            except (
+                OSError,
+                RuntimeError,
+                ValueError,
+                Neo4jError,
+                ServiceUnavailable,
+            ) as error:
                 if backend == "neo4j":
                     return None, f"neo4j_graph_unavailable:{type(error).__name__}"
         try:
@@ -338,19 +361,28 @@ class HybridKnowledgeService:
         manifest: CorpusManifest,
         manifest_refs: list[str],
         risks: list[str],
+        trace=None,
     ) -> RetrievalSearchResponse:
         from .models import RetrievalTrace
 
-        trace = RetrievalTrace(
-            query_normalized=request.query,
-            retrieval_mode=RetrievalMode.UNAVAILABLE,
-            corpus_id=manifest.corpus_id,
-            manifest_refs=manifest_refs,
-            risk_flags=risks,
-            dense_available=False,
-            sparse_available=False,
-            graph_available=False,
-        )
+        if trace is None:
+            trace = RetrievalTrace(
+                query_normalized=request.query,
+                retrieval_mode=RetrievalMode.UNAVAILABLE,
+                corpus_id=manifest.corpus_id,
+                manifest_refs=manifest_refs,
+                risk_flags=risks,
+                dense_available=False,
+                sparse_available=False,
+                graph_available=False,
+            )
+        else:
+            trace = trace.model_copy(
+                update={
+                    "retrieval_mode": RetrievalMode.UNAVAILABLE,
+                    "risk_flags": sorted(set([*trace.risk_flags, *risks])),
+                }
+            )
         return RetrievalSearchResponse(
             project_id=request.project_id,
             corpus_id=manifest.corpus_id,

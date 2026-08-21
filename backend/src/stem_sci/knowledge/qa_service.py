@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -103,7 +103,14 @@ class QuestionAnswerService:
             allow_llm=allow_llm,
         )
         if agentic_result is not None:
-            answer_record, route, retrieval, citations, tool_calls = agentic_result
+            (
+                answer_record,
+                route,
+                retrieval,
+                citations,
+                tool_calls,
+                context_bundle,
+            ) = agentic_result
             answer_mode: Literal["llm", "fallback"] = "llm"
         else:
             answer_record, answer_mode = self._synthesize(
@@ -247,6 +254,7 @@ class QuestionAnswerService:
         RetrievalSearchResponse,
         list[QAReference],
         list[str],
+        ContextBundle,
     ] | None:
         """Let the model choose bounded read-only tools before final synthesis."""
 
@@ -304,6 +312,7 @@ class QuestionAnswerService:
             tool_names: list[str] = []
             active_retrieval = retrieval
             active_citations = citations
+            active_context_bundle = context_bundle
             selected_tool = first.tool_calls[0]
             for call in first.tool_calls[:3]:
                 tool_names.append(call.name)
@@ -313,13 +322,27 @@ class QuestionAnswerService:
                     project_id=request.project_id,
                     default_query=rewritten_query,
                 )
-                if call.name == "hybrid_search":
+                retrieval_payload = result.get("retrieval_response")
+                if isinstance(retrieval_payload, Mapping):
                     try:
-                        active_retrieval = RetrievalSearchResponse.model_validate(result)
+                        active_retrieval = RetrievalSearchResponse.model_validate(
+                            retrieval_payload
+                        )
                         active_citations = self._build_citations(active_retrieval)
+                        tool_query = str(
+                            call.arguments.get("query") or rewritten_query
+                        ).strip()
+                        active_context_bundle = self._knowledge_service.build_context(
+                            project_id=request.project_id,
+                            task_ref=context_bundle.task_ref,
+                            query=tool_query,
+                            token_budget=context_bundle.token_budget,
+                            mode="discovery",
+                        )
                     except ValueError:
                         active_retrieval = retrieval
                         active_citations = citations
+                        active_context_bundle = context_bundle
                 messages.append(
                     {
                         "role": "tool",
@@ -329,6 +352,24 @@ class QuestionAnswerService:
                     }
                 )
 
+            messages.append(
+                {
+                    "role": "user",
+                    "content": self._user_prompt(
+                        question,
+                        rewritten_query,
+                        QARouteDecision(
+                            route=route_for_tool(selected_tool.name),
+                            reason=tool_reason(selected_tool.name),
+                            recommended_agent=route.recommended_agent,
+                        ),
+                        active_retrieval,
+                        active_context_bundle,
+                        active_citations,
+                        history,
+                    ),
+                }
+            )
             final = self._provider.complete(
                 messages=messages,
                 model=self._model,
@@ -363,6 +404,7 @@ class QuestionAnswerService:
                 active_retrieval,
                 active_citations,
                 tool_names,
+                active_context_bundle,
             )
         except Exception:
             # Tool routing is an enhancement; deterministic retrieval and the

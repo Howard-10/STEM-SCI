@@ -153,6 +153,7 @@ class QAToolExecutor:
                 )
             )
             payload = response.model_dump(mode="json")
+            payload["retrieval_response"] = response.model_dump(mode="json")
             if name == "graph_search":
                 payload = {
                     "project_id": project_id,
@@ -166,14 +167,18 @@ class QAToolExecutor:
                         "graph_relations_are_navigation_only",
                     ],
                     "retrieval_trace": response.retrieval_trace.model_dump(mode="json"),
+                    "retrieval_response": response.model_dump(mode="json"),
                 }
             elif name == "vector_search":
                 payload = {
                     "project_id": project_id,
                     "corpus_id": response.corpus_id,
                     "retrieval_status": response.retrieval_status,
-                    "chunk_hits": response.chunk_hits,
+                    "chunk_hits": [
+                        item.model_dump(mode="json") for item in response.chunk_hits
+                    ],
                     "risk_flags": response.risk_flags,
+                    "retrieval_response": response.model_dump(mode="json"),
                 }
             elif name == "paper_lookup":
                 payload = {
@@ -187,6 +192,7 @@ class QAToolExecutor:
                         item.model_dump(mode="json") for item in response.chunk_hits
                     ],
                     "risk_flags": response.risk_flags,
+                    "retrieval_response": response.model_dump(mode="json"),
                 }
             return payload
 
