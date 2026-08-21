@@ -391,20 +391,34 @@ class ResearchController:
         return state
 
     def _execute_agent_tools(
-        self, project_id: str, result: AgentResult
-    ) -> tuple[list[str], list[str]]:
+        self,
+        project_id: str,
+        result: AgentResult,
+        *,
+        query: str = "",
+        context_bundle: ContextBundle | None = None,
+    ) -> tuple[list[str], list[str], list[str]]:
         runs = self.operator_executor.execute_tool_requests(
             project_id=project_id,
             agent_run_id=result.agent_run_id,
             tool_requests=result.tool_requests,
+            query=query,
+            context_bundle=context_bundle,
         )
         execution_refs = [run.operator_run_id for run in runs]
+        output_artifact_refs = [
+            artifact_ref
+            for run in runs
+            for artifact_ref in run.output_artifact_refs
+        ]
         risk_flags: list[str] = []
         if any(run.status.value == "BLOCKED" for run in runs):
             risk_flags.append("OPERATOR_EXECUTION_UNAVAILABLE")
         if any(run.status.value == "FAILED" for run in runs):
             risk_flags.append("OPERATOR_REQUEST_FAILED")
-        return execution_refs, risk_flags
+        if any(run.status.value == "NEEDS_REVIEW" for run in runs):
+            risk_flags.append("OPERATOR_REVIEW_REQUIRED")
+        return execution_refs, output_artifact_refs, risk_flags
 
     def _record_audit(
         self,
@@ -412,6 +426,7 @@ class ResearchController:
         result: AgentResult,
         route: RouteDecision,
         execution_refs: list[str],
+        output_artifact_refs: Iterable[str] = (),
     ) -> None:
         candidate_content = {
             artifact.candidate_ref: artifact for artifact in result.candidate_artifacts
@@ -459,7 +474,10 @@ class ResearchController:
                 agent_version=result.agent_version,
                 prompt_template_version=agent_input.prompt_template_version,
                 input_artifact_refs=[agent_input.context_bundle_ref],
-                output_artifact_refs=list(result.candidate_artifact_refs),
+                output_artifact_refs=[
+                    *result.candidate_artifact_refs,
+                    *output_artifact_refs,
+                ],
                 tool_run_refs=execution_refs,
                 llm_metadata_refs=result.llm_metadata_refs,
                 route_decision_ref=route.decision_id,
@@ -625,7 +643,11 @@ class ResearchController:
         result = self.dispatcher.dispatch("mentor_planning", agent_input)
         if not result.candidate_artifact_refs:
             raise ValueError("planning Agent produced no candidate artifacts")
-        execution_refs, operator_risk_flags = self._execute_agent_tools(request.project_id, result)
+        execution_refs, operator_output_refs, operator_risk_flags = self._execute_agent_tools(
+            request.project_id,
+            result,
+            query=request.research_intent,
+        )
 
         approval = ApprovalRequest(
             request_id=f"approval-{request.run_id}",
@@ -639,7 +661,7 @@ class ResearchController:
             task_status={"planning": TaskStatus.WAITING_HUMAN},
             task_ledger=[f"task://{request.project_id}/planning"],
             agent_run_refs=[request.run_id],
-            artifact_refs=result.candidate_artifact_refs,
+            artifact_refs=[*result.candidate_artifact_refs, *operator_output_refs],
             execution_run_refs=execution_refs,
             approval_request_refs=[approval.request_id],
             unresolved_questions=result.unresolved_questions,
@@ -657,7 +679,13 @@ class ResearchController:
             triggered_rules=["INTAKE_REQUIRES_SCOPE"],
             created_at=datetime.now(UTC),
         )
-        self._record_audit(agent_input, result, route, execution_refs)
+        self._record_audit(
+            agent_input,
+            result,
+            route,
+            execution_refs,
+            operator_output_refs,
+        )
         state = ControllerWorkflowState(
             project_id=request.project_id,
             current_stage=ProjectStage.WAITING_HUMAN,
@@ -786,8 +814,19 @@ class ResearchController:
         result = self.dispatcher.dispatch(agent_id, agent_input, context_bundle)
         if not result.candidate_artifact_refs:
             raise ValueError(f"{agent_id} produced no candidate artifacts")
-        execution_refs, operator_risk_flags = self._execute_agent_tools(project_id, result)
-        self._record_audit(agent_input, result, route, execution_refs)
+        execution_refs, operator_output_refs, operator_risk_flags = self._execute_agent_tools(
+            project_id,
+            result,
+            query=self._project_intents.get(project_id, ""),
+            context_bundle=context_bundle if isinstance(context_bundle, ContextBundle) else None,
+        )
+        self._record_audit(
+            agent_input,
+            result,
+            route,
+            execution_refs,
+            operator_output_refs,
+        )
         approval = ApprovalRequest(
             request_id=f"approval-{run_id}",
             artifact_ref=result.candidate_artifact_refs[0],
@@ -801,7 +840,7 @@ class ResearchController:
             task_status={task_type: TaskStatus.WAITING_HUMAN},
             task_ledger=[f"task://{project_id}/{task_type}"],
             agent_run_refs=[run_id],
-            artifact_refs=result.candidate_artifact_refs,
+            artifact_refs=[*result.candidate_artifact_refs, *operator_output_refs],
             execution_run_refs=execution_refs,
             evidence_refs=result.evidence_refs,
             context_bundle_refs=[context_ref] if context_bundle is not None else [],

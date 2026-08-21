@@ -28,6 +28,8 @@ The main boundaries are:
 
 For local workflow development only, set `STEM_SCI_ALLOW_UNVERIFIED_FORMAL_EVIDENCE=true` to let retrieved shared-corpus chunks pass through the formal workflow while retaining `model_generated_unverified` status and a visible risk flag. Keep it unset or `false` for production; strict configuration rejects this switch.
 
+The workflow literature operators are wired to the shared knowledge service: `literature_search` persists an `EvidenceSet`, `paper_screening` persists a `ScreenedPaperSet`, and `paper_extraction` persists a `PaperCard`. `source_verification` completes only when the corpus has verified locator-backed evidence; otherwise it persists a review-required traceability report and keeps the evidence unverified.
+
 ## LangGraph six-Agent workflow
 
 `LangGraphWorkflow` is the executable graph entry point. LangGraph owns node transitions, checkpointed human pauses, and `Command(resume=...)`; `ResearchController` remains responsible for artifact persistence, permissions, approvals, REWORK, and audit. The six-Agent order is `mentor_planning -> evidence_review -> research_design -> data_analysis -> paper_writing -> independent_review`.

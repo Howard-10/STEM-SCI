@@ -54,6 +54,7 @@ from .controller.policy.route_decision import RouteDecision
 from .controller.policy.route_store import SQLiteRouteDecisionStore
 from .core.state import ResearchState
 from .operators.executor import OperatorExecutor
+from .operators.knowledge import KnowledgeOperatorRuntime
 from .operators.models import OperatorRun, OperatorSpec
 from .operators.registry import OperatorRegistry
 from .provenance.agent_run_store import SQLiteAgentRunStore
@@ -151,6 +152,16 @@ artifact_store = SQLiteArtifactStore(workflow_database)
 artifact_content_store = SQLiteArtifactContentStore(workflow_database)
 agent_run_store = SQLiteAgentRunStore(workflow_database)
 route_store = SQLiteRouteDecisionStore(workflow_database)
+knowledge_operator_runtime = KnowledgeOperatorRuntime(
+    knowledge_service,
+    artifact_store=artifact_store,
+    artifact_content_store=artifact_content_store,
+)
+workflow_operator_executor = OperatorExecutor(
+    registry=operator_registry,
+    execution_store=execution_store,
+    handlers=knowledge_operator_runtime.handlers(),
+)
 
 
 def _configured_qa_service() -> QuestionAnswerService:
@@ -188,10 +199,7 @@ workflow_controller = ResearchController(
     context_provider=_configured_context_provider(),
     decision_store=SQLiteDecisionStore(workflow_database),
     workflow_store=SQLiteWorkflowStore(workflow_database),
-    operator_executor=OperatorExecutor(
-        registry=operator_registry,
-        execution_store=execution_store,
-    ),
+    operator_executor=workflow_operator_executor,
     artifact_store=artifact_store,
     artifact_content_store=artifact_content_store,
     agent_run_store=agent_run_store,

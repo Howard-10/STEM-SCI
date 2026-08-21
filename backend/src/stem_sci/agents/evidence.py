@@ -11,7 +11,7 @@ from stem_sci.context.models import ContextBundle, EvidenceRef, VerificationStat
 from stem_sci.settings import allow_unverified_formal_evidence
 
 from .base import BaseAgent
-from .contracts import AgentInput, AgentResult, CandidateArtifact
+from .contracts import AgentInput, AgentResult, CandidateArtifact, ToolRequest
 from .evidence_pipeline import (
     CorpusCoverageReport,
     EvidenceConflictMap,
@@ -86,11 +86,48 @@ class EvidenceReviewAgent(BaseAgent):
                 result = self.run_pipeline(agent_input, pipeline_context)
             except StructuredGenerationError:
                 result = self._fallback_with_generation_failure(agent_input, context)
-            return self._mark_development_evidence(result, development_formal_mode)
-        return self._mark_development_evidence(
+            return self._prepare_result(
+                result,
+                agent_input,
+                context,
+                development_formal_mode,
+            )
+        return self._prepare_result(
             self._deterministic_result(agent_input, context),
+            agent_input,
+            context,
             development_formal_mode,
         )
+
+    def _prepare_result(
+        self,
+        result: AgentResult,
+        agent_input: AgentInput,
+        context: ContextBundle,
+        development_formal_mode: bool,
+    ) -> AgentResult:
+        """Attach the bounded operator requests used by the evidence route."""
+        requested = {
+            request.capability for request in result.tool_requests
+        }
+        operator_requests = [
+            ToolRequest(
+                request_id=f"{agent_input.agent_run_id}:tool:{capability}",
+                capability=capability,
+                input_refs=[context.context_id],
+                reason=f"EvidenceReview requires {capability} for the bounded evidence package.",
+            )
+            for capability in (
+                "paper_screening",
+                "paper_extraction",
+                "source_verification",
+            )
+            if capability not in requested
+        ]
+        prepared = result.model_copy(
+            update={"tool_requests": [*result.tool_requests, *operator_requests]}
+        )
+        return self._mark_development_evidence(prepared, development_formal_mode)
 
     @staticmethod
     def _mark_development_evidence(

@@ -220,9 +220,7 @@ class DenseRetriever:
                 np.frombuffer(index_bytes, dtype="uint8")
             )
         except (OSError, RuntimeError, ValueError) as error:
-            raise RetrievalUnavailable(
-                f"FAISS index could not be opened: {self._index_path}"
-            ) from error
+            raise RetrievalUnavailable("FAISS index could not be opened") from error
         if index.ntotal != len(self._corpus.records):
             raise RetrievalUnavailable("FAISS index and vector metadata counts differ")
         vector = np.asarray(self._embedder(query), dtype="float32").reshape(1, -1)

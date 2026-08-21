@@ -13,6 +13,12 @@ class OperatorRegistry:
 
     @classmethod
     def default(cls) -> OperatorRegistry:
+        runtime_capabilities = {
+            "literature_search",
+            "paper_screening",
+            "paper_extraction",
+            "source_verification",
+        }
         definitions = (
             ("literature_search", "Literature Search", "SearchProtocol", "EvidenceSet"),
             ("paper_screening", "Paper Screening", "PaperSet", "ScreenedPaperSet"),
@@ -30,7 +36,11 @@ class OperatorRegistry:
         return cls(
             OperatorSpec(
                 operator_id=capability,
-                operator_version="phase1-contract",
+                operator_version=(
+                    "phase2-knowledge-runtime"
+                    if capability in runtime_capabilities
+                    else "phase1-contract"
+                ),
                 display_name=display_name,
                 capability=capability,
                 input_schema_ref=f"schema://{input_type}",

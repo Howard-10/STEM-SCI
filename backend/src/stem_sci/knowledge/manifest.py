@@ -21,6 +21,7 @@ class CorpusRegistry:
     """Load and validate declared shared-corpus assets before retrieval."""
 
     def __init__(self, root: Path | None = None) -> None:
+        self._uses_configured_external_assets = root is None
         self.root = (root or repository_root()).resolve()
 
     def manifest_path(self, corpus_id: str) -> Path:
@@ -73,7 +74,11 @@ class CorpusRegistry:
 
         relative_path = reference.relative_path.replace("\\", "/")
         vector_root = os.getenv("STEM_SCI_VECTOR_KB_ROOT", "").strip()
-        if vector_root and relative_path.startswith("data/local/vector_kb/"):
+        if (
+            self._uses_configured_external_assets
+            and vector_root
+            and relative_path.startswith("data/local/vector_kb/")
+        ):
             return (
                 Path(vector_root).expanduser().resolve()
                 / relative_path.removeprefix("data/local/vector_kb/")
@@ -87,7 +92,7 @@ class CorpusRegistry:
         """Resolve the local PDF root used by a deployment."""
 
         configured = os.getenv("STEM_SCI_PDF_ROOT", "").strip()
-        if configured:
+        if self._uses_configured_external_assets and configured:
             return Path(configured).expanduser().resolve()
         return (self.root / manifest.pdf_root_relative_path).resolve()
 
