@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from .graph_retriever import GraphRetriever
 from .models import GraphCandidate, RetrievalHit, RetrievalMode, RetrievalTrace
 from .normalization import expanded_query
 from .retrievers import RetrievalUnavailable
@@ -18,7 +17,7 @@ class HybridRetriever:
         *,
         corpus_id: str,
         manifest_refs: list[str],
-        graph_retriever: GraphRetriever | None,
+        graph_retriever,
         dense_search: Callable[[str, int], list[RetrievalHit]] | None,
         sparse_search: Callable[[str, int], list[RetrievalHit]] | None,
     ) -> None:

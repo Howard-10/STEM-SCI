@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import UTC, datetime
 from typing import Literal
+
+from neo4j.exceptions import Neo4jError
 from uuid import uuid4
 
 from stem_sci.context.models import ContextBundle, EvidenceRef, SourceLocation, VerificationStatus
@@ -15,6 +18,7 @@ from .graph_retriever import GraphRetriever
 from .hybrid_retriever import HybridRetriever
 from .identity import PaperIdentityResolver
 from .manifest import CorpusRegistry
+from .neo4j_graph_retriever import Neo4jGraphRetriever
 from .models import (
     ContextMode,
     CorpusManifest,
@@ -39,6 +43,7 @@ class HybridKnowledgeService:
     def __init__(self, context_service: ContextService, registry: CorpusRegistry | None = None) -> None:
         self._context_service = context_service
         self._registry = registry or CorpusRegistry()
+        self._graph_cache: dict[str, object] = {}
 
     def list_corpora(self) -> list[CorpusManifest]:
         """Return public manifest metadata; raw source paths remain local-only."""
@@ -125,13 +130,33 @@ class HybridKnowledgeService:
         self,
         manifest: CorpusManifest,
         resolver: PaperIdentityResolver,
-    ) -> tuple[GraphRetriever | None, str | None]:
-        """Allow graph navigation to degrade without blocking text retrieval."""
+    ) -> tuple[object | None, str | None]:
+        """Prefer Neo4j when configured, with JSON navigation as an explicit fallback."""
 
+        backend = os.getenv("STEM_SCI_GRAPH_BACKEND", "auto").strip().lower()
+        if backend in {"neo4j", "auto"}:
+            try:
+                cache_key = "|".join(
+                    [
+                        os.getenv("NEO4J_URI", "bolt://localhost:7688"),
+                        os.getenv("NEO4J_USERNAME", "neo4j"),
+                        os.getenv("NEO4J_DATABASE", "neo4j"),
+                        os.getenv("NEO4J_PROJECT_ID", "stem-sci"),
+                    ]
+                )
+                cached = self._graph_cache.get(cache_key)
+                if cached is not None:
+                    return cached, None
+                retriever = Neo4jGraphRetriever(resolver)
+                self._graph_cache[cache_key] = retriever
+                return retriever, None
+            except (OSError, RuntimeError, ValueError, Neo4jError) as error:
+                if backend == "neo4j":
+                    return None, f"neo4j_graph_unavailable:{type(error).__name__}"
         try:
             return GraphRetriever(self._registry.asset_path(manifest.graph_artifact), resolver), None
         except (OSError, ValueError) as error:
-            return None, f"graph_navigation_unavailable:{type(error).__name__}"
+            return None, f"json_graph_unavailable:{type(error).__name__}"
 
     def build_context(
         self,

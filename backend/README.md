@@ -54,6 +54,62 @@ python -m pytest -q tests/test_langgraph_workflow.py
 
 Real GPT calls are opt-in for mentor planning, research design, evidence review, and paper writing. Configure `STEM_SCI_LLM_PROVIDER=gpt`, a GPT-compatible `STEM_SCI_LLM_BASE_URL`, `STEM_SCI_LLM_MODEL`, `STEM_SCI_LLM_TIMEOUT_SECONDS`, and the per-run `STEM_SCI_MAX_LLM_CALLS` budget. Keep `STEM_SCI_LLM_API_KEY` in the local environment only. Automated tests inject `FakeLLMProvider` and do not access the network.
 
+## Conversational QA
+
+The user-facing QA chain is exposed separately from the six-agent workflow:
+
+```text
+POST /api/v1/qa/answer
+```
+
+It performs transparent query expansion, graph-guided hybrid retrieval, `ContextBundle`
+assembly, optional GPT-compatible answer synthesis, citations, and SQLite conversation
+memory. When an LLM key is configured, the router can use bounded function calls for
+`graph_search`, `vector_search`, `hybrid_search`, `paper_lookup`, `workflow_agent`, and
+`external_paper_search`, then synthesize a final answer from the returned tool results.
+Without an LLM key it returns a deterministic evidence summary and keeps the same
+retrieval/memory trace. `workflow_agent` is proposal-only and cannot mutate workflow state.
+
+The response includes `tool_calls` so the frontend can show which retrieval path was
+selected without exposing provider credentials or internal database connections.
+
+For DeepSeek-compatible chat completions, set:
+
+```text
+STEM_SCI_LLM_PROVIDER=gpt
+STEM_SCI_LLM_BASE_URL=https://api.deepseek.com
+STEM_SCI_LLM_MODEL=deepseek-chat
+STEM_SCI_LLM_API_KEY=<local-secret>
+STEM_SCI_LLM_RESPONSE_FORMAT=auto
+```
+
+The vector query side still uses `DASHSCOPE_API_KEY` and the declared
+`text-embedding-v3` corpus index. Set both keys only in the local shell or an ignored
+`.env.local`; never commit them.
+
+When the vector files and PDFs are stored outside the repository, point the backend at
+them without copying them into Git:
+
+```text
+STEM_SCI_VECTOR_KB_ROOT=C:\path\to\vector_kb
+STEM_SCI_PDF_ROOT=C:\path\to\literature_pdfs
+```
+
+To use the imported Neo4j sparse graph instead of the JSON graph artifact:
+
+```text
+STEM_SCI_GRAPH_BACKEND=neo4j
+NEO4J_URI=bolt://localhost:7688
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=<local-neo4j-password>
+NEO4J_DATABASE=neo4j
+NEO4J_PROJECT_ID=stem-sci
+```
+
+`STEM_SCI_GRAPH_BACKEND=auto` is the default. It tries Neo4j when configured and
+falls back to the checked-in JSON graph when Neo4j is unavailable. Use `neo4j` when
+you want a failed connection to be visible instead of silently degrading.
+
 ## Research-code execution configuration
 
 The API loads the repository root `.env` (and `.env.local`) before constructing

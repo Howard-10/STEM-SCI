@@ -2,6 +2,8 @@
 
 from .prompt_registry import PromptRegistry, PromptTemplate
 from .provider import (
+    ChatCompletionResult,
+    ChatToolCall,
     FakeLLMProvider,
     GenerationResult,
     GPTProvider,
@@ -14,6 +16,8 @@ from .provider import (
 from .structured_generator import StructuredGenerationError, StructuredGenerator
 
 __all__ = [
+    "ChatCompletionResult",
+    "ChatToolCall",
     "FakeLLMProvider",
     "GPTProvider",
     "GenerationResult",

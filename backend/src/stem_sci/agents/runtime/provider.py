@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Protocol
 
@@ -47,6 +48,26 @@ class LLMSchemaError(LLMProviderError):
     """The provider response did not satisfy the requested schema."""
 
 
+@dataclass(frozen=True)
+class ChatToolCall:
+    """A provider-neutral function call emitted by a chat completion."""
+
+    call_id: str
+    name: str
+    arguments: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class ChatCompletionResult:
+    """The bounded chat result needed by the tool-routing layer."""
+
+    message: Mapping[str, Any]
+    content: str | None
+    tool_calls: tuple[ChatToolCall, ...]
+    response_hash: str
+    request_id: str
+
+
 class LLMProvider(Protocol):
     """One structured generation call, independent of agent semantics."""
 
@@ -84,6 +105,7 @@ class GPTProvider:
         self.timeout_seconds = timeout_seconds
         self.default_model = default_model
         self._client = client or httpx.Client(timeout=timeout_seconds)
+        self.response_format_mode = _response_format_mode(self.base_url)
 
     @classmethod
     def from_env(cls) -> GPTProvider:
@@ -125,14 +147,10 @@ class GPTProvider:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": response_model.__name__,
-                    "strict": True,
-                    "schema": response_model.model_json_schema(),
-                },
-            },
+            "response_format": _response_format(
+                response_model,
+                self.response_format_mode,
+            ),
         }
         started = perf_counter()
         try:
@@ -166,6 +184,59 @@ class GPTProvider:
             latency_ms=latency_ms,
             response_hash=response_hash,
         )
+
+    def complete(
+        self,
+        *,
+        messages: Sequence[Mapping[str, Any]],
+        model: str,
+        tools: Sequence[Mapping[str, Any]] = (),
+        tool_choice: str | Mapping[str, Any] | None = None,
+        response_model: type[BaseModel] | None = None,
+    ) -> ChatCompletionResult:
+        """Run a chat completion for bounded LLM tool routing.
+
+        This method intentionally returns only the assistant message and parsed
+        function calls. The caller owns tool execution and must append tool
+        results explicitly before requesting the final answer.
+        """
+
+        selected_model = model or self.default_model
+        if not selected_model:
+            raise LLMResponseError("LLM model must not be empty")
+        request_body: dict[str, Any] = {
+            "model": selected_model,
+            "messages": list(messages),
+        }
+        if tools:
+            request_body["tools"] = list(tools)
+            request_body["tool_choice"] = tool_choice or "auto"
+        if response_model is not None:
+            request_body["response_format"] = _response_format(
+                response_model,
+                self.response_format_mode,
+            )
+        try:
+            response = self._client.post(
+                self._chat_completions_url(),
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                json=request_body,
+                timeout=self.timeout_seconds,
+            )
+        except httpx.RequestError:
+            raise LLMTransportError("LLM provider request failed") from None
+        if not response.is_success:
+            raise LLMResponseError(
+                f"LLM provider returned HTTP status {response.status_code}"
+            ) from None
+        payload = _response_payload(response)
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or not choices or not isinstance(choices[0], Mapping):
+            raise LLMResponseError("LLM provider returned an invalid response shape")
+        message = choices[0].get("message")
+        if not isinstance(message, Mapping):
+            raise LLMResponseError("LLM provider returned an invalid response shape")
+        return _chat_completion_result(response, message)
 
     def _chat_completions_url(self) -> str:
         if self.base_url.endswith("/chat/completions"):
@@ -223,6 +294,36 @@ def _required_environment_value(name: str) -> str:
     return value
 
 
+def _response_format_mode(base_url: str) -> str:
+    """Select a provider-compatible JSON response mode.
+
+    ``auto`` uses JSON mode for DeepSeek-compatible endpoints because some
+    deployments do not accept OpenAI's strict json_schema envelope. Set
+    ``STEM_SCI_LLM_RESPONSE_FORMAT=json_schema`` or ``json_object`` to
+    override this behavior.
+    """
+
+    configured = os.getenv("STEM_SCI_LLM_RESPONSE_FORMAT", "auto").strip().lower()
+    if configured in {"json_schema", "json_object"}:
+        return configured
+    if "deepseek.com" in base_url.casefold():
+        return "json_object"
+    return "json_schema"
+
+
+def _response_format(response_model: type[BaseModel], mode: str) -> Mapping[str, Any]:
+    if mode == "json_object":
+        return {"type": "json_object"}
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": response_model.__name__,
+            "strict": True,
+            "schema": response_model.model_json_schema(),
+        },
+    }
+
+
 def _response_payload(response: httpx.Response) -> Mapping[str, Any]:
     try:
         payload = response.json()
@@ -231,6 +332,57 @@ def _response_payload(response: httpx.Response) -> Mapping[str, Any]:
     if not isinstance(payload, Mapping):
         raise LLMResponseError("LLM provider returned an invalid response shape")
     return payload
+
+
+def _chat_completion_result(
+    response: httpx.Response,
+    message: Mapping[str, Any],
+) -> ChatCompletionResult:
+    raw_tool_calls = message.get("tool_calls")
+    parsed_tool_calls: list[ChatToolCall] = []
+    if raw_tool_calls is not None:
+        if not isinstance(raw_tool_calls, list):
+            raise LLMResponseError("LLM provider returned invalid tool calls")
+        for raw_call in raw_tool_calls:
+            if not isinstance(raw_call, Mapping):
+                raise LLMResponseError("LLM provider returned invalid tool call")
+            function = raw_call.get("function")
+            if not isinstance(function, Mapping):
+                raise LLMResponseError("LLM provider returned invalid tool call")
+            call_id = raw_call.get("id")
+            name = function.get("name")
+            arguments = function.get("arguments", "{}")
+            if not isinstance(call_id, str) or not call_id:
+                raise LLMResponseError("LLM provider returned a tool call without an id")
+            if not isinstance(name, str) or not name:
+                raise LLMResponseError("LLM provider returned a tool call without a name")
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError:
+                    raise LLMResponseError("LLM provider returned invalid tool arguments") from None
+            if not isinstance(arguments, Mapping):
+                raise LLMResponseError("LLM provider returned invalid tool arguments")
+            parsed_tool_calls.append(
+                ChatToolCall(
+                    call_id=call_id,
+                    name=name,
+                    arguments=dict(arguments),
+                )
+            )
+    content = message.get("content")
+    if content is not None and not isinstance(content, str):
+        raise LLMResponseError("LLM provider returned invalid message content")
+    return ChatCompletionResult(
+        message=dict(message),
+        content=content,
+        tool_calls=tuple(parsed_tool_calls),
+        response_hash=sha256_text(response.text),
+        request_id=(
+            _string_or_none(response.headers.get("x-request-id"))
+            or f"chat-request-{sha256_text(response.text)[:16]}"
+        ),
+    )
 
 
 def _parse_chat_output(

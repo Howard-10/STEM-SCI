@@ -36,7 +36,7 @@ class CorpusRegistry:
 
         manifest = self.load_manifest(corpus_id)
         checks = [self._check(asset) for asset in self._required_assets(manifest)]
-        pdf_root = self.root / manifest.pdf_root_relative_path
+        pdf_root = self.pdf_root_path(manifest)
         if not pdf_root.is_dir():
             checks.append(
                 AssetCheck(
@@ -69,12 +69,27 @@ class CorpusRegistry:
         )
 
     def asset_path(self, reference: AssetRef) -> Path:
-        """Resolve an allowed manifest asset relative to the repository root."""
+        """Resolve a manifest asset, allowing ignored local corpus roots."""
 
-        candidate = (self.root / reference.relative_path).resolve()
+        relative_path = reference.relative_path.replace("\\", "/")
+        vector_root = os.getenv("STEM_SCI_VECTOR_KB_ROOT", "").strip()
+        if vector_root and relative_path.startswith("data/local/vector_kb/"):
+            return (
+                Path(vector_root).expanduser().resolve()
+                / relative_path.removeprefix("data/local/vector_kb/")
+            ).resolve()
+        candidate = (self.root / relative_path).resolve()
         if self.root not in candidate.parents and candidate != self.root:
             raise ValueError("Manifest asset escapes repository root")
         return candidate
+
+    def pdf_root_path(self, manifest: CorpusManifest) -> Path:
+        """Resolve the local PDF root used by a deployment."""
+
+        configured = os.getenv("STEM_SCI_PDF_ROOT", "").strip()
+        if configured:
+            return Path(configured).expanduser().resolve()
+        return (self.root / manifest.pdf_root_relative_path).resolve()
 
     def _check(self, reference: AssetRef) -> AssetCheck:
         path = self.asset_path(reference)
@@ -111,7 +126,7 @@ class CorpusRegistry:
                 declared_count_key=None,
             )
         )
-        pdf_root = self.root / manifest.pdf_root_relative_path
+        pdf_root = self.pdf_root_path(manifest)
         if pdf_root.is_dir():
             count = len(list(pdf_root.rglob("*.pdf")))
             checks.append(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Annotated
@@ -57,10 +58,14 @@ from .operators.models import OperatorRun, OperatorSpec
 from .operators.registry import OperatorRegistry
 from .provenance.agent_run_store import SQLiteAgentRunStore
 from .provenance.models import AgentRunRecord
+from .settings import ConfigurationReport, validate_environment
 from .knowledge import (
     CorpusManifest,
     HybridContextBuildRequest,
     HybridKnowledgeService,
+    QAAnswerRequest,
+    QAAnswerResponse,
+    QuestionAnswerService,
     RetrievalSearchRequest,
     RetrievalSearchResponse,
     SharedCorpusSummary,
@@ -69,6 +74,8 @@ from .knowledge.manifest import CorpusRegistry
 
 DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 DEFAULT_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+logger = logging.getLogger("stem_sci.api")
+configuration_report: ConfigurationReport
 
 # Load repository-local switches before constructing Controller services.
 _repository_root = Path(__file__).resolve().parents[3]
@@ -100,6 +107,7 @@ def _error(status_code: int, code: str, message: str) -> JSONResponse:
 
 
 app = FastAPI(title="STEM-SCI Research Workflow Platform", version="0.2.0")
+configuration_report = validate_environment()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
@@ -133,6 +141,30 @@ artifact_store = SQLiteArtifactStore(workflow_database)
 artifact_content_store = SQLiteArtifactContentStore(workflow_database)
 agent_run_store = SQLiteAgentRunStore(workflow_database)
 route_store = SQLiteRouteDecisionStore(workflow_database)
+
+
+def _configured_qa_service() -> QuestionAnswerService:
+    """Create the chat service; provider configuration remains environment-only."""
+
+    api_key = os.getenv("STEM_SCI_LLM_API_KEY", "").strip()
+    provider = None
+    if api_key:
+        try:
+            provider = GPTProvider.from_env()
+        except ValueError:
+            # The QA endpoint remains available in deterministic fallback mode
+            # while the provider environment is incomplete.
+            provider = None
+    return QuestionAnswerService(
+        knowledge_service=knowledge_service,
+        storage_root=storage_root,
+        provider=provider,
+    )
+
+
+qa_service = _configured_qa_service()
+
+
 def _configured_context_provider() -> LocalContextProvider | HybridContextProvider:
     configured = os.getenv("STEM_SCI_CONTEXT_PROVIDER", "local").strip().lower()
     if configured == "local":
@@ -201,7 +233,10 @@ async def handle_http_exception(_: Request, error: StarletteHTTPException) -> JS
 
 
 @app.exception_handler(Exception)
-async def handle_unexpected(_: Request, __: Exception) -> JSONResponse:
+async def handle_unexpected(_: Request, error: Exception) -> JSONResponse:
+    # Keep provider/database details out of the HTTP response, but retain the
+    # traceback in the backend console for local debugging.
+    logger.exception("Unhandled API exception: %s", error)
     return _error(500, "internal_error", "An internal error occurred")
 
 
@@ -216,8 +251,13 @@ ProjectIdQuery = Annotated[
 
 
 @app.get("/api/v1/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, object]:
+    return {
+        "status": "ok",
+        "service": "stem-sci-backend",
+        "configuration_valid": configuration_report.valid,
+        "warnings": list(configuration_report.warnings),
+    }
 
 
 @app.get("/api/v1/corpora", response_model=list[SharedCorpusSummary])
@@ -258,6 +298,13 @@ def hybrid_search(request: RetrievalSearchRequest) -> RetrievalSearchResponse:
 def hybrid_build_context(request: HybridContextBuildRequest) -> ContextBundle:
     """Build a discovery or fail-closed formal shared-corpus ContextBundle."""
     return knowledge_service.build_from_request(request)
+
+
+@app.post("/api/v1/qa/answer", response_model=QAAnswerResponse)
+def qa_answer(request: QAAnswerRequest) -> QAAnswerResponse:
+    """Run rewrite, hybrid retrieval, answer synthesis, and memory persistence."""
+
+    return qa_service.answer(request)
 
 
 @app.post("/api/v1/workflow/projects")

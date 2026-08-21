@@ -211,7 +211,18 @@ class DenseRetriever:
             raise RetrievalUnavailable("faiss-cpu retrieval dependencies are not installed") from error
         if not self._index_path.is_file():
             raise RetrievalUnavailable("FAISS index is unavailable")
-        index = faiss.read_index(str(self._index_path))
+        try:
+            # Read bytes in Python first. On Windows, FAISS's native
+            # read_index(path) may fail when the absolute path contains
+            # non-ASCII characters, even though the file exists.
+            index_bytes = self._index_path.read_bytes()
+            index = faiss.deserialize_index(
+                np.frombuffer(index_bytes, dtype="uint8")
+            )
+        except (OSError, RuntimeError, ValueError) as error:
+            raise RetrievalUnavailable(
+                f"FAISS index could not be opened: {self._index_path}"
+            ) from error
         if index.ntotal != len(self._corpus.records):
             raise RetrievalUnavailable("FAISS index and vector metadata counts differ")
         vector = np.asarray(self._embedder(query), dtype="float32").reshape(1, -1)
