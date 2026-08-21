@@ -7,7 +7,8 @@ from typing import cast
 
 from pydantic import JsonValue
 
-from stem_sci.context.models import ContextBundle, EvidenceRef
+from stem_sci.context.models import ContextBundle, EvidenceRef, VerificationStatus
+from stem_sci.settings import allow_unverified_formal_evidence
 
 from .base import BaseAgent
 from .contracts import AgentInput, AgentResult, CandidateArtifact
@@ -56,6 +57,9 @@ class EvidenceReviewAgent(BaseAgent):
 
     def run_with_context(self, agent_input: AgentInput, context: ContextBundle) -> AgentResult:
         """Create evidence candidates while preserving source references from Context MVP."""
+        development_formal_mode = (
+            context.context_mode == "formal" and allow_unverified_formal_evidence()
+        )
         if self.pipeline is not None:
             pipeline_context = EvidenceReviewContext(
                 project_id=context.project_id,
@@ -64,12 +68,47 @@ class EvidenceReviewAgent(BaseAgent):
                 evidence_refs=context.evidence_refs,
                 source_refs=context.source_refs,
                 context_hash=context.context_hash,
+                intended_use="demo" if development_formal_mode else "formal",
+                allowed_verification_statuses=(
+                    [
+                        VerificationStatus.SOURCE_VERIFIED,
+                        VerificationStatus.HUMAN_VERIFIED,
+                        VerificationStatus.MODEL_GENERATED_UNVERIFIED,
+                    ]
+                    if development_formal_mode
+                    else [
+                        VerificationStatus.SOURCE_VERIFIED,
+                        VerificationStatus.HUMAN_VERIFIED,
+                    ]
+                ),
             )
             try:
-                return self.run_pipeline(agent_input, pipeline_context)
+                result = self.run_pipeline(agent_input, pipeline_context)
             except StructuredGenerationError:
-                return self._fallback_with_generation_failure(agent_input, context)
-        return self._deterministic_result(agent_input, context)
+                result = self._fallback_with_generation_failure(agent_input, context)
+            return self._mark_development_evidence(result, development_formal_mode)
+        return self._mark_development_evidence(
+            self._deterministic_result(agent_input, context),
+            development_formal_mode,
+        )
+
+    @staticmethod
+    def _mark_development_evidence(
+        result: AgentResult, development_formal_mode: bool
+    ) -> AgentResult:
+        if not development_formal_mode:
+            return result
+        return result.model_copy(
+            update={
+                "risk_flags": list(
+                    dict.fromkeys([*result.risk_flags, "UNVERIFIED_FORMAL_EVIDENCE_ENABLED"])
+                ),
+                "recommendations": [
+                    *result.recommendations,
+                    "Development mode only: retrieved evidence is unverified and must not support production claims.",
+                ],
+            }
+        )
 
     def _deterministic_result(self, agent_input: AgentInput, context: ContextBundle) -> AgentResult:
         package = self._deterministic_fallback(context)

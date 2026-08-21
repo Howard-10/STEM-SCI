@@ -1,4 +1,7 @@
+import pytest
+
 from stem_sci.agents.contracts import ReviewFinding
+from stem_sci.context.models import ContextBundle
 from stem_sci.controller import PlanningRequest, ResearchController
 from stem_sci.core.enums import DecisionScope, ProjectStage
 
@@ -67,6 +70,50 @@ def test_approved_rework_clears_rework_target() -> None:
 
     assert approved.current_stage is ProjectStage.EVIDENCE_READY
     assert approved.rework_target_agent is None
+
+
+def test_incomplete_evidence_cannot_be_approved() -> None:
+    class EmptyFormalContextProvider:
+        def build_context(
+            self, project_id: str, task_ref: str, query: str, token_budget: int
+        ) -> ContextBundle:
+            return ContextBundle(
+                context_id="empty-formal-context",
+                project_id=project_id,
+                task_ref=task_ref,
+                query=query,
+                evidence_refs=[],
+                source_refs=[],
+                risk_flags=["INSUFFICIENT_CORPUS_COVERAGE"],
+                verification_summary={},
+                token_budget=token_budget,
+                estimated_tokens=0,
+                context_hash="e" * 64,
+                generated_at="2026-08-21T00:00:00Z",
+            )
+
+    controller = ResearchController(context_provider=EmptyFormalContextProvider())
+    project_id = "blocked-evidence-approval"
+    planning = controller.start_planning(
+        PlanningRequest(project_id=project_id, research_intent="scope", run_id="blocked-1")
+    )
+    controller.resume_approval(project_id, planning.approval_request, decision="approved", decided_by="r")
+    evidence = controller.run_next(project_id)
+
+    with pytest.raises(ValueError, match="verified evidence is required"):
+        controller.resume_approval(
+            project_id, evidence.approval_request, decision="approved", decided_by="r"
+        )
+
+    state = controller.get_state(project_id)
+    assert state.current_stage is ProjectStage.WAITING_HUMAN
+    assert state.pending_approval_ref == evidence.approval_request.request_id
+
+    rejected = controller.resume_approval(
+        project_id, evidence.approval_request, decision="rejected", decided_by="r"
+    )
+    assert rejected.current_stage is ProjectStage.REWORK
+    assert rejected.rework_target_agent == "evidence_review"
 
 
 def test_full_six_agent_path_routes_review_rework_to_paper_writing() -> None:

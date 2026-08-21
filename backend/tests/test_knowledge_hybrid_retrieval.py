@@ -293,6 +293,29 @@ def test_discovery_context_is_traceable_but_formal_context_fails_closed(
     assert "formal_locator_index_unavailable" in formal.retrieval_risk_flags
 
 
+def test_development_mode_allows_unverified_formal_context(
+    tmp_path: Path, registry: CorpusRegistry, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("STEM_SCI_ALLOW_UNVERIFIED_FORMAL_EVIDENCE", "true")
+    service = HybridKnowledgeService(ContextService(tmp_path / "state"), registry)
+
+    formal = service.build_context(
+        project_id="alpha",
+        task_ref="protocol-development",
+        query="generative AI scaffolding physics",
+        token_budget=500,
+        mode="formal",
+    )
+
+    assert formal.context_mode == "formal"
+    assert formal.evidence_refs
+    assert all(
+        item.verification_status is VerificationStatus.MODEL_GENERATED_UNVERIFIED
+        for item in formal.evidence_refs
+    )
+    assert "UNVERIFIED_FORMAL_EVIDENCE_ENABLED" in formal.risk_flags
+
+
 def test_graph_navigation_is_only_reported_for_graph_nominated_papers(
     tmp_path: Path, registry: CorpusRegistry
 ) -> None:

@@ -24,6 +24,15 @@ def validate_environment() -> ConfigurationReport:
     errors: list[str] = []
     warnings: list[str] = []
     strict = _as_bool(os.getenv("STEM_SCI_CONFIG_STRICT", "false"))
+    if allow_unverified_formal_evidence():
+        if strict:
+            errors.append(
+                "STEM_SCI_ALLOW_UNVERIFIED_FORMAL_EVIDENCE must be false in strict mode"
+            )
+        else:
+            warnings.append(
+                "UNVERIFIED_FORMAL_EVIDENCE_ENABLED: formal workflow is using retrieval candidates for development only"
+            )
 
     origins = _csv("STEM_SCI_CORS_ORIGINS") or [
         "http://localhost:5173",
@@ -70,6 +79,12 @@ def validate_environment() -> ConfigurationReport:
     if errors:
         raise ValueError("; ".join(errors))
     return ConfigurationReport(valid=True, warnings=tuple(sorted(set(warnings))))
+
+
+def allow_unverified_formal_evidence() -> bool:
+    """Return whether development may route unverified retrieval hits formally."""
+
+    return _as_bool(os.getenv("STEM_SCI_ALLOW_UNVERIFIED_FORMAL_EVIDENCE", "false"))
 
 
 def _csv(name: str) -> list[str]:

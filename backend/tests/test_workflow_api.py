@@ -31,6 +31,13 @@ def test_workflow_api_exposes_planning_and_next_route() -> None:
     assert next_run.status_code == 200
     assert next_run.json()["route_decision"]["selected_route"] == "evidence_review"
 
+    blocked_approval = client.post(
+        "/api/v1/workflow/projects/api-physics-demo/approve",
+        json={"decision": "approved", "decided_by": "researcher"},
+    )
+    assert blocked_approval.status_code == 400
+    assert "verified evidence is required" in blocked_approval.json()["error"]["message"]
+
     rejected = client.post(
         "/api/v1/workflow/projects/api-physics-demo/approve",
         json={"decision": "rejected", "decided_by": "researcher"},

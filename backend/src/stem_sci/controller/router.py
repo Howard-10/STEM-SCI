@@ -210,6 +210,13 @@ class AgentDispatcher:
 class ResearchController:
     """Controller-owned dynamic routing over the six deterministic Agent roles."""
 
+    _EVIDENCE_APPROVAL_BLOCKING_RISKS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "insufficient_corpus_coverage",
+            "insufficient_verified_evidence",
+        }
+    )
+
     _ROUTES: ClassVar[dict[ProjectStage, tuple[str, str, str, str]]] = {
         ProjectStage.SCOPED: (
             "evidence_review",
@@ -844,6 +851,12 @@ class ResearchController:
             if existing is not None:
                 return state
             raise ValueError("approval request does not match the pending Controller decision")
+        if decision == "approved":
+            block_reason = self._evidence_approval_block_reason(
+                workflow_state, state, approval_request
+            )
+            if block_reason is not None:
+                raise ValueError(block_reason)
         if existing is None:
             record = ApprovalRecord(
                 approval_id=approval_request.request_id,
@@ -920,6 +933,37 @@ class ResearchController:
         self._approvals.pop(project_id, None)
         self._persist(project_id)
         return updated
+
+    def _evidence_approval_block_reason(
+        self,
+        workflow_state: ControllerWorkflowState,
+        state: ResearchState,
+        approval_request: ApprovalRequest,
+    ) -> str | None:
+        """Keep formal evidence approval fail-closed when verified evidence is absent."""
+        if approval_request.approval_type != "evidence_protocol":
+            return None
+
+        risk_flags = {flag.strip().lower() for flag in state.risk_flags}
+        if risk_flags & self._EVIDENCE_APPROVAL_BLOCKING_RISKS:
+            return (
+                "evidence_protocol approval blocked: verified evidence is required "
+                "before progression"
+            )
+
+        # A context-backed EvidenceReview with no usable refs is the real formal
+        # path. Empty test Controllers intentionally have no context provider and
+        # remain compatible with the lightweight unit-test workflow.
+        has_formal_context = bool(state.context_bundle_refs) and (
+            workflow_state.last_route_decision is not None
+            and workflow_state.last_route_decision.selected_route == "evidence_review"
+        )
+        if has_formal_context and not state.evidence_refs:
+            return (
+                "evidence_protocol approval blocked: verified evidence is required "
+                "before progression"
+            )
+        return None
 
     def get_pending_approval(self, project_id: str) -> ApprovalRequest:
         if project_id not in self._approvals:

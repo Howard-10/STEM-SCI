@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -46,6 +46,30 @@ class QARouteDecision(QAStrictModel):
     recommended_agent: str | None = None
 
 
+class QAWorkflowAction(QAStrictModel):
+    """A bounded workflow action reported by the conversational facade."""
+
+    action: Literal[
+        "STARTED",
+        "STATUS",
+        "NEXT_AGENT",
+        "APPROVAL_READY",
+        "PROPOSAL_ONLY",
+        "UNAVAILABLE",
+    ]
+    project_id: str
+    message: str
+    current_stage: str | None = None
+    selected_agent: str | None = None
+    approval_required: bool = False
+    confirmation_required: bool = False
+    approval_request_id: str | None = None
+    approval_request: dict[str, Any] | None = None
+    workflow_state: dict[str, Any] | None = None
+    artifacts: list[dict[str, Any]] = Field(default_factory=list)
+    next_available_actions: list[str] = Field(default_factory=list)
+
+
 class QAAnswerRecord(QAStrictModel):
     answer: str
     citation_indices: list[int] = Field(default_factory=list)
@@ -72,6 +96,7 @@ class QAAnswerResponse(QAStrictModel):
     needs_follow_up: bool = False
     follow_up_question: str | None = None
     tool_calls: list[str] = Field(default_factory=list)
+    workflow_action: QAWorkflowAction | None = None
 
 
 class MemoryTurn(QAStrictModel):

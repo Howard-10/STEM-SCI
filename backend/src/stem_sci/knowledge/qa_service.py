@@ -23,9 +23,16 @@ from .qa_models import (
     QAAnswerResponse,
     QAReference,
     QARouteDecision,
+    QAWorkflowAction,
 )
 from .service import HybridKnowledgeService
-from .qa_tools import QAToolExecutor, route_for_tool, tool_definitions, tool_reason
+from .qa_tools import (
+    WORKFLOW_TOOL_NAMES,
+    QAToolExecutor,
+    route_for_tool,
+    tool_definitions,
+    tool_reason,
+)
 
 
 class _AnswerDraft(BaseModel):
@@ -50,6 +57,8 @@ class QuestionAnswerService:
         storage_root: Path,
         provider: GPTProvider | None = None,
         model: str | None = None,
+        workflow_controller: Any | None = None,
+        artifact_store: Any | None = None,
         prompt_version: str = "qa-v1",
         max_retries: int = 1,
     ) -> None:
@@ -59,7 +68,11 @@ class QuestionAnswerService:
         self._generator = (
             StructuredGenerator(provider, max_retries=max_retries) if provider else None
         )
-        self._tool_executor = QAToolExecutor(knowledge_service)
+        self._tool_executor = QAToolExecutor(
+            knowledge_service,
+            workflow_controller=workflow_controller,
+            artifact_store=artifact_store,
+        )
         self._model = model or (provider.default_model if provider else None)
         self._prompt_version = prompt_version
 
@@ -110,6 +123,7 @@ class QuestionAnswerService:
                 citations,
                 tool_calls,
                 context_bundle,
+                workflow_action,
             ) = agentic_result
             answer_mode: Literal["llm", "fallback"] = "llm"
         else:
@@ -124,6 +138,7 @@ class QuestionAnswerService:
                 allow_llm=allow_llm,
             )
             tool_calls = []
+            workflow_action = None
         selected_citations = self._select_citations(
             citations, answer_record.citation_indices
         )
@@ -158,6 +173,7 @@ class QuestionAnswerService:
             needs_follow_up=answer_record.needs_follow_up,
             follow_up_question=answer_record.follow_up_question,
             tool_calls=tool_calls,
+            workflow_action=workflow_action,
         )
 
     def _rewrite_query(self, question: str, history: list[MemoryTurn]) -> str:
@@ -255,8 +271,9 @@ class QuestionAnswerService:
         list[QAReference],
         list[str],
         ContextBundle,
+        QAWorkflowAction | None,
     ] | None:
-        """Let the model choose bounded read-only tools before final synthesis."""
+        """Let the model choose bounded retrieval or workflow tools."""
 
         if (
             not allow_llm
@@ -290,6 +307,23 @@ class QuestionAnswerService:
             if not first.tool_calls:
                 return None
 
+            calls = list(first.tool_calls[:3])
+            workflow_calls = [call for call in calls if call.name in WORKFLOW_TOOL_NAMES]
+            if workflow_calls:
+                # A single turn may perform at most one Controller workflow action.
+                calls = workflow_calls[:1]
+            selected_tool = calls[0] if calls else first.tool_calls[0]
+            assistant_message = dict(first.message)
+            if workflow_calls:
+                raw_tool_calls = assistant_message.get("tool_calls")
+                if isinstance(raw_tool_calls, list):
+                    assistant_message["tool_calls"] = [
+                        item
+                        for item in raw_tool_calls
+                        if isinstance(item, Mapping)
+                        and item.get("id") == selected_tool.call_id
+                    ]
+
             messages: list[Mapping[str, Any]] = [
                 {
                     "role": "system",
@@ -307,14 +341,14 @@ class QuestionAnswerService:
                         history,
                     ),
                 },
-                dict(first.message),
+                assistant_message,
             ]
             tool_names: list[str] = []
+            workflow_action: QAWorkflowAction | None = None
             active_retrieval = retrieval
             active_citations = citations
             active_context_bundle = context_bundle
-            selected_tool = first.tool_calls[0]
-            for call in first.tool_calls[:3]:
+            for call in calls:
                 tool_names.append(call.name)
                 result = self._tool_executor.execute(
                     name=call.name,
@@ -322,6 +356,12 @@ class QuestionAnswerService:
                     project_id=request.project_id,
                     default_query=rewritten_query,
                 )
+                workflow_payload = result.get("workflow_action")
+                if isinstance(workflow_payload, Mapping):
+                    try:
+                        workflow_action = QAWorkflowAction.model_validate(workflow_payload)
+                    except ValueError:
+                        workflow_action = None
                 retrieval_payload = result.get("retrieval_response")
                 if isinstance(retrieval_payload, Mapping):
                     try:
@@ -370,14 +410,29 @@ class QuestionAnswerService:
                     ),
                 }
             )
-            final = self._provider.complete(
-                messages=messages,
-                model=self._model,
-                response_model=_AnswerDraft,
-            )
-            if not final.content:
-                return None
-            parsed = _AnswerDraft.model_validate_json(final.content)
+            try:
+                final = self._provider.complete(
+                    messages=messages,
+                    model=self._model,
+                    response_model=_AnswerDraft,
+                )
+                if not final.content:
+                    raise ValueError("LLM returned no final answer")
+                parsed = _AnswerDraft.model_validate_json(final.content)
+            except Exception:
+                if workflow_action is None:
+                    raise
+                parsed = _AnswerDraft(
+                    answer=workflow_action.message,
+                    citation_indices=[],
+                    confidence=0.9,
+                    needs_follow_up=workflow_action.confirmation_required,
+                    follow_up_question=(
+                        "请在工作流页面确认批准或退回当前候选。"
+                        if workflow_action.confirmation_required
+                        else None
+                    ),
+                )
             public_route = route_for_tool(selected_tool.name)
             recommended_agent = (
                 str(selected_tool.arguments.get("agent"))
@@ -405,6 +460,7 @@ class QuestionAnswerService:
                 active_citations,
                 tool_names,
                 active_context_bundle,
+                workflow_action,
             )
         except Exception:
             # Tool routing is an enhancement; deterministic retrieval and the
@@ -420,13 +476,20 @@ class QuestionAnswerService:
     @staticmethod
     def _tool_router_system_prompt() -> str:
         return (
-            "You are the STEM-SCI research router. Select one or more read-only "
-            "tools when they improve evidence quality. Use hybrid_search for most "
+            "You are the STEM-SCI research router. Select the minimum bounded "
+            "retrieval or workflow tool needed for the user's request. Use "
+            "hybrid_search for most "
             "research questions, paper_lookup for a specific paper, graph_search "
             "for relationship discovery, vector_search for textual evidence, "
-            "workflow_agent for proposal-only workflow guidance, and "
+            "start_research_workflow only when the user explicitly asks to create "
+            "a project, get_workflow_status for progress questions, "
+            "run_next_workflow_agent only when the user explicitly asks to continue, "
+            "get_workflow_artifacts to inspect candidates, "
+            "prepare_workflow_approval to show a pending approval, and "
+            "workflow_agent only for proposal-only Agent recommendations. "
             "external_paper_search only when the local corpus is insufficient. "
-            "Never invent tool results and never request workflow state changes."
+            "Never invent tool results. Never approve, reject, freeze data, execute "
+            "statistics, or release a project from the conversational tool layer."
         )
 
     @staticmethod

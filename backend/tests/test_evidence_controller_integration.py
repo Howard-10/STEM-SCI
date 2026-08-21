@@ -146,3 +146,26 @@ def test_controller_persists_evidence_package_content_and_metadata(tmp_path: Pat
     assert len(run.llm_metadata_refs) == 4
     assert result.workflow_state.research_state is not None
     assert all(isinstance(ref, str) for ref in result.workflow_state.research_state.artifact_refs)
+
+
+def test_verified_evidence_can_be_approved(tmp_path: Path) -> None:
+    project_id = "evidence-approval-integration"
+    controller, _, _ = make_controller(tmp_path, project_id)
+    planning = controller.start_planning(
+        PlanningRequest(
+            project_id=project_id,
+            research_intent="Study AI-supported physics modeling.",
+            run_id="planning-evidence-approval",
+        )
+    )
+    controller.resume_approval(
+        project_id, planning.approval_request, decision="approved", decided_by="researcher"
+    )
+
+    evidence = controller.run_next(project_id)
+    approved = controller.resume_approval(
+        project_id, evidence.approval_request, decision="approved", decided_by="researcher"
+    )
+
+    assert approved.current_stage.value == "EVIDENCE_READY"
+    assert approved.evidence_refs == ["evidence-1"]

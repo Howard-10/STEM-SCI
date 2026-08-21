@@ -169,10 +169,9 @@ def _configured_qa_service() -> QuestionAnswerService:
         knowledge_service=knowledge_service,
         storage_root=storage_root,
         provider=provider,
+        workflow_controller=workflow_controller,
+        artifact_store=artifact_store,
     )
-
-
-qa_service = _configured_qa_service()
 
 
 def _configured_context_provider() -> LocalContextProvider | HybridContextProvider:
@@ -199,6 +198,7 @@ workflow_controller = ResearchController(
     route_store=route_store,
     data_pipeline_root=storage_root,
 )
+qa_service = _configured_qa_service()
 
 
 class WorkflowProjectRequest(BaseModel):

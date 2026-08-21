@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from stem_sci.context.models import ContextBundle, EvidenceRef, SourceLocation, VerificationStatus
 from stem_sci.context.service import ContextService
+from stem_sci.settings import allow_unverified_formal_evidence
 
 from .graph_retriever import GraphRetriever
 from .hybrid_retriever import HybridRetriever
@@ -68,7 +69,14 @@ class HybridKnowledgeService:
         manifest = self._registry.load_manifest("physics_stem_v1")
         readiness = self._registry.readiness(manifest.corpus_id)
         manifest_refs = self._manifest_refs(manifest)
-        if request.mode is ContextMode.FORMAL and not readiness.formal_evidence_ready:
+        development_formal_mode = (
+            request.mode is ContextMode.FORMAL and allow_unverified_formal_evidence()
+        )
+        if (
+            request.mode is ContextMode.FORMAL
+            and not readiness.formal_evidence_ready
+            and not development_formal_mode
+        ):
             return self._unavailable(request, manifest, manifest_refs, readiness.risk_flags)
         if request.mode is ContextMode.DISCOVERY and not readiness.discovery_ready:
             return self._unavailable(request, manifest, manifest_refs, readiness.risk_flags)
@@ -120,6 +128,8 @@ class HybridKnowledgeService:
         if request.mode is ContextMode.DISCOVERY:
             readiness_risks = [risk for risk in readiness_risks if not risk.startswith("formal_")]
         risk_flags = sorted(set([*readiness_risks, *trace.risk_flags]))
+        if development_formal_mode:
+            risk_flags.append("UNVERIFIED_FORMAL_EVIDENCE_ENABLED")
         navigated_paper_ids = {
             candidate.canonical_paper_id for candidate in trace.graph_candidates
         }
@@ -234,11 +244,16 @@ class HybridKnowledgeService:
                 )
             )
             tokens_used += cost
-        if context_mode is ContextMode.FORMAL:
+        development_formal_mode = (
+            context_mode is ContextMode.FORMAL and allow_unverified_formal_evidence()
+        )
+        if context_mode is ContextMode.FORMAL and not development_formal_mode:
             # Defensive invariant: no formal bundle may contain unverified shared evidence.
             selected = []
             tokens_used = 0
         risk_flags = list(response.risk_flags)
+        if development_formal_mode:
+            risk_flags.append("UNVERIFIED_FORMAL_EVIDENCE_ENABLED")
         if not selected:
             risk_flags.append("insufficient_verified_evidence")
         canonical = {
@@ -265,7 +280,7 @@ class HybridKnowledgeService:
             evidence_refs=selected,
             source_refs=sorted({ref.source_id for ref in selected}),
             unresolved_questions=([] if selected else ["No eligible traceable evidence matched the request"]),
-            risk_flags=([] if selected else ["insufficient_verified_evidence"]),
+            risk_flags=sorted(set(risk_flags)) if selected else ["insufficient_verified_evidence"],
             verification_summary={
                 status.value: sum(ref.verification_status is status for ref in selected)
                 for status in VerificationStatus
