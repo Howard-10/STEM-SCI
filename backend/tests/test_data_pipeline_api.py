@@ -15,6 +15,16 @@ from stem_sci.statistics.mode_policy import AnalysisMode
 def test_data_pipeline_api_runs_to_verified_python_only_result() -> None:
     client = TestClient(app)
     project_id = f"api-data-{uuid4().hex[:12]}"
+    evidence_text = (
+        "STEM_SCI_DEMO_SEED: true\n"
+        "Synthetic physics STEM evidence for the approved data-pipeline integration test."
+    )
+    imported = client.post(
+        "/api/v1/sources/import",
+        data={"project_id": project_id},
+        files={"file": ("demo-evidence.txt", evidence_text.encode("utf-8"), "text/plain")},
+    )
+    assert imported.status_code == 200
     created = client.post(
         "/api/v1/workflow/projects",
         json={"project_id": project_id, "research_intent": "synthetic physics STEM", "run_id": f"{project_id}-p"},
