@@ -1,0 +1,1 @@
+export function TechnicalTrace({ title = "技术追溯", children }: { title?: string; children: React.ReactNode }) { return <details className="technical-trace"><summary>{title}</summary><div className="technical-content">{children}</div></details>; }

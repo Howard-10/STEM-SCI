@@ -170,4 +170,19 @@ export const workflowApi = {
   listAgents() {
     return request<AgentCapability[]>("/workflow/agents");
   },
+  listExecutions(projectId: string) {
+    return request<Array<Record<string, unknown>>>(`/workflow/projects/${encodeURIComponent(projectId)}/executions`);
+  },
+  listArtifacts(projectId: string) {
+    return request<Array<Record<string, unknown>>>(`/workflow/projects/${encodeURIComponent(projectId)}/artifacts`);
+  },
+  listArtifactContents(projectId: string) {
+    return request<Array<Record<string, unknown>>>(`/workflow/projects/${encodeURIComponent(projectId)}/artifact-contents`);
+  },
+  listAgentRuns(projectId: string) {
+    return request<Array<Record<string, unknown>>>(`/workflow/projects/${encodeURIComponent(projectId)}/agent-runs`);
+  },
+  listRoutes(projectId: string) {
+    return request<Array<Record<string, unknown>>>(`/workflow/projects/${encodeURIComponent(projectId)}/routes`);
+  },
 };

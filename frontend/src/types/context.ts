@@ -9,6 +9,8 @@ export interface SourceLocation {
   char_start: number;
   char_end: number;
   heading?: string | null;
+  page_start?: number | null;
+  page_end?: number | null;
 }
 
 export interface Source {
@@ -37,6 +39,10 @@ export interface EvidenceRef {
   excerpt: string;
   location: SourceLocation;
   verification_status: VerificationStatus;
+  canonical_paper_id?: string | null;
+  canonical_chunk_id?: string | null;
+  corpus_id?: string | null;
+  retrieval_modalities?: string[];
 }
 
 export interface EvidenceDetail extends EvidenceRef {
