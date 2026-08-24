@@ -11,10 +11,16 @@ import {
   type AuthState,
 } from "./api/auth";
 import { qaApi, type QAAnswerResponse, type QAContextMode } from "./api/qa";
+import {
+  workflowApi,
+  type ControllerWorkflowState,
+  type DataPipelineState,
+  type RuntimeStatus,
+} from "./api/workflow";
 import { demoBundle, demoCorpus, demoQAResponse, demoRuntime } from "./demo/data";
 import { demoDocumentContents, demoDocumentsByProject, demoProjects } from "./demo/projectHub";
 
-type WorkspaceView = "knowledge" | "codex" | "audit";
+type WorkspaceView = "knowledge" | "codex" | "analysis" | "audit";
 export type WorkspaceTab = "home" | "workspace" | "editor" | "agent" | "audit";
 
 type ChatMessage = {
@@ -56,13 +62,40 @@ const starterPrompts = [
 ];
 
 const agentRows = [
-  ["01", "导师规划", "界定研究问题与范围", "已完成"],
-  ["02", "证据审查", "筛选、核验和组织文献证据", "进行中"],
-  ["03", "研究设计", "形成可审批的研究方案", "待启动"],
-  ["04", "数据分析", "编译分析计划与结果检查", "待启动"],
-  ["05", "论文写作", "生成基于证据的写作草案", "待启动"],
-  ["06", "独立审查", "检查风险、引用和方法", "待启动"],
-];
+  ["01", "mentor_planning", "导师规划", "界定研究问题与范围"],
+  ["02", "evidence_review", "证据审查", "筛选、核验和组织文献证据"],
+  ["03", "research_design", "研究设计", "形成可审批的研究方案"],
+  ["04", "data_analysis", "数据分析", "编译分析计划与结果检查"],
+  ["05", "paper_writing", "论文写作", "生成基于证据的写作草案"],
+  ["06", "independent_review", "独立审查", "检查风险、引用和方法"],
+] as const;
+
+const completedAgentsByStage: Record<string, string[]> = {
+  INTAKE: [],
+  SCOPED: ["mentor_planning"],
+  EVIDENCE_READY: ["mentor_planning", "evidence_review"],
+  STUDY_PROTOCOL_APPROVED: ["mentor_planning", "evidence_review", "research_design"],
+  DATA_READY: ["mentor_planning", "evidence_review", "research_design"],
+  ANALYZED: ["mentor_planning", "evidence_review", "research_design", "data_analysis"],
+  DRAFTED: ["mentor_planning", "evidence_review", "research_design", "data_analysis", "paper_writing"],
+  VERIFIED: ["mentor_planning", "evidence_review", "research_design", "data_analysis", "paper_writing", "independent_review"],
+  RELEASED: ["mentor_planning", "evidence_review", "research_design", "data_analysis", "paper_writing", "independent_review"],
+};
+
+function agentStatus(snapshot: ControllerWorkflowState | null, agentId: string): string {
+  if (!snapshot) return "读取中";
+  const routeAgent = snapshot.last_route_decision?.selected_route;
+  if (snapshot.current_stage === "WAITING_HUMAN" && routeAgent === agentId) {
+    return "等待审批";
+  }
+  if (snapshot.current_stage === "REWORK" && snapshot.research_state?.rework_target_agent === agentId) {
+    return "待返工";
+  }
+  if (completedAgentsByStage[snapshot.current_stage]?.includes(agentId)) {
+    return "已完成";
+  }
+  return "待启动";
+}
 
 const capabilityCards = [
   {
@@ -132,6 +165,13 @@ export function App() {
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const analysisInputRef = useRef<HTMLInputElement>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>(demoRuntime);
+  const [workflowSnapshot, setWorkflowSnapshot] = useState<ControllerWorkflowState | null>(null);
+  const [analysisState, setAnalysisState] = useState<DataPipelineState | null>(null);
+  const [analysisStage, setAnalysisStage] = useState("STUDY_PROTOCOL_APPROVED");
+  const [analysisBusy, setAnalysisBusy] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
   const chatAttachmentInputRef = useRef<HTMLInputElement>(null);
   const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
@@ -215,6 +255,27 @@ export function App() {
       mounted = false;
     };
   }, [auth?.access_token, projectId]);
+
+  useEffect(() => {
+    let mounted = true;
+    setAnalysisError("");
+    void Promise.all([
+      workflowApi.getRuntime(),
+      workflowApi.getControllerProject(projectId),
+    ]).then(([runtime, controllerState]) => {
+      if (!mounted) return;
+      setRuntimeStatus(runtime);
+      setWorkflowSnapshot(controllerState);
+      setAnalysisStage(controllerState.current_stage);
+      setAnalysisState(controllerState.data_pipeline);
+    }).catch((error) => {
+      if (!mounted) return;
+      setAnalysisError(error instanceof Error ? error.message : "无法读取数据分析状态");
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [projectId]);
 
   useEffect(() => {
     if (!draggingPane) return;
@@ -436,6 +497,68 @@ export function App() {
     } finally {
       setUploadBusy(false);
       if (uploadInputRef.current) uploadInputRef.current.value = "";
+    }
+  };
+
+  const refreshAnalysisState = async () => {
+    if (!projectId) return;
+    const controllerState = await workflowApi.getControllerProject(projectId);
+    setWorkflowSnapshot(controllerState);
+    setAnalysisStage(controllerState.current_stage);
+    setAnalysisState(controllerState.data_pipeline);
+  };
+
+  const uploadAnalysisDataset = async (file: File) => {
+    if (!projectId) return;
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      setAnalysisError("数据分析目前只接受 CSV 文件，避免把未结构化文档直接送入统计执行链。");
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setAnalysisError("CSV 文件不能超过 50 MB。");
+      return;
+    }
+    setAnalysisBusy(true);
+    setAnalysisError("");
+    try {
+      const next = await workflowApi.uploadRawCsv(projectId, file);
+      setAnalysisState(next);
+      setAnalysisStage(next.stage);
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "实验数据上传失败");
+    } finally {
+      setAnalysisBusy(false);
+      if (analysisInputRef.current) analysisInputRef.current.value = "";
+    }
+  };
+
+  const decideAnalysisStep = async (decision: "approved" | "rejected") => {
+    if (!projectId || !analysisState?.pending_approval) return;
+    setAnalysisBusy(true);
+    setAnalysisError("");
+    try {
+      const decidedBy = auth?.user.username ?? "researcher";
+      const next = await workflowApi.decideDataPipeline(projectId, decision, decidedBy);
+      setAnalysisState(next);
+      setAnalysisStage(next.stage);
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "数据分析审批失败");
+    } finally {
+      setAnalysisBusy(false);
+    }
+  };
+
+  const runAnalysisAgent = async () => {
+    if (!projectId) return;
+    setAnalysisBusy(true);
+    setAnalysisError("");
+    try {
+      await workflowApi.runPublicNext(projectId);
+      await refreshAnalysisState();
+    } catch (error) {
+      setAnalysisError(error instanceof Error ? error.message : "数据分析 Agent 暂时无法启动");
+    } finally {
+      setAnalysisBusy(false);
     }
   };
 
@@ -694,6 +817,10 @@ export function App() {
             <span className="ui-icon">⌘</span>
             Codex
           </button>
+          <button className={view === "analysis" ? "sidebar-link sidebar-link-active" : "sidebar-link"} type="button" onClick={() => setView("analysis")}>
+            <span className="ui-icon">◫</span>
+            数据分析
+          </button>
           <button className={view === "audit" ? "sidebar-link sidebar-link-active" : "sidebar-link"} type="button" onClick={() => setView("audit")}>
             <span className="ui-icon">✓</span>
             数据审查
@@ -922,7 +1049,7 @@ export function App() {
         <div className="output-header">
           <div>
             <span className="chat-kicker">研究上下文</span>
-            <h2>{view === "knowledge" ? "知识库" : view === "codex" ? "Codex 工作区" : "数据审查"}</h2>
+            <h2>{view === "knowledge" ? "知识库" : view === "codex" ? "Codex 工作区" : view === "analysis" ? "数据分析" : "数据审查"}</h2>
           </div>
           <button className="header-icon-button" type="button" title="隐藏右侧面板，进入双栏模式" onClick={() => setRightPaneVisible(false)}>→</button>
         </div>
@@ -1037,20 +1164,180 @@ export function App() {
               <span className="codex-symbol">⌘</span>
               <h3>面向研究的代码工作区</h3>
               <p>在当前项目中编写、解释和审查 Python 分析代码。代码执行仍然需要经过数据审查和人工确认。</p>
-              <button className="primary-inline-button" type="button">打开代码编辑器 <span>→</span></button>
+              <button
+                className="primary-inline-button"
+                type="button"
+                onClick={() => {
+                  setView("analysis");
+                  setQuestion("请根据当前研究问题和已审批的分析计划生成 Python 分析代码草案，并说明每一步的统计目的。");
+                }}
+              >
+                转到数据分析 <span>→</span>
+              </button>
             </section>
             <section className="output-section">
               <div className="output-section-heading"><h3>运行环境</h3><span className="review-tag">开发模式</span></div>
               <div className="runtime-list">
-                <div><span>代码提供方</span><strong>{demoRuntime.coding_provider}</strong></div>
-                <div><span>Codex CLI</span><strong>{demoRuntime.codex_available ? "可用" : "未配置"}</strong></div>
-                <div><span>SPSS</span><strong>{demoRuntime.spss_available ? "可用" : "未配置"}</strong></div>
+                <div><span>代码提供方</span><strong>{runtimeStatus.coding_provider}</strong></div>
+                <div><span>Codex CLI</span><strong>{runtimeStatus.codex_available ? "可用" : runtimeStatus.codex_reason ?? "未配置"}</strong></div>
+                <div><span>SPSS</span><strong>{runtimeStatus.spss_available ? "可用" : runtimeStatus.spss_reason ?? "未配置"}</strong></div>
               </div>
             </section>
             <section className="output-section">
               <div className="output-section-heading"><h3>最近代码任务</h3><span>0</span></div>
               <div className="empty-output"><span className="empty-symbol">⌘</span><p>在对话中描述你的分析需求，Codex 会先生成代码草案。</p></div>
             </section>
+          </div>
+        )}
+
+        {view === "analysis" && (
+          <div className="output-content">
+            <section className="analysis-summary">
+              <div className="analysis-summary-icon">◫</div>
+              <div>
+                <strong>实验数据进入受控分析链</strong>
+                <p>上传 CSV 后先做数据审查，再逐步审批处理、冻结和执行。Codex 只生成候选代码，SPSS 未配置时不会伪装成已完成。</p>
+              </div>
+            </section>
+
+            <section className="output-section">
+              <div className="output-section-heading">
+                <h3>当前链路</h3>
+                <button
+                  className="plain-action"
+                  type="button"
+                  disabled={analysisBusy || !projectId}
+                  onClick={() => void refreshAnalysisState()}
+                >
+                  刷新
+                </button>
+              </div>
+              <div className="analysis-stage">
+                <div className={analysisStage === "STUDY_PROTOCOL_APPROVED" ? "analysis-stage-item active" : "analysis-stage-item"}>
+                  <span>1</span><strong>研究方案</strong><small>{analysisStage === "STUDY_PROTOCOL_APPROVED" ? "等待启动分析 Agent" : "已完成或已进入数据阶段"}</small>
+                </div>
+                <div className={analysisState ? "analysis-stage-item active" : "analysis-stage-item"}>
+                  <span>2</span><strong>数据管道</strong><small>{analysisState?.stage ?? "尚未建立分析计划"}</small>
+                </div>
+                <div className={analysisState?.statistical_result_card ? "analysis-stage-item active" : "analysis-stage-item"}>
+                  <span>3</span><strong>结果验证</strong><small>{analysisState?.statistical_result_card ? "已有结果卡" : "等待受控执行"}</small>
+                </div>
+              </div>
+              {!analysisState && (
+                <div className="analysis-inline-note">
+                  <strong>还没有 Controller 数据管道</strong>
+                  <span>请先在研究流程中完成研究方案审批，再由数据分析 Agent 生成分析规格。当前页面不会绕过这一步直接执行代码。</span>
+                  {analysisStage === "STUDY_PROTOCOL_APPROVED" && (
+                    <button className="secondary-inline-button" type="button" disabled={analysisBusy} onClick={() => void runAnalysisAgent()}>
+                      {analysisBusy ? "正在启动…" : "运行数据分析 Agent"}
+                      <span>→</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </section>
+
+            {analysisState && (
+              <>
+                <section className="output-section">
+                  <div className="output-section-heading">
+                    <div>
+                      <h3>实验数据</h3>
+                      <p className="section-subtitle">只接受 CSV，原始文件会先经过确定性审查</p>
+                    </div>
+                    <div className="output-heading-actions">
+                      <span className={analysisState.data_audit_report?.passed ? "ready-text" : ""}>
+                        {analysisState.data_audit_report ? (analysisState.data_audit_report.passed ? "审查通过" : "需要修正") : "等待上传"}
+                      </span>
+                      <button
+                        className="upload-doc-button"
+                        type="button"
+                        disabled={analysisBusy || analysisState.stage !== "WAITING_RAW_DATA"}
+                        onClick={() => analysisInputRef.current?.click()}
+                      >
+                        {analysisBusy ? "处理中..." : "上传 CSV"}
+                      </button>
+                      <input
+                        ref={analysisInputRef}
+                        className="visually-hidden"
+                        type="file"
+                        accept=".csv,text/csv"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) void uploadAnalysisDataset(file);
+                        }}
+                      />
+                    </div>
+                  </div>
+                  {analysisState.raw_dataset ? (
+                    <div className="analysis-dataset-row">
+                      <span className="paper-file-icon">CSV</span>
+                      <div>
+                        <strong>{String(analysisState.raw_dataset.dataset_id ?? "原始实验数据")}</strong>
+                        <small>数据集已登记 · {analysisState.data_audit_report?.passed ? "通过基础字段审查" : "存在审查问题"}</small>
+                      </div>
+                      <span className="analysis-dataset-status">{analysisState.stage}</span>
+                    </div>
+                  ) : (
+                    <div className="analysis-file-drop">
+                      <strong>上传实验数据 CSV</strong>
+                      <span>建议包含清晰的分组、结果变量和必要的受试者标识；系统会先检查列名、类型、缺失和隐私风险。</span>
+                    </div>
+                  )}
+                  {analysisState.data_audit_report?.risk_flags.length ? (
+                    <div className="analysis-risk-list">
+                      {analysisState.data_audit_report.risk_flags.map((flag) => <span key={flag}>! {flag}</span>)}
+                    </div>
+                  ) : null}
+                </section>
+
+                <section className="output-section">
+                  <div className="output-section-heading"><h3>代码与统计引擎</h3><span>{analysisState.executable_plan?.analysis_mode ?? "等待分析计划"}</span></div>
+                  <div className="analysis-engine-grid">
+                    <div className="analysis-engine-row">
+                      <span>Codex / Python</span>
+                      <strong>{analysisState.code_artifact_ref ? "候选代码已生成" : runtimeStatus.codex_available ? "可生成候选代码" : "使用受控模板或待配置"}</strong>
+                      <small>{analysisState.code_review_ref ? "已记录代码审查" : "执行前需要代码审查和人工确认"}</small>
+                    </div>
+                    <div className="analysis-engine-row">
+                      <span>SPSS</span>
+                      <strong>{runtimeStatus.spss_available ? "SPSS 可用" : "SPSS 未配置"}</strong>
+                      <small>{runtimeStatus.spss_available ? "双引擎模式可在审批后执行" : runtimeStatus.spss_reason ?? "需要配置 SPSS 批处理程序"}</small>
+                    </div>
+                  </div>
+                  <div className="analysis-code-ref">
+                    <span>代码工件</span>
+                    <code>{analysisState.code_artifact_ref ?? "尚未生成，需先完成数据冻结和执行审批"}</code>
+                  </div>
+                </section>
+
+                {analysisState.pending_approval && (
+                  <section className="output-section analysis-approval">
+                    <div className="output-section-heading"><h3>待人工确认</h3><span>{analysisState.pending_approval.approval_type}</span></div>
+                    <p>{analysisState.pending_approval.reason}</p>
+                    <div className="analysis-approval-actions">
+                      <button className="secondary-inline-button" type="button" disabled={analysisBusy} onClick={() => void decideAnalysisStep("rejected")}>退回修正<span>↩</span></button>
+                      <button className="primary-inline-button" type="button" disabled={analysisBusy} onClick={() => void decideAnalysisStep("approved")}>{analysisBusy ? "处理中..." : "确认并继续"}<span>→</span></button>
+                    </div>
+                  </section>
+                )}
+
+                <section className="output-section compact-section">
+                  <div className="output-section-heading"><h3>分析结果</h3><span>{analysisState.statistical_result_card ? "已生成" : "等待执行"}</span></div>
+                  {analysisState.statistical_result_card ? (
+                    <div className="analysis-result-grid">
+                      {Object.entries(analysisState.statistical_result_card.values).map(([key, value]) => (
+                        <div key={key}><strong>{String(value)}</strong><small>{key.replaceAll("_", " ")}</small></div>
+                      ))}
+                      <p className="analysis-result-note">结果状态：{analysisState.statistical_result_card.execution_status}。正式解释仍需遵守结果卡和人工审查边界。</p>
+                    </div>
+                  ) : (
+                    <div className="empty-output"><span className="empty-symbol">∿</span><p>完成数据审查、冻结和执行审批后，结果卡会出现在这里。</p></div>
+                  )}
+                </section>
+              </>
+            )}
+            {analysisError && <p className="upload-error" role="alert">{analysisError}</p>}
           </div>
         )}
 
@@ -1061,15 +1348,25 @@ export function App() {
               <div><strong>研究链路正在审查</strong><p>当前回答已关联证据，正式发布前仍需检查数据和引用。</p></div>
             </section>
             <section className="output-section">
-              <div className="output-section-heading"><h3>六个 Agent</h3><span>1 / 6 活跃</span></div>
+              <div className="output-section-heading">
+                <h3>六个 Agent</h3>
+                <span>
+                  {workflowSnapshot
+                    ? `${agentRows.filter(([, agentId]) => agentStatus(workflowSnapshot, agentId) === "等待审批").length} 个待审批`
+                    : "读取中..."}
+                </span>
+              </div>
               <div className="agent-list">
-                {agentRows.map(([index, name, description, status]) => (
+                {agentRows.map(([index, agentId, name, description]) => {
+                  const status = agentStatus(workflowSnapshot, agentId);
+                  return (
                   <div className="agent-row" key={index}>
                     <span className="agent-index">{index}</span>
                     <span><strong>{name}</strong><small>{description}</small></span>
-                    <span className={status === "进行中" ? "agent-status active" : "agent-status"}>{status}</span>
+                    <span className={status === "等待审批" ? "agent-status active" : "agent-status"}>{status}</span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
             <section className="output-section">
@@ -1077,6 +1374,15 @@ export function App() {
               <div className="review-list">
                 {lastResponse.risk_flags.map((flag) => <div className="review-item" key={flag}><span>!</span><p>{flag}</p></div>)}
               </div>
+              {workflowSnapshot?.pending_approval_ref && (
+                <div className="audit-pending-note">
+                  <strong>当前存在 Human Gate</strong>
+                  <p>
+                    {workflowSnapshot.last_route_decision?.selected_route ?? "当前 Agent"} 已生成候选结果，
+                    需要研究者在研究流程中确认后才能进入下一阶段。
+                  </p>
+                </div>
+              )}
               <button className="secondary-inline-button" type="button">查看完整审查记录 <span>→</span></button>
             </section>
           </div>
