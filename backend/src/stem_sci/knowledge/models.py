@@ -200,6 +200,17 @@ class RetrievalHitSummary(StrictKnowledgeModel):
     sparse_rank: int | None = None
     rrf_score: float = 0
     locator_status: Literal["RESOLVED", "UNRESOLVED"]
+    source_locator_method: Literal[
+        "PAGE_TEXT_EXACT", "NORMALIZED_TEXT_MATCH", "UNRESOLVED"
+    ] = "UNRESOLVED"
+    verification_status: Literal[
+        "demo_seed", "model_generated_unverified", "source_verified", "human_verified"
+    ] = "model_generated_unverified"
+    pdf_sha256: str | None = None
+    page_start: int | None = None
+    page_end: int | None = None
+    char_start: int | None = None
+    char_end: int | None = None
     retrieval_modalities: list[Literal["dense", "sparse", "graph_navigation"]] = Field(
         default_factory=list
     )

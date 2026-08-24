@@ -7,9 +7,9 @@ import json
 import os
 from datetime import UTC, datetime
 from typing import Literal
+from uuid import uuid4
 
 from neo4j.exceptions import Neo4jError, ServiceUnavailable
-from uuid import uuid4
 
 from stem_sci.context.models import ContextBundle, EvidenceRef, SourceLocation, VerificationStatus
 from stem_sci.context.service import ContextService
@@ -18,8 +18,8 @@ from stem_sci.settings import allow_unverified_formal_evidence
 from .graph_retriever import GraphRetriever
 from .hybrid_retriever import GraphSearcher, HybridRetriever
 from .identity import PaperIdentityResolver
+from .locator import ChunkLocator, LocatorIndex
 from .manifest import CorpusRegistry
-from .neo4j_graph_retriever import Neo4jGraphRetriever
 from .models import (
     ContextMode,
     CorpusManifest,
@@ -32,6 +32,7 @@ from .models import (
     RetrievalSearchResponse,
     RetrievalTrace,
 )
+from .neo4j_graph_retriever import Neo4jGraphRetriever
 from .retrievers import DenseRetriever, LocalMetadataCorpus, SparseRetriever
 
 
@@ -57,7 +58,7 @@ class HybridKnowledgeService:
 
         return self._registry.load_manifest(corpus_id)
 
-    def readiness(self, corpus_id: str) -> "CorpusReadiness":
+    def readiness(self, corpus_id: str) -> CorpusReadiness:
         """Expose the safe readiness summary without leaking local asset paths."""
 
         return self._registry.readiness(corpus_id)
@@ -70,6 +71,14 @@ class HybridKnowledgeService:
         manifest = self._registry.load_manifest("physics_stem_v1")
         readiness = self._registry.readiness(manifest.corpus_id)
         manifest_refs = self._manifest_refs(manifest)
+        locators: dict[str, ChunkLocator] = {}
+        if manifest.locator_index is not None:
+            try:
+                locators = LocatorIndex.from_path(
+                    self._registry.asset_path(manifest.locator_index)
+                ).by_chunk_id()
+            except (OSError, UnicodeDecodeError, ValueError):
+                locators = {}
         development_formal_mode = (
             request.mode is ContextMode.FORMAL and allow_unverified_formal_evidence()
         )
@@ -131,6 +140,19 @@ class HybridKnowledgeService:
         risk_flags = sorted(set([*readiness_risks, *trace.risk_flags]))
         if development_formal_mode:
             risk_flags.append("UNVERIFIED_FORMAL_EVIDENCE_ENABLED")
+        if request.mode is ContextMode.FORMAL and not development_formal_mode:
+            eligible_hits = [
+                hit
+                for hit in hits
+                if (locator := locators.get(hit.canonical_chunk_id)) is not None
+                and locator.eligible_for_formal_use
+            ]
+            if len(eligible_hits) != len(hits):
+                risk_flags.append("formal_unverified_hits_filtered")
+            hits = eligible_hits
+            if not hits:
+                risk_flags.append("insufficient_verified_evidence")
+        risk_flags = sorted(set(risk_flags))
         navigated_paper_ids = {
             candidate.canonical_paper_id for candidate in trace.graph_candidates
         }
@@ -144,7 +166,7 @@ class HybridKnowledgeService:
             chunk_hits=[
                 self._summary(
                     hit,
-                    locator_status="UNRESOLVED",
+                    locator=locators.get(hit.canonical_chunk_id),
                     graph_navigated=hit.canonical_paper_id in navigated_paper_ids,
                 )
                 for hit in hits
@@ -233,11 +255,13 @@ class HybridKnowledgeService:
                     excerpt=hit.excerpt,
                     location=SourceLocation(
                         chunk_index=hit.chunk_index,
-                        char_start=0,
-                        char_end=len(hit.excerpt),
+                        char_start=hit.char_start or 0,
+                        char_end=hit.char_end or len(hit.excerpt),
                         heading=hit.section_hint,
+                        page_start=hit.page_start,
+                        page_end=hit.page_end,
                     ),
-                    verification_status=VerificationStatus.MODEL_GENERATED_UNVERIFIED,
+                    verification_status=VerificationStatus(hit.verification_status),
                     corpus_id=response.corpus_id,
                     canonical_paper_id=hit.canonical_paper_id,
                     canonical_chunk_id=hit.canonical_chunk_id,
@@ -249,9 +273,14 @@ class HybridKnowledgeService:
             context_mode is ContextMode.FORMAL and allow_unverified_formal_evidence()
         )
         if context_mode is ContextMode.FORMAL and not development_formal_mode:
-            # Defensive invariant: no formal bundle may contain unverified shared evidence.
-            selected = []
-            tokens_used = 0
+            selected = [
+                item
+                for item in selected
+                if item.verification_status
+                in {VerificationStatus.SOURCE_VERIFIED, VerificationStatus.HUMAN_VERIFIED}
+                and item.location.page_start is not None
+            ]
+            tokens_used = sum(max(1, len(item.excerpt) // 4) for item in selected)
         risk_flags = list(response.risk_flags)
         if development_formal_mode:
             risk_flags.append("UNVERIFIED_FORMAL_EVIDENCE_ENABLED")
@@ -281,7 +310,7 @@ class HybridKnowledgeService:
             evidence_refs=selected,
             source_refs=sorted({ref.source_id for ref in selected}),
             unresolved_questions=([] if selected else ["No eligible traceable evidence matched the request"]),
-            risk_flags=sorted(set(risk_flags)) if selected else ["insufficient_verified_evidence"],
+            risk_flags=sorted(set(risk_flags)),
             verification_summary={
                 status.value: sum(ref.verification_status is status for ref in selected)
                 for status in VerificationStatus
@@ -316,13 +345,16 @@ class HybridKnowledgeService:
 
     @staticmethod
     def _manifest_refs(manifest: CorpusManifest) -> list[str]:
-        return [
+        refs = [
             f"manifest:{manifest.corpus_id}:{manifest.corpus_version}",
             f"sha256:{manifest.identity_map.sha256}",
             f"sha256:{manifest.graph_artifact.sha256}",
             f"sha256:{manifest.vector_metadata.sha256}",
             f"sha256:{manifest.vector_index.sha256}",
         ]
+        if manifest.locator_index is not None:
+            refs.append(f"sha256:{manifest.locator_index.sha256}")
+        return refs
 
     @staticmethod
     def _evidence_id(project_id: str, corpus_id: str, canonical_chunk_id: str) -> str:
@@ -348,10 +380,11 @@ class HybridKnowledgeService:
     def _summary(
         hit: RetrievalHit,
         *,
-        locator_status: Literal["RESOLVED", "UNRESOLVED"],
+        locator: ChunkLocator | None,
         graph_navigated: bool,
     ) -> RetrievalHitSummary:
         excerpt = " ".join(hit.text.split())[:800]
+        resolved = locator is not None and locator.source_locator_method != "UNRESOLVED"
         return RetrievalHitSummary(
             canonical_chunk_id=hit.canonical_chunk_id,
             canonical_paper_id=hit.canonical_paper_id,
@@ -364,7 +397,20 @@ class HybridKnowledgeService:
             dense_rank=hit.dense_rank,
             sparse_rank=hit.sparse_rank,
             rrf_score=hit.rrf_score,
-            locator_status=locator_status,
+            locator_status="RESOLVED" if resolved else "UNRESOLVED",
+            source_locator_method=(
+                locator.source_locator_method if locator is not None else "UNRESOLVED"
+            ),
+            verification_status=(
+                locator.verification_status.value
+                if locator is not None
+                else VerificationStatus.MODEL_GENERATED_UNVERIFIED.value
+            ),
+            pdf_sha256=locator.pdf_sha256 if locator is not None else None,
+            page_start=locator.page_start if locator is not None else None,
+            page_end=locator.page_end if locator is not None else None,
+            char_start=locator.char_start if locator is not None else None,
+            char_end=locator.char_end if locator is not None else None,
             retrieval_modalities=HybridKnowledgeService._modalities(
                 hit,
                 graph_navigated=graph_navigated,

@@ -43,6 +43,7 @@ class ChunkRecord:
     canonical_chunk_id: str
     canonical_paper_id: str
     source_filename: str
+    vector_filename: str
     paper_title: str
     normalized_doi: str | None
     chunk_index: int
@@ -73,7 +74,7 @@ class LocalMetadataCorpus:
         cls,
         path: Path,
         resolver: PaperIdentityResolver,
-    ) -> "LocalMetadataCorpus":
+    ) -> LocalMetadataCorpus:
         raw = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(raw, list):
             raise ValueError("Vector metadata must be a JSON array")
@@ -97,6 +98,7 @@ class LocalMetadataCorpus:
                     ),
                     canonical_paper_id=paper.canonical_paper_id,
                     source_filename=paper.source_filename,
+                    vector_filename=metadata.filename,
                     paper_title=paper.title,
                     normalized_doi=normalize_doi(metadata.doi) or paper.normalized_doi,
                     chunk_index=metadata.chunk_index,

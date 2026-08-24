@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from stem_sci import api
 from stem_sci.context.models import ContextBuildRequest, VerificationStatus
 from stem_sci.context.service import ContextService
+from stem_sci.knowledge.evaluation import evaluate_gold_set
 from stem_sci.knowledge.graph_retriever import GraphRetriever
 from stem_sci.knowledge.hybrid_retriever import HybridRetriever
 from stem_sci.knowledge.identity import PaperIdentityResolver
@@ -19,7 +20,6 @@ from stem_sci.knowledge.manifest import CorpusRegistry
 from stem_sci.knowledge.models import ContextMode, RetrievalMode, RetrievalSearchRequest
 from stem_sci.knowledge.retrievers import LocalMetadataCorpus, SparseRetriever
 from stem_sci.knowledge.service import HybridKnowledgeService
-from stem_sci.knowledge.evaluation import evaluate_gold_set
 
 
 def _sha256(path: Path) -> str:
@@ -121,7 +121,47 @@ def _write_assets(tmp_path: Path, *, locator: bool = False) -> None:
     index_path.write_bytes(b"test index without faiss")
     locator_path = catalog_dir / "locator.json"
     if locator:
-        locator_path.write_text("{}", encoding="utf-8")
+        resolver = PaperIdentityResolver.from_catalog_path(catalog_path)
+        corpus = LocalMetadataCorpus.from_metadata_path(metadata_path, resolver)
+        locator_records = []
+        for record in corpus.records:
+            pdf_path = pdf_dir / record.vector_filename
+            locator_records.append(
+                {
+                    "canonical_chunk_id": record.canonical_chunk_id,
+                    "canonical_paper_id": record.canonical_paper_id,
+                    "source_filename": record.source_filename,
+                    "pdf_relative_path": record.vector_filename,
+                    "pdf_sha256": _sha256(pdf_path),
+                    "chunk_index": record.chunk_index,
+                    "quote_sha256": hashlib.sha256(record.text.encode("utf-8")).hexdigest(),
+                    "page_start": 1,
+                    "page_end": 1,
+                    "char_start": 0,
+                    "char_end": len(record.text),
+                    "source_locator_method": "PAGE_TEXT_EXACT",
+                    "verification_status": "source_verified",
+                    "verification_note": "Synthetic verified locator",
+                }
+            )
+        locator_path.write_text(
+            json.dumps(
+                {
+                    "artifact_type": "PhysicsStemChunkLocatorIndex",
+                    "artifact_version": "test-v1",
+                    "corpus_id": "physics_stem_v1",
+                    "corpus_version": "test-v1",
+                    "generated_at": "2026-08-24T00:00:00Z",
+                    "paper_count": 2,
+                    "chunk_count": 3,
+                    "resolved_count": 3,
+                    "source_verified_count": 3,
+                    "unresolved_count": 0,
+                    "records": locator_records,
+                }
+            ),
+            encoding="utf-8",
+        )
     manifest = {
         "corpus_id": "physics_stem_v1",
         "corpus_version": "test-v1",
@@ -408,7 +448,11 @@ def test_evaluation_refuses_a_non_frozen_gold_set() -> None:
 
 
 def test_evaluation_calculates_metrics_only_from_verified_labels() -> None:
-    from stem_sci.knowledge.models import RetrievalSearchResponse, RetrievalTrace, RetrievalHitSummary
+    from stem_sci.knowledge.models import (
+        RetrievalHitSummary,
+        RetrievalSearchResponse,
+        RetrievalTrace,
+    )
 
     def fake_search(request: RetrievalSearchRequest) -> RetrievalSearchResponse:
         hit = RetrievalHitSummary(
@@ -464,3 +508,59 @@ def test_evaluation_calculates_metrics_only_from_verified_labels() -> None:
     assert report.paper_recall_at_5 == 1.0
     assert report.chunk_hit_rate_at_5 == 1.0
     assert report.mean_reciprocal_rank == 1.0
+
+
+def test_valid_locator_allows_source_verified_formal_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_assets(tmp_path, locator=True)
+    monkeypatch.setattr(
+        "stem_sci.knowledge.service.DenseRetriever.search",
+        lambda self, query, limit: [],
+    )
+    service = HybridKnowledgeService(ContextService(tmp_path / "state"), CorpusRegistry(tmp_path))
+
+    readiness = service.readiness("physics_stem_v1")
+    assert readiness.formal_evidence_ready is True
+    response = service.search(
+        RetrievalSearchRequest(
+            project_id="alpha",
+            query="generative AI physics",
+            mode=ContextMode.FORMAL,
+        )
+    )
+    assert response.chunk_hits
+    assert all(hit.locator_status == "RESOLVED" for hit in response.chunk_hits)
+    assert all(hit.verification_status == "source_verified" for hit in response.chunk_hits)
+    assert all(hit.page_start == 1 for hit in response.chunk_hits)
+
+    bundle = service.build_context(
+        project_id="alpha",
+        task_ref="formal-evidence",
+        query="generative AI physics",
+        token_budget=500,
+        mode="formal",
+    )
+    assert bundle.evidence_refs
+    assert all(
+        item.verification_status is VerificationStatus.SOURCE_VERIFIED
+        for item in bundle.evidence_refs
+    )
+    assert all(item.location.page_start == 1 for item in bundle.evidence_refs)
+
+
+def test_pdf_tamper_blocks_formal_but_keeps_discovery_ready(tmp_path: Path) -> None:
+    _write_assets(tmp_path, locator=True)
+    (tmp_path / "data/local/literature_pdfs/p1.pdf").write_bytes(b"tampered PDF asset")
+    registry = CorpusRegistry(tmp_path)
+
+    readiness = registry.readiness()
+    assert readiness.discovery_ready is True
+    assert readiness.formal_evidence_ready is False
+    assert "formal_locator_index_invalid" in readiness.risk_flags
+
+    response = HybridKnowledgeService(ContextService(tmp_path / "state"), registry).search(
+        RetrievalSearchRequest(project_id="alpha", query="physics", mode=ContextMode.FORMAL)
+    )
+    assert response.retrieval_status == "UNAVAILABLE"
+    assert response.chunk_hits == []

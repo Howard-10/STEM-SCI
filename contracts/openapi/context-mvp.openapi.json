@@ -13,13 +13,1038 @@
           "200": {
             "description": "Successful Response",
             "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health Api V1 Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "summary": "Auth Register",
+        "description": "Create a user and return an immediately usable session.",
+        "operationId": "auth_register_api_v1_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthTokenPair"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "summary": "Auth Login",
+        "operationId": "auth_login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthTokenPair"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "summary": "Auth Refresh",
+        "operationId": "auth_refresh_api_v1_auth_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthTokenPair"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "summary": "Auth Logout",
+        "operationId": "auth_logout_api_v1_auth_logout_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "type": "object",
                   "additionalProperties": {
                     "type": "string"
                   },
+                  "title": "Response Auth Logout Api V1 Auth Logout Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "summary": "Auth Me",
+        "operationId": "auth_me_api_v1_auth_me_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfile"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects": {
+      "get": {
+        "summary": "Projects",
+        "operationId": "projects_api_v1_projects_get",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ResearchProject"
+                  },
+                  "title": "Response Projects Api V1 Projects Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Project",
+        "operationId": "create_project_api_v1_projects_post",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchProject"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}": {
+      "get": {
+        "summary": "Project",
+        "operationId": "project_api_v1_projects__project_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchProject"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Patch Project",
+        "operationId": "patch_project_api_v1_projects__project_id__patch",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchProject"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Project",
+        "operationId": "delete_project_api_v1_projects__project_id__delete",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
                   "type": "object",
-                  "title": "Response Health Api V1 Health Get"
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Project Api V1 Projects  Project Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/documents": {
+      "get": {
+        "summary": "Project Documents",
+        "operationId": "project_documents_api_v1_projects__project_id__documents_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectDocument"
+                  },
+                  "title": "Response Project Documents Api V1 Projects  Project Id  Documents Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Project Document",
+        "operationId": "create_project_document_api_v1_projects__project_id__documents_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDocument"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/documents/{document_id}": {
+      "get": {
+        "summary": "Project Document",
+        "operationId": "project_document_api_v1_projects__project_id__documents__document_id__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDocument"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Patch Project Document",
+        "operationId": "patch_project_document_api_v1_projects__project_id__documents__document_id__patch",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentPatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDocument"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Project Document",
+        "operationId": "delete_project_document_api_v1_projects__project_id__documents__document_id__delete",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Delete Project Document Api V1 Projects  Project Id  Documents  Document Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/documents/{document_id}/versions": {
+      "get": {
+        "summary": "Project Document Versions",
+        "operationId": "project_document_versions_api_v1_projects__project_id__documents__document_id__versions_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentVersion"
+                  },
+                  "title": "Response Project Document Versions Api V1 Projects  Project Id  Documents  Document Id  Versions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create Project Document Version",
+        "operationId": "create_project_document_version_api_v1_projects__project_id__documents__document_id__versions_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentVersionCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentVersion"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/documents/{document_id}/versions/{version}": {
+      "get": {
+        "summary": "Project Document Version",
+        "operationId": "project_document_version_api_v1_projects__project_id__documents__document_id__versions__version__get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Version"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentVersion"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -36,7 +1061,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "items": {
                     "$ref": "#/components/schemas/SharedCorpusSummary"
@@ -70,7 +1095,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/CorpusManifest"
                 }
@@ -109,7 +1134,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/RetrievalSearchResponse"
                 }
@@ -148,9 +1173,506 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/ContextBundle"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/qa/answer": {
+      "post": {
+        "summary": "Qa Answer",
+        "description": "Run rewrite, hybrid retrieval, answer synthesis, and memory persistence.",
+        "operationId": "qa_answer_api_v1_qa_answer_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QAAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/QAAnswerResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/chat/answer": {
+      "post": {
+        "summary": "Project Chat Answer",
+        "description": "Project-scoped conversational QA with membership enforced.",
+        "operationId": "project_chat_answer_api_v1_projects__project_id__chat_answer_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QAAnswerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/QAAnswerResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/conversations": {
+      "get": {
+        "summary": "Project Conversations",
+        "description": "List persisted QA conversations for a project the user can access.",
+        "operationId": "project_conversations_api_v1_projects__project_id__conversations_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConversationSummary"
+                  },
+                  "title": "Response Project Conversations Api V1 Projects  Project Id  Conversations Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/conversations/{conversation_id}/turns": {
+      "get": {
+        "summary": "Project Conversation Turns",
+        "description": "Return ordered QA turns for one project-scoped conversation.",
+        "operationId": "project_conversation_turns_api_v1_projects__project_id__conversations__conversation_id__turns_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MemoryTurn"
+                  },
+                  "title": "Response Project Conversation Turns Api V1 Projects  Project Id  Conversations  Conversation Id  Turns Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/workflow": {
+      "post": {
+        "summary": "Start Project Workflow",
+        "description": "Start workflow planning inside an authenticated research project.",
+        "operationId": "start_project_workflow_api_v1_projects__project_id__workflow_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectWorkflowStartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanningRunResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Project Workflow",
+        "operationId": "project_workflow_api_v1_projects__project_id__workflow_get",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControllerWorkflowState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/workflow/next": {
+      "post": {
+        "summary": "Project Workflow Next",
+        "operationId": "project_workflow_next_api_v1_projects__project_id__workflow_next_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRunResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/workflow/approve": {
+      "post": {
+        "summary": "Project Workflow Approve",
+        "operationId": "project_workflow_approve_api_v1_projects__project_id__workflow_approve_post",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowApprovalInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchState"
                 }
               }
             }
@@ -187,7 +1709,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/PlanningRunResult"
                 }
@@ -226,7 +1748,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/ControllerWorkflowState"
                 }
@@ -265,7 +1787,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkflowRunResult"
                 }
@@ -314,7 +1836,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/ResearchState"
                 }
@@ -342,7 +1864,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "items": {
                     "$ref": "#/components/schemas/AgentCapability"
@@ -364,13 +1886,34 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "items": {
                     "$ref": "#/components/schemas/OperatorSpec"
                   },
                   "type": "array",
                   "title": "Response Workflow Operators Api V1 Workflow Operators Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/workflow/runtime": {
+      "get": {
+        "summary": "Workflow Runtime",
+        "description": "Expose safe local capability status without returning executable paths.",
+        "operationId": "workflow_runtime_api_v1_workflow_runtime_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Workflow Runtime Api V1 Workflow Runtime Get"
                 }
               }
             }
@@ -397,7 +1940,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "type": "array",
                   "items": {
@@ -440,7 +1983,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "type": "array",
                   "items": {
@@ -483,7 +2026,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "type": "array",
                   "items": {
@@ -526,7 +2069,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "type": "array",
                   "items": {
@@ -569,7 +2112,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "type": "array",
                   "items": {
@@ -622,7 +2165,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/ResearchState"
                 }
@@ -671,7 +2214,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/ReproducibilityReviewRunResult"
                 }
@@ -720,7 +2263,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/DataPipelineState"
                 }
@@ -769,7 +2312,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/DataPipelineState"
                 }
@@ -818,7 +2361,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/DataPipelineState"
                 }
@@ -856,7 +2399,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/SourceDocument"
                 }
@@ -898,7 +2441,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "type": "array",
                   "items": {
@@ -953,7 +2496,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/SourceDocument"
                 }
@@ -1004,7 +2547,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "type": "array",
                   "items": {
@@ -1046,7 +2589,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "items": {
                     "$ref": "#/components/schemas/EvidenceSearchResult"
@@ -1101,7 +2644,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/EvidenceDetail"
                 }
@@ -1172,7 +2715,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/EvidenceRef"
                 }
@@ -1210,7 +2753,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/ContextBundle"
                 }
@@ -1261,7 +2804,7 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
+              "application/json; charset=utf-8": {
                 "schema": {
                   "$ref": "#/components/schemas/ContextBundle"
                 }
@@ -1333,117 +2876,7 @@
         "title": "AgentCapability",
         "description": "Machine-readable role boundary advertised to the Controller."
       },
-      "AgentResult-Input": {
-        "properties": {
-          "agent_run_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Agent Run Id"
-          },
-          "agent_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Agent Id"
-          },
-          "agent_version": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Agent Version"
-          },
-          "candidate_artifact_refs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Candidate Artifact Refs"
-          },
-          "candidate_artifacts": {
-            "items": {
-              "$ref": "#/components/schemas/CandidateArtifact"
-            },
-            "type": "array",
-            "title": "Candidate Artifacts"
-          },
-          "evidence_refs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Evidence Refs"
-          },
-          "llm_metadata_refs": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Llm Metadata Refs"
-          },
-          "tool_requests": {
-            "items": {
-              "$ref": "#/components/schemas/ToolRequest"
-            },
-            "type": "array",
-            "title": "Tool Requests"
-          },
-          "approval_requests": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Approval Requests"
-          },
-          "risk_flags": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Risk Flags"
-          },
-          "unresolved_questions": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Unresolved Questions"
-          },
-          "recommendations": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Recommendations"
-          },
-          "confidence": {
-            "anyOf": [
-              {
-                "type": "number",
-                "maximum": 1.0,
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Confidence"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Created At"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "agent_run_id",
-          "agent_id",
-          "agent_version",
-          "created_at"
-        ],
-        "title": "AgentResult",
-        "description": "Candidate outputs from an agent; governance fields are intentionally absent."
-      },
-      "AgentResult-Output": {
+      "AgentResult": {
         "properties": {
           "agent_run_id": {
             "type": "string",
@@ -1718,6 +3151,75 @@
             "type": "string",
             "minLength": 1,
             "title": "Formula Or Design"
+          },
+          "human_readable_formula": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Human Readable Formula"
+          },
+          "executable_fixed_formula": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executable Fixed Formula"
+          },
+          "groups_variable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groups Variable"
+          },
+          "re_formula": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Re Formula"
+          },
+          "primary_contrast_weights": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Primary Contrast Weights"
+          },
+          "reference_levels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Reference Levels"
+          },
+          "inference_contract_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inference Contract Ref"
           },
           "assumptions": {
             "items": {
@@ -2010,6 +3512,40 @@
         ],
         "title": "AssetRef",
         "description": "A relative, hash-addressed asset reference without a local absolute path."
+      },
+      "AuthTokenPair": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token"
+          },
+          "token_type": {
+            "type": "string",
+            "const": "bearer",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserProfile"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "access_token",
+          "refresh_token",
+          "expires_in",
+          "user"
+        ],
+        "title": "AuthTokenPair"
       },
       "Body_import_source_api_v1_sources_import_post": {
         "properties": {
@@ -2427,6 +3963,55 @@
         "title": "ControllerWorkflowState",
         "description": "Reference-only state owned and changed by the Controller."
       },
+      "ConversationSummary": {
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "title": "Conversation Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "last_question": {
+            "type": "string",
+            "title": "Last Question"
+          },
+          "last_answer_preview": {
+            "type": "string",
+            "title": "Last Answer Preview"
+          },
+          "turn_count": {
+            "type": "integer",
+            "title": "Turn Count"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "project_id",
+          "title",
+          "last_question",
+          "last_answer_preview",
+          "turn_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConversationSummary"
+      },
       "CorpusAccessMode": {
         "type": "string",
         "enum": [
@@ -2560,52 +4145,10 @@
         "title": "CorpusManifest",
         "description": "Versioned declaration of all assets needed by a shared corpus."
       },
-      "DataAnalysisPreAnalysisOutcome-Input": {
+      "DataAnalysisPreAnalysisOutcome": {
         "properties": {
           "agent_result": {
-            "$ref": "#/components/schemas/AgentResult-Input"
-          },
-          "readiness_report": {
-            "$ref": "#/components/schemas/AnalysisReadinessReport"
-          },
-          "data_audit_specification": {
-            "$ref": "#/components/schemas/DataAuditSpecification"
-          },
-          "data_processing_plan_candidate": {
-            "$ref": "#/components/schemas/DataProcessingPlanCandidate"
-          },
-          "executable_plan_candidate": {
-            "$ref": "#/components/schemas/ExecutableAnalysisPlanCandidate"
-          },
-          "code_specification_draft": {
-            "$ref": "#/components/schemas/CodeSpecificationDraft"
-          },
-          "model_diagnostic_recommendation": {
-            "$ref": "#/components/schemas/ModelDiagnosticRecommendation"
-          },
-          "robustness_check_plan": {
-            "$ref": "#/components/schemas/RobustnessCheckPlan"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "agent_result",
-          "readiness_report",
-          "data_audit_specification",
-          "data_processing_plan_candidate",
-          "executable_plan_candidate",
-          "code_specification_draft",
-          "model_diagnostic_recommendation",
-          "robustness_check_plan"
-        ],
-        "title": "DataAnalysisPreAnalysisOutcome",
-        "description": "Complete, proposal-only package returned by PRE_ANALYSIS."
-      },
-      "DataAnalysisPreAnalysisOutcome-Output": {
-        "properties": {
-          "agent_result": {
-            "$ref": "#/components/schemas/AgentResult-Output"
+            "$ref": "#/components/schemas/AgentResult"
           },
           "readiness_report": {
             "$ref": "#/components/schemas/AnalysisReadinessReport"
@@ -2828,7 +4371,7 @@
             "title": "Preregistration Approval Ref"
           },
           "pre_analysis": {
-            "$ref": "#/components/schemas/DataAnalysisPreAnalysisOutcome-Input"
+            "$ref": "#/components/schemas/DataAnalysisPreAnalysisOutcome"
           },
           "model_specification": {
             "$ref": "#/components/schemas/AnalysisModelSpecification"
@@ -2890,7 +4433,7 @@
             "title": "Preregistration Approval Ref"
           },
           "pre_analysis": {
-            "$ref": "#/components/schemas/DataAnalysisPreAnalysisOutcome-Output"
+            "$ref": "#/components/schemas/DataAnalysisPreAnalysisOutcome"
           },
           "model_specification": {
             "$ref": "#/components/schemas/AnalysisModelSpecification"
@@ -2927,6 +4470,39 @@
               }
             ],
             "title": "Code Review Ref"
+          },
+          "spss_code_artifact_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spss Code Artifact Ref"
+          },
+          "spss_execution_run_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spss Execution Run Ref"
+          },
+          "result_consistency_report_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Consistency Report Ref"
           },
           "raw_dataset": {
             "anyOf": [
@@ -3113,6 +4689,222 @@
           "PROJECT"
         ],
         "title": "DecisionScope"
+      },
+      "DocumentCreateRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 180,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "document_type": {
+            "type": "string",
+            "enum": [
+              "manuscript",
+              "reference",
+              "dataset",
+              "protocol",
+              "note"
+            ],
+            "title": "Document Type",
+            "default": "manuscript"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "markdown",
+              "text",
+              "pdf",
+              "docx",
+              "csv"
+            ],
+            "title": "Format",
+            "default": "markdown"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 1000000,
+            "title": "Content",
+            "default": ""
+          },
+          "change_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "DocumentCreateRequest"
+      },
+      "DocumentPatchRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 180,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "document_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "manuscript",
+                  "reference",
+                  "dataset",
+                  "protocol",
+                  "note"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Type"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "archived"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DocumentPatchRequest"
+      },
+      "DocumentVersion": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "markdown",
+              "text",
+              "pdf",
+              "docx",
+              "csv"
+            ],
+            "title": "Format"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "storage_ref": {
+            "type": "string",
+            "title": "Storage Ref"
+          },
+          "change_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Note"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "document_id",
+          "project_id",
+          "version",
+          "format",
+          "content",
+          "sha256",
+          "size_bytes",
+          "storage_ref",
+          "created_by",
+          "created_at"
+        ],
+        "title": "DocumentVersion"
+      },
+      "DocumentVersionCreateRequest": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 1000000,
+            "title": "Content"
+          },
+          "change_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "DocumentVersionCreateRequest"
       },
       "EvidenceDetail": {
         "properties": {
@@ -3577,6 +5369,16 @@
             "minLength": 64,
             "title": "Sha256"
           },
+          "raw_bytes_sha256": {
+            "type": "string",
+            "title": "Raw Bytes Sha256",
+            "default": ""
+          },
+          "canonical_content_sha256": {
+            "type": "string",
+            "title": "Canonical Content Sha256",
+            "default": ""
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -3826,6 +5628,29 @@
         "description": "Human review state for an interpretation; distinct from numeric validity."
       },
       "JsonValue": {},
+      "LoginRequest": {
+        "properties": {
+          "login": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 1,
+            "title": "Login"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "login",
+          "password"
+        ],
+        "title": "LoginRequest"
+      },
       "ManuscriptNumericClaim": {
         "properties": {
           "claim_ref": {
@@ -3889,6 +5714,73 @@
           "summary"
         ],
         "title": "MemoryRef"
+      },
+      "MemoryTurn": {
+        "properties": {
+          "memory_id": {
+            "type": "string",
+            "title": "Memory Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "title": "Conversation Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "rewritten_query": {
+            "type": "string",
+            "title": "Rewritten Query"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "route": {
+            "type": "string",
+            "title": "Route"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/QAReference"
+            },
+            "type": "array",
+            "title": "Citations"
+          },
+          "retrieval_trace_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Trace Ref"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "memory_id",
+          "conversation_id",
+          "project_id",
+          "question",
+          "rewritten_query",
+          "answer",
+          "route",
+          "created_at"
+        ],
+        "title": "MemoryTurn"
       },
       "ModelDiagnosticRecommendation": {
         "properties": {
@@ -4141,7 +6033,7 @@
             "$ref": "#/components/schemas/ControllerWorkflowState"
           },
           "agent_result": {
-            "$ref": "#/components/schemas/AgentResult-Output"
+            "$ref": "#/components/schemas/AgentResult"
           },
           "approval_request": {
             "$ref": "#/components/schemas/ApprovalRequest"
@@ -4195,6 +6087,16 @@
             "minLength": 64,
             "title": "Sha256"
           },
+          "raw_bytes_sha256": {
+            "type": "string",
+            "title": "Raw Bytes Sha256",
+            "default": ""
+          },
+          "canonical_content_sha256": {
+            "type": "string",
+            "title": "Canonical Content Sha256",
+            "default": ""
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -4237,6 +6139,209 @@
         ],
         "title": "ProcessedDatasetRef"
       },
+      "ProjectCreateRequest": {
+        "properties": {
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "research_direction": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Research Direction"
+          },
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "research_direction"
+        ],
+        "title": "ProjectCreateRequest"
+      },
+      "ProjectDocument": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "document_type": {
+            "type": "string",
+            "enum": [
+              "manuscript",
+              "reference",
+              "dataset",
+              "protocol",
+              "note"
+            ],
+            "title": "Document Type"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "markdown",
+              "text",
+              "pdf",
+              "docx",
+              "csv"
+            ],
+            "title": "Format"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "title": "Status",
+            "default": "active"
+          },
+          "current_version": {
+            "type": "integer",
+            "title": "Current Version"
+          },
+          "current_sha256": {
+            "type": "string",
+            "title": "Current Sha256"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          },
+          "updated_by": {
+            "type": "string",
+            "title": "Updated By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "document_id",
+          "project_id",
+          "title",
+          "document_type",
+          "format",
+          "current_version",
+          "current_sha256",
+          "size_bytes",
+          "created_by",
+          "updated_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ProjectDocument"
+      },
+      "ProjectPatchRequest": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 160,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "research_direction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Research Direction"
+          },
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "archived"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ProjectPatchRequest"
+      },
       "ProjectStage": {
         "type": "string",
         "enum": [
@@ -4257,6 +6362,459 @@
           "FAILED"
         ],
         "title": "ProjectStage"
+      },
+      "ProjectWorkflowStartRequest": {
+        "properties": {
+          "research_intent": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Research Intent"
+          },
+          "context_bundle_ref": {
+            "type": "string",
+            "title": "Context Bundle Ref",
+            "default": "context://initial"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "research_intent"
+        ],
+        "title": "ProjectWorkflowStartRequest"
+      },
+      "QAAnswerRequest": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Project Id"
+          },
+          "question": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Question"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ContextMode",
+            "default": "discovery"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "context_bundle_ref": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Bundle Ref"
+          },
+          "top_k": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "default": 8
+          },
+          "token_budget": {
+            "type": "integer",
+            "maximum": 20000.0,
+            "minimum": 256.0,
+            "title": "Token Budget",
+            "default": 3000
+          },
+          "allow_llm": {
+            "type": "boolean",
+            "title": "Allow Llm",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "question"
+        ],
+        "title": "QAAnswerRequest"
+      },
+      "QAAnswerResponse": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "title": "Conversation Id"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "rewritten_query": {
+            "type": "string",
+            "title": "Rewritten Query"
+          },
+          "route": {
+            "$ref": "#/components/schemas/QARouteDecision"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/QAReference"
+            },
+            "type": "array",
+            "title": "Citations"
+          },
+          "retrieval_status": {
+            "type": "string",
+            "title": "Retrieval Status"
+          },
+          "retrieval_trace_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieval Trace Ref"
+          },
+          "context_bundle_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Bundle Ref"
+          },
+          "memory_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Ref"
+          },
+          "risk_flags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Risk Flags"
+          },
+          "answer_mode": {
+            "type": "string",
+            "enum": [
+              "llm",
+              "fallback"
+            ],
+            "title": "Answer Mode",
+            "default": "fallback"
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 0.0
+          },
+          "needs_follow_up": {
+            "type": "boolean",
+            "title": "Needs Follow Up",
+            "default": false
+          },
+          "follow_up_question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follow Up Question"
+          },
+          "tool_calls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tool Calls"
+          },
+          "workflow_action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QAWorkflowAction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "conversation_id",
+          "question",
+          "rewritten_query",
+          "route",
+          "answer",
+          "retrieval_status"
+        ],
+        "title": "QAAnswerResponse"
+      },
+      "QAReference": {
+        "properties": {
+          "paper_title": {
+            "type": "string",
+            "title": "Paper Title"
+          },
+          "source_filename": {
+            "type": "string",
+            "title": "Source Filename"
+          },
+          "canonical_paper_id": {
+            "type": "string",
+            "title": "Canonical Paper Id"
+          },
+          "canonical_chunk_id": {
+            "type": "string",
+            "title": "Canonical Chunk Id"
+          },
+          "chunk_index": {
+            "type": "integer",
+            "title": "Chunk Index"
+          },
+          "excerpt": {
+            "type": "string",
+            "title": "Excerpt"
+          },
+          "normalized_doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Doi"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "chunk",
+              "paper"
+            ],
+            "title": "Source Type",
+            "default": "chunk"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "paper_title",
+          "source_filename",
+          "canonical_paper_id",
+          "canonical_chunk_id",
+          "chunk_index",
+          "excerpt"
+        ],
+        "title": "QAReference"
+      },
+      "QARouteDecision": {
+        "properties": {
+          "route": {
+            "type": "string",
+            "enum": [
+              "hybrid_search",
+              "graph_search",
+              "vector_search",
+              "paper_lookup",
+              "workflow_agent",
+              "external_paper_search",
+              "direct_answer"
+            ],
+            "title": "Route",
+            "default": "hybrid_search"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "recommended_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommended Agent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "QARouteDecision"
+      },
+      "QAWorkflowAction": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "STARTED",
+              "STATUS",
+              "NEXT_AGENT",
+              "APPROVAL_READY",
+              "PROPOSAL_ONLY",
+              "UNAVAILABLE"
+            ],
+            "title": "Action"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "current_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Stage"
+          },
+          "selected_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Agent"
+          },
+          "approval_required": {
+            "type": "boolean",
+            "title": "Approval Required",
+            "default": false
+          },
+          "confirmation_required": {
+            "type": "boolean",
+            "title": "Confirmation Required",
+            "default": false
+          },
+          "approval_request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Request Id"
+          },
+          "approval_request": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Request"
+          },
+          "workflow_state": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow State"
+          },
+          "artifacts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Artifacts"
+          },
+          "next_available_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Next Available Actions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "project_id",
+          "message"
+        ],
+        "title": "QAWorkflowAction",
+        "description": "A bounded workflow action reported by the conversational facade."
       },
       "RawDatasetRef": {
         "properties": {
@@ -4286,6 +6844,16 @@
             "minLength": 64,
             "title": "Sha256"
           },
+          "raw_bytes_sha256": {
+            "type": "string",
+            "title": "Raw Bytes Sha256",
+            "default": ""
+          },
+          "canonical_content_sha256": {
+            "type": "string",
+            "title": "Canonical Content Sha256",
+            "default": ""
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -4302,7 +6870,8 @@
           "sha256",
           "created_at"
         ],
-        "title": "RawDatasetRef"
+        "title": "RawDatasetRef",
+        "description": "Read-only original upload; its canonical hash is observational only."
       },
       "ReproducibilityReviewOutcome": {
         "properties": {
@@ -4396,6 +6965,77 @@
         ],
         "title": "ReproducibilityReviewRunResult",
         "description": "Controller-routed reviewer output; the Reviewer never sets workflow state."
+      },
+      "ResearchProject": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "owner_user_id": {
+            "type": "string",
+            "title": "Owner User Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "research_direction": {
+            "type": "string",
+            "title": "Research Direction"
+          },
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "title": "Status",
+            "default": "active"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "editor",
+              "viewer"
+            ],
+            "title": "Role",
+            "default": "owner"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project_id",
+          "owner_user_id",
+          "title",
+          "research_direction",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ResearchProject"
       },
       "ResearchState": {
         "properties": {
@@ -4667,6 +7307,147 @@
             },
             "type": "array",
             "title": "Finding Refs"
+          },
+          "fit_converged": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fit Converged"
+          },
+          "optimizer_warning": {
+            "type": "boolean",
+            "title": "Optimizer Warning",
+            "default": false
+          },
+          "variance_boundary": {
+            "type": "boolean",
+            "title": "Variance Boundary",
+            "default": false
+          },
+          "rank_deficient": {
+            "type": "boolean",
+            "title": "Rank Deficient",
+            "default": false
+          },
+          "nonfinite_inference": {
+            "type": "boolean",
+            "title": "Nonfinite Inference",
+            "default": false
+          },
+          "design_matrix_rank": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Design Matrix Rank"
+          },
+          "design_columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Design Columns"
+          },
+          "group_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Group Counts"
+          },
+          "sequence_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Sequence Counts"
+          },
+          "task_period_row_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Task Period Row Counts"
+          },
+          "variance_boundary_policy_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variance Boundary Policy Version"
+          },
+          "variance_boundary_threshold": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variance Boundary Threshold"
+          },
+          "random_intercept_variance": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Random Intercept Variance"
+          },
+          "residual_variance": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Variance"
+          },
+          "random_to_residual_variance_ratio": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Random To Residual Variance Ratio"
+          },
+          "diagnostics_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diagnostics Ref"
           }
         },
         "additionalProperties": false,
@@ -4767,6 +7548,82 @@
               "UNRESOLVED"
             ],
             "title": "Locator Status"
+          },
+          "source_locator_method": {
+            "type": "string",
+            "enum": [
+              "PAGE_TEXT_EXACT",
+              "NORMALIZED_TEXT_MATCH",
+              "UNRESOLVED"
+            ],
+            "title": "Source Locator Method",
+            "default": "UNRESOLVED"
+          },
+          "verification_status": {
+            "type": "string",
+            "enum": [
+              "demo_seed",
+              "model_generated_unverified",
+              "source_verified",
+              "human_verified"
+            ],
+            "title": "Verification Status",
+            "default": "model_generated_unverified"
+          },
+          "pdf_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Sha256"
+          },
+          "page_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Start"
+          },
+          "page_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page End"
+          },
+          "char_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Char Start"
+          },
+          "char_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Char End"
           },
           "retrieval_modalities": {
             "items": {
@@ -5230,6 +8087,13 @@
           "decision_scope": {
             "$ref": "#/components/schemas/DecisionScope"
           },
+          "blocked_target_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blocked Target Ids"
+          },
           "risk_level": {
             "type": "string",
             "title": "Risk Level",
@@ -5279,7 +8143,9 @@
           "SUCCEEDED",
           "FAILED",
           "TERMINATED",
-          "BLOCKED"
+          "BLOCKED",
+          "NEEDS_REVIEW",
+          "NOT_STARTED"
         ],
         "title": "RunStatus"
       },
@@ -5553,6 +8419,22 @@
         ],
         "title": "TaskStatus"
       },
+      "TokenRefreshRequest": {
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 32,
+            "title": "Refresh Token"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "refresh_token"
+        ],
+        "title": "TokenRefreshRequest"
+      },
       "ToolRequest": {
         "properties": {
           "request_id": {
@@ -5594,6 +8476,91 @@
         ],
         "title": "ToolRequest",
         "description": "A request for a deterministic operator; it is not an execution command."
+      },
+      "UserCreateRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 3,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$",
+            "title": "Username"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 3,
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 8,
+            "title": "Password"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "username",
+          "email",
+          "password"
+        ],
+        "title": "UserCreateRequest"
+      },
+      "UserProfile": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_id",
+          "username",
+          "email",
+          "created_at"
+        ],
+        "title": "UserProfile"
       },
       "ValidationError": {
         "properties": {
@@ -5719,7 +8686,7 @@
             "$ref": "#/components/schemas/ControllerWorkflowState"
           },
           "agent_result": {
-            "$ref": "#/components/schemas/AgentResult-Output"
+            "$ref": "#/components/schemas/AgentResult"
           },
           "approval_request": {
             "$ref": "#/components/schemas/ApprovalRequest"

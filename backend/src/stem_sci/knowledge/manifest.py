@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 
+from .locator import LocatorIndex
 from .models import AssetCheck, AssetRef, CorpusManifest, CorpusReadiness
 
 
@@ -53,13 +54,17 @@ class CorpusRegistry:
             if check.state != "READY" and check.required
         ]
         discovery_ready = not base_risks
-        formal_ready = discovery_ready and manifest.locator_index is not None
+        locator_ready = False
         risks = list(base_risks)
         if manifest.locator_index is None:
             risks.append("formal_locator_index_unavailable")
-        elif self._check(manifest.locator_index).state != "READY":
-            formal_ready = False
-            risks.append("formal_locator_index_invalid")
+        else:
+            locator_check = self._locator_check(manifest)
+            checks.append(locator_check)
+            locator_ready = locator_check.state == "READY"
+            if not locator_ready:
+                risks.append("formal_locator_index_invalid")
+        formal_ready = discovery_ready and locator_ready
         return CorpusReadiness(
             corpus_id=manifest.corpus_id,
             corpus_version=manifest.corpus_version,
@@ -195,6 +200,46 @@ class CorpusRegistry:
             relative_path=f"{reference.relative_path}#content",
             state="READY" if valid else "CONTENT_MISMATCH",
             required=reference.required,
+        )
+
+    def _locator_check(self, manifest: CorpusManifest) -> AssetCheck:
+        """Validate locator structure, coverage, and every referenced PDF hash."""
+
+        reference = manifest.locator_index
+        if reference is None:
+            raise ValueError("locator check requires a declared locator index")
+        asset_check = self._check(reference)
+        if asset_check.state != "READY":
+            return asset_check.model_copy(update={"required": False})
+        valid = False
+        try:
+            index = LocatorIndex.from_path(self.asset_path(reference))
+            valid = (
+                index.corpus_id == manifest.corpus_id
+                and index.corpus_version == manifest.corpus_version
+                and index.paper_count == manifest.paper_count
+                and index.chunk_count == manifest.vector_chunk_count
+                and index.source_verified_count > 0
+            )
+            pdf_root = self.pdf_root_path(manifest)
+            expected_hashes: dict[str, str] = {}
+            for record in index.records:
+                previous = expected_hashes.setdefault(record.pdf_relative_path, record.pdf_sha256)
+                valid = valid and previous == record.pdf_sha256
+            for relative_path, expected_hash in expected_hashes.items():
+                candidate = (pdf_root / relative_path).resolve()
+                if pdf_root not in candidate.parents or not candidate.is_file():
+                    valid = False
+                    break
+                if self._sha256(candidate) != expected_hash:
+                    valid = False
+                    break
+        except (OSError, UnicodeDecodeError, ValueError):
+            valid = False
+        return AssetCheck(
+            relative_path=f"{reference.relative_path}#content",
+            state="READY" if valid else "CONTENT_MISMATCH",
+            required=False,
         )
 
     @staticmethod
