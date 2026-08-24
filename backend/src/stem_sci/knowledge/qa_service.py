@@ -17,6 +17,7 @@ from .models import ContextMode, RetrievalSearchRequest, RetrievalSearchResponse
 from .normalization import expanded_query, normalize_doi, normalize_text
 from .qa_memory import ConversationMemoryStore
 from .qa_models import (
+    ConversationSummary,
     MemoryTurn,
     QAAnswerRecord,
     QAAnswerRequest,
@@ -78,7 +79,11 @@ class QuestionAnswerService:
 
     def answer(self, request: QAAnswerRequest) -> QAAnswerResponse:
         conversation_id = request.conversation_id or f"conv_{uuid4().hex}"
-        history = self._memory_store.recent_turns(conversation_id, limit=4)
+        history = self._memory_store.recent_turns(
+            conversation_id,
+            limit=4,
+            project_id=request.project_id,
+        )
         rewritten_query = self._rewrite_query(request.question, history)
         route = self._route(request.question, rewritten_query, history)
 
@@ -87,7 +92,7 @@ class QuestionAnswerService:
                 project_id=request.project_id,
                 corpus_ids=["physics_stem_v1"],
                 query=rewritten_query,
-                mode=ContextMode.DISCOVERY,
+                mode=request.mode,
                 limit=request.top_k,
             )
         )
@@ -96,7 +101,7 @@ class QuestionAnswerService:
             task_ref=request.context_bundle_ref or conversation_id,
             query=rewritten_query,
             token_budget=request.token_budget,
-            mode="discovery",
+            mode=request.mode.value,
         )
         citations = self._build_citations(retrieval)
         allow_llm = (
@@ -114,6 +119,7 @@ class QuestionAnswerService:
             citations=citations,
             history=history,
             allow_llm=allow_llm,
+            mode=request.mode,
         )
         if agentic_result is not None:
             (
@@ -174,6 +180,27 @@ class QuestionAnswerService:
             follow_up_question=answer_record.follow_up_question,
             tool_calls=tool_calls,
             workflow_action=workflow_action,
+        )
+
+    def list_conversations(
+        self,
+        project_id: str,
+        *,
+        limit: int = 50,
+    ) -> list[ConversationSummary]:
+        return self._memory_store.list_conversations(project_id, limit=limit)
+
+    def conversation_turns(
+        self,
+        project_id: str,
+        conversation_id: str,
+        *,
+        limit: int = 100,
+    ) -> list[MemoryTurn]:
+        return self._memory_store.conversation_turns(
+            project_id=project_id,
+            conversation_id=conversation_id,
+            limit=limit,
         )
 
     def _rewrite_query(self, question: str, history: list[MemoryTurn]) -> str:
@@ -264,6 +291,7 @@ class QuestionAnswerService:
         citations: list[QAReference],
         history: list[MemoryTurn],
         allow_llm: bool,
+        mode: ContextMode,
     ) -> tuple[
         QAAnswerRecord,
         QARouteDecision,
@@ -355,6 +383,7 @@ class QuestionAnswerService:
                     arguments=call.arguments,
                     project_id=request.project_id,
                     default_query=rewritten_query,
+                    mode=mode,
                 )
                 workflow_payload = result.get("workflow_action")
                 if isinstance(workflow_payload, Mapping):
@@ -377,7 +406,7 @@ class QuestionAnswerService:
                             task_ref=context_bundle.task_ref,
                             query=tool_query,
                             token_budget=context_bundle.token_budget,
-                            mode="discovery",
+                            mode=mode.value,
                         )
                     except ValueError:
                         active_retrieval = retrieval

@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, File, Form, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -16,6 +16,18 @@ from dotenv import load_dotenv
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .agents import AgentCapability, ReviewFinding
+from .accounts import (
+    AuthError,
+    AuthTokenPair,
+    IdentityService,
+    LoginRequest,
+    ProjectCreateRequest,
+    ProjectPatchRequest,
+    ResearchProject,
+    TokenRefreshRequest,
+    UserCreateRequest,
+    UserProfile,
+)
 from .agents.runtime import GPTProvider, StructuredGenerator
 from .artifacts.artifact_store import SQLiteArtifactStore
 from .artifacts.content_store import ArtifactContent, SQLiteArtifactContentStore
@@ -53,6 +65,15 @@ from .controller import (
 from .controller.policy.route_decision import RouteDecision
 from .controller.policy.route_store import SQLiteRouteDecisionStore
 from .core.state import ResearchState
+from .documents import (
+    DocumentCreateRequest,
+    DocumentError,
+    DocumentPatchRequest,
+    DocumentService,
+    DocumentVersion,
+    DocumentVersionCreateRequest,
+    ProjectDocument,
+)
 from .operators.executor import OperatorExecutor
 from .operators.knowledge import KnowledgeOperatorRuntime
 from .operators.models import OperatorRun, OperatorSpec
@@ -61,9 +82,11 @@ from .provenance.agent_run_store import SQLiteAgentRunStore
 from .provenance.models import AgentRunRecord
 from .settings import ConfigurationReport, validate_environment
 from .knowledge import (
+    ConversationSummary,
     CorpusManifest,
     HybridContextBuildRequest,
     HybridKnowledgeService,
+    MemoryTurn,
     QAAnswerRequest,
     QAAnswerResponse,
     QuestionAnswerService,
@@ -123,13 +146,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 storage_root = Path(os.getenv("STEM_SCI_STORAGE_DIR", ".stem_sci"))
 service = ContextService(storage_root, max_upload_bytes=_max_upload_bytes())
 knowledge_service = HybridKnowledgeService(service, CorpusRegistry())
 workflow_database = storage_root / "workflow.db"
+identity_service = IdentityService(storage_root / "identity.db")
+document_service = DocumentService(storage_root / "documents.db", storage_root / "project-documents")
 
 
 def _configured_agent_registry() -> AgentRegistry:
@@ -218,11 +243,32 @@ class WorkflowProjectRequest(BaseModel):
     run_id: str | None = None
 
 
+class ProjectWorkflowStartRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    research_intent: str = Field(min_length=1)
+    context_bundle_ref: str = "context://initial"
+    run_id: str | None = None
+
+
 class WorkflowApprovalInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     decision: str = Field(min_length=1)
     decided_by: str = Field(min_length=1)
+
+
+def _access_token(authorization: Annotated[str | None, Header()] = None) -> str:
+    if authorization is None:
+        raise AuthError(401, "missing_access_token", "Authorization bearer token is required")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise AuthError(401, "invalid_authorization_header", "Authorization must use Bearer token")
+    return token.strip()
+
+
+def current_user(token: Annotated[str, Depends(_access_token)]) -> UserProfile:
+    return identity_service.user_for_access_token(token)
 
 
 @app.exception_handler(ContextInputError)
@@ -233,6 +279,16 @@ async def handle_context_input(_: Request, error: ContextInputError) -> JSONResp
 @app.exception_handler(ContextNotFoundError)
 async def handle_not_found(_: Request, error: ContextNotFoundError) -> JSONResponse:
     return _error(404, "not_found", f"{error.resource} was not found")
+
+
+@app.exception_handler(AuthError)
+async def handle_auth_error(_: Request, error: AuthError) -> JSONResponse:
+    return _error(error.status_code, error.code, error.message)
+
+
+@app.exception_handler(DocumentError)
+async def handle_document_error(_: Request, error: DocumentError) -> JSONResponse:
+    return _error(error.status_code, error.code, error.message)
 
 
 @app.exception_handler(ValueError)
@@ -276,6 +332,174 @@ def health() -> dict[str, object]:
         "configuration_valid": configuration_report.valid,
         "warnings": list(configuration_report.warnings),
     }
+
+
+@app.post("/api/v1/auth/register", response_model=AuthTokenPair)
+def auth_register(request: UserCreateRequest) -> AuthTokenPair:
+    """Create a user and return an immediately usable session."""
+    return identity_service.register(request)
+
+
+@app.post("/api/v1/auth/login", response_model=AuthTokenPair)
+def auth_login(request: LoginRequest) -> AuthTokenPair:
+    return identity_service.login(request)
+
+
+@app.post("/api/v1/auth/refresh", response_model=AuthTokenPair)
+def auth_refresh(request: TokenRefreshRequest) -> AuthTokenPair:
+    return identity_service.refresh(request)
+
+
+@app.post("/api/v1/auth/logout")
+def auth_logout(token: Annotated[str, Depends(_access_token)]) -> dict[str, str]:
+    identity_service.logout(token)
+    return {"status": "ok"}
+
+
+@app.get("/api/v1/auth/me", response_model=UserProfile)
+def auth_me(user: Annotated[UserProfile, Depends(current_user)]) -> UserProfile:
+    return user
+
+
+@app.get("/api/v1/projects", response_model=list[ResearchProject])
+def projects(user: Annotated[UserProfile, Depends(current_user)]) -> list[ResearchProject]:
+    return identity_service.list_projects(user)
+
+
+@app.post("/api/v1/projects", response_model=ResearchProject)
+def create_project(
+    request: ProjectCreateRequest,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> ResearchProject:
+    return identity_service.create_project(user, request)
+
+
+@app.get("/api/v1/projects/{project_id}", response_model=ResearchProject)
+def project(
+    project_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> ResearchProject:
+    return identity_service.get_project(user, project_id)
+
+
+@app.patch("/api/v1/projects/{project_id}", response_model=ResearchProject)
+def patch_project(
+    project_id: str,
+    request: ProjectPatchRequest,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> ResearchProject:
+    return identity_service.patch_project(user, project_id, request)
+
+
+@app.delete("/api/v1/projects/{project_id}")
+def delete_project(
+    project_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> dict[str, str]:
+    identity_service.delete_project(user, project_id)
+    return {"status": "deleted"}
+
+
+@app.get("/api/v1/projects/{project_id}/documents", response_model=list[ProjectDocument])
+def project_documents(
+    project_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> list[ProjectDocument]:
+    identity_service.get_project(user, project_id)
+    return document_service.list_project(project_id)
+
+
+@app.post("/api/v1/projects/{project_id}/documents", response_model=ProjectDocument)
+def create_project_document(
+    project_id: str,
+    request: DocumentCreateRequest,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> ProjectDocument:
+    identity_service.get_project(user, project_id)
+    return document_service.create(project_id=project_id, user=user, request=request)
+
+
+@app.get("/api/v1/projects/{project_id}/documents/{document_id}", response_model=ProjectDocument)
+def project_document(
+    project_id: str,
+    document_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> ProjectDocument:
+    identity_service.get_project(user, project_id)
+    return document_service.get(project_id, document_id)
+
+
+@app.patch("/api/v1/projects/{project_id}/documents/{document_id}", response_model=ProjectDocument)
+def patch_project_document(
+    project_id: str,
+    document_id: str,
+    request: DocumentPatchRequest,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> ProjectDocument:
+    identity_service.get_project(user, project_id)
+    return document_service.patch(
+        project_id=project_id,
+        document_id=document_id,
+        user=user,
+        request=request,
+    )
+
+
+@app.delete("/api/v1/projects/{project_id}/documents/{document_id}")
+def delete_project_document(
+    project_id: str,
+    document_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> dict[str, str]:
+    identity_service.get_project(user, project_id)
+    document_service.delete(project_id=project_id, document_id=document_id, user=user)
+    return {"status": "deleted"}
+
+
+@app.get(
+    "/api/v1/projects/{project_id}/documents/{document_id}/versions",
+    response_model=list[DocumentVersion],
+)
+def project_document_versions(
+    project_id: str,
+    document_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> list[DocumentVersion]:
+    identity_service.get_project(user, project_id)
+    return document_service.list_versions(project_id, document_id)
+
+
+@app.post(
+    "/api/v1/projects/{project_id}/documents/{document_id}/versions",
+    response_model=DocumentVersion,
+)
+def create_project_document_version(
+    project_id: str,
+    document_id: str,
+    request: DocumentVersionCreateRequest,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> DocumentVersion:
+    identity_service.get_project(user, project_id)
+    return document_service.create_version(
+        project_id=project_id,
+        document_id=document_id,
+        user=user,
+        request=request,
+    )
+
+
+@app.get(
+    "/api/v1/projects/{project_id}/documents/{document_id}/versions/{version}",
+    response_model=DocumentVersion,
+)
+def project_document_version(
+    project_id: str,
+    document_id: str,
+    version: int,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> DocumentVersion:
+    identity_service.get_project(user, project_id)
+    return document_service.get_version(project_id, document_id, version)
 
 
 @app.get("/api/v1/corpora", response_model=list[SharedCorpusSummary])
@@ -323,6 +547,101 @@ def qa_answer(request: QAAnswerRequest) -> QAAnswerResponse:
     """Run rewrite, hybrid retrieval, answer synthesis, and memory persistence."""
 
     return qa_service.answer(request)
+
+
+@app.post("/api/v1/projects/{project_id}/chat/answer", response_model=QAAnswerResponse)
+def project_chat_answer(
+    project_id: str,
+    request: QAAnswerRequest,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> QAAnswerResponse:
+    """Project-scoped conversational QA with membership enforced."""
+
+    if request.project_id != project_id:
+        raise ContextInputError("project_mismatch", "path project_id does not match request project_id")
+    identity_service.get_project(user, project_id)
+    return qa_service.answer(request)
+
+
+@app.get("/api/v1/projects/{project_id}/conversations", response_model=list[ConversationSummary])
+def project_conversations(
+    project_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> list[ConversationSummary]:
+    """List persisted QA conversations for a project the user can access."""
+
+    identity_service.get_project(user, project_id)
+    return qa_service.list_conversations(project_id, limit=limit)
+
+
+@app.get(
+    "/api/v1/projects/{project_id}/conversations/{conversation_id}/turns",
+    response_model=list[MemoryTurn],
+)
+def project_conversation_turns(
+    project_id: str,
+    conversation_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+) -> list[MemoryTurn]:
+    """Return ordered QA turns for one project-scoped conversation."""
+
+    identity_service.get_project(user, project_id)
+    return qa_service.conversation_turns(project_id, conversation_id, limit=limit)
+
+
+@app.post("/api/v1/projects/{project_id}/workflow")
+def start_project_workflow(
+    project_id: str,
+    request: ProjectWorkflowStartRequest,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> PlanningRunResult:
+    """Start workflow planning inside an authenticated research project."""
+
+    identity_service.get_project(user, project_id)
+    return workflow_controller.start_planning(
+        PlanningRequest(
+            project_id=project_id,
+            research_intent=request.research_intent,
+            context_bundle_ref=request.context_bundle_ref,
+            run_id=request.run_id or f"planning-{project_id}",
+        )
+    )
+
+
+@app.get("/api/v1/projects/{project_id}/workflow")
+def project_workflow(
+    project_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> ControllerWorkflowState:
+    identity_service.get_project(user, project_id)
+    return workflow_controller.get_state(project_id)
+
+
+@app.post("/api/v1/projects/{project_id}/workflow/next")
+def project_workflow_next(
+    project_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> WorkflowRunResult:
+    identity_service.get_project(user, project_id)
+    return workflow_controller.run_next(project_id)
+
+
+@app.post("/api/v1/projects/{project_id}/workflow/approve")
+def project_workflow_approve(
+    project_id: str,
+    request: WorkflowApprovalInput,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> ResearchState:
+    identity_service.get_project(user, project_id)
+    approval = workflow_controller.get_pending_approval(project_id)
+    return workflow_controller.resume_approval(
+        project_id,
+        approval,
+        decision=request.decision,
+        decided_by=request.decided_by,
+    )
 
 
 @app.post("/api/v1/workflow/projects")

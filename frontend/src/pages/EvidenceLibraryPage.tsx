@@ -6,13 +6,19 @@ import { GateSummary } from "../components/GateSummary";
 import { TechnicalTrace } from "../components/TechnicalTrace";
 import { buildCorpusView, buildEvidenceCoverage, evidenceView } from "../utils/researchViewModel";
 import type { EvidenceViewModel } from "../types/research";
+import { demoCorpus, demoRetrieval } from "../demo/data";
 
 export function EvidenceLibraryPage() {
-  const [projectId, setProjectId] = useState(import.meta.env.VITE_PROJECT_ID ?? "physics-ai-demo");
+  const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
+  const [projectId, setProjectId] = useState(
+    import.meta.env.VITE_PROJECT_ID && import.meta.env.VITE_PROJECT_ID !== "demo"
+      ? import.meta.env.VITE_PROJECT_ID
+      : "physics-ai-demo",
+  );
   const [query, setQuery] = useState("生成式 AI 支架 物理建模 师范生");
   const [mode, setMode] = useState<SharedContextMode>("discovery");
-  const [corpus, setCorpus] = useState<SharedCorpusSummary | null>(null);
-  const [result, setResult] = useState<SharedRetrievalResponse | null>(null);
+  const [corpus, setCorpus] = useState<SharedCorpusSummary | null>(demoMode ? demoCorpus : null);
+  const [result, setResult] = useState<SharedRetrievalResponse | null>(demoMode ? demoRetrieval : null);
   const [selected, setSelected] = useState<EvidenceViewModel | null>(null);
   const [bundleReady, setBundleReady] = useState(false);
   const [busy, setBusy] = useState(false);

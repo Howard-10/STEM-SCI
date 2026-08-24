@@ -29,7 +29,13 @@ from .graph_extraction import (
     GraphExtractionUnavailable,
     UnavailableGraphExtractionProvider,
 )
-from .qa_models import QAAnswerRequest, QAAnswerResponse, QARouteDecision
+from .qa_models import (
+    ConversationSummary,
+    MemoryTurn,
+    QAAnswerRequest,
+    QAAnswerResponse,
+    QARouteDecision,
+)
 from .qa_service import QuestionAnswerService
 from .service import HybridKnowledgeService
 
@@ -56,5 +62,7 @@ __all__ = [
     "QAAnswerRequest",
     "QAAnswerResponse",
     "QARouteDecision",
+    "ConversationSummary",
+    "MemoryTurn",
     "QuestionAnswerService",
 ]

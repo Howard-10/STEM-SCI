@@ -211,6 +211,7 @@ class QAToolExecutor:
         arguments: Mapping[str, Any],
         project_id: str,
         default_query: str,
+        mode: ContextMode = ContextMode.DISCOVERY,
     ) -> dict[str, Any]:
         if name in {"graph_search", "vector_search", "hybrid_search", "paper_lookup"}:
             query = str(arguments.get("query") or default_query).strip()
@@ -222,7 +223,7 @@ class QAToolExecutor:
                     project_id=project_id,
                     corpus_ids=["physics_stem_v1"],
                     query=query,
-                    mode=ContextMode.DISCOVERY,
+                    mode=mode,
                     limit=limit,
                 )
             )

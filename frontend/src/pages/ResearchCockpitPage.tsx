@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { qaApi, type QAAnswerResponse } from "../api/qa";
+import { authApi, readStoredAuth } from "../api/auth";
+import { qaApi, type QAAnswerResponse, type QAContextMode } from "../api/qa";
 import { workflowApi, type ApprovalRequest, type WorkflowState } from "../api/workflow";
 import { api } from "../api/client";
 import type { SharedChunkHit, SharedCorpusSummary } from "../types/context";
@@ -8,11 +9,11 @@ import { ArtifactSummary } from "../components/ArtifactSummary";
 import { CitationDetailDrawer } from "../components/CitationDetailDrawer";
 import { EvidenceCoverage } from "../components/EvidenceCoverage";
 import { EvidencePanel } from "../components/EvidencePanel";
-import { GateSummary } from "../components/GateSummary";
 import { HumanGatePanel } from "../components/HumanGatePanel";
 import { StageTimeline } from "../components/StageTimeline";
-import { buildAnswerView, buildResearchContext, evidenceView } from "../utils/researchViewModel";
+import { buildAnswerView, buildResearchContext } from "../utils/researchViewModel";
 import type { EvidenceViewModel } from "../types/research";
+import { demoApproval, demoCorpus, demoQAResponse, demoRetrieval, demoWorkflowState } from "../demo/data";
 
 const presets = [
   "生成式 AI 分层支架是否改善师范生 Python 物理建模能力？",
@@ -20,39 +21,407 @@ const presets = [
   "有前测、后测和迁移测验时应采用什么分析方法？",
 ];
 
-export function ResearchCockpitPage({ onNavigate }: { onNavigate: (tab: WorkspaceTab) => void }) {
-  const [projectId, setProjectId] = useState("physics-ai-demo");
-  const [question, setQuestion] = useState(presets[0]);
-  const [conversationId, setConversationId] = useState<string>();
-  const [answer, setAnswer] = useState<QAAnswerResponse | null>(null);
-  const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
-  const [approval, setApproval] = useState<ApprovalRequest | null>(null);
-  const [corpus, setCorpus] = useState<SharedCorpusSummary | null>(null);
-  const [sharedHits, setSharedHits] = useState<SharedChunkHit[]>([]);
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  response?: QAAnswerResponse;
+  mode?: QAContextMode;
+  evidence: EvidenceViewModel[];
+};
+
+function newMessageId(role: ChatMessage["role"]) {
+  return `${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function retrievalLabel(response: QAAnswerResponse) {
+  if (response.retrieval_status === "READY") return "检索完成";
+  if (response.retrieval_status === "DEGRADED") return "检索降级";
+  if (response.retrieval_status === "UNAVAILABLE") return "检索不可用";
+  return response.retrieval_status;
+}
+
+function modeLabel(mode: QAContextMode) {
+  return mode === "formal" ? "正式证据" : "发现探索";
+}
+
+function AnswerMessage({
+  message,
+  onOpenEvidence,
+  onNavigate,
+}: {
+  message: ChatMessage;
+  onOpenEvidence: (item: EvidenceViewModel) => void;
+  onNavigate: (tab: WorkspaceTab) => void;
+}) {
+  const response = message.response;
+  const evidence = message.evidence;
+  if (!response) {
+    return (
+      <div className="chat-message chat-message-assistant">
+        <div className="assistant-avatar">S</div>
+        <div className="chat-bubble assistant-bubble welcome-bubble">
+          <div className="message-label">STEM-SCI 研究助手</div>
+          <p>{message.text}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="chat-message chat-message-assistant">
+      <div className="assistant-avatar">S</div>
+      <div className="chat-bubble assistant-bubble answer-bubble">
+        <div className="message-toolbar">
+          <span className="message-label">研究助手回答</span>
+          <span className="answer-time">{modeLabel(message.mode ?? "discovery")}</span>
+        </div>
+        <p className="answer-text">{response.answer}</p>
+        <div className="answer-status-row" aria-label="回答状态">
+          <span className={`answer-status status-${response.retrieval_status.toLowerCase()}`}>
+            <i className="status-dot" />
+            {retrievalLabel(response)}
+          </span>
+          <span className="answer-status">{response.answer_mode === "llm" ? "模型综合" : "证据摘要"}</span>
+          <span className="answer-status">置信度 {Math.round(response.confidence * 100)}%</span>
+        </div>
+        <EvidenceCoverage coverage={buildAnswerView(response, null, []).coverage} />
+        {response.risk_flags.length > 0 && (
+          <div className="risk-callout">
+            <strong>需要注意</strong>
+            <span>{response.risk_flags.join("；")}</span>
+          </div>
+        )}
+        {evidence.length > 0 ? (
+          <div className="inline-citations">
+            <div className="inline-citations-heading">
+              <strong>回答依据</strong>
+              <span>{evidence.length} 条检索材料</span>
+            </div>
+            <div className="inline-citation-list">
+              {evidence.slice(0, 3).map((item, index) => (
+                <button className="inline-citation" key={item.id} onClick={() => onOpenEvidence(item)} type="button">
+                  <span className="citation-index">{index + 1}</span>
+                  <span className="inline-citation-copy">
+                    <strong>{item.title}</strong>
+                    <span>{item.excerpt}</span>
+                    <small>
+                      {item.source}
+                      {item.page ? ` · ${item.page}` : " · 位置待补充"} · {item.verification}
+                    </small>
+                  </span>
+                  <span className="citation-arrow" aria-hidden="true">
+                    {"->"}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {evidence.length > 3 && <span className="citation-more">还有 {evidence.length - 3} 条依据，可在证据库查看</span>}
+          </div>
+        ) : (
+          <div className="no-citation-callout">
+            <strong>当前回答没有可展示的引用</strong>
+            <span>可以继续补充问题，或打开证据库查看检索结果。</span>
+          </div>
+        )}
+        <div className="answer-actions">
+          <button className="text-action" onClick={() => onNavigate("workspace")} type="button">
+            打开项目工作台
+          </button>
+          <button className="text-action" onClick={() => onNavigate("agent")} type="button">
+            查看 Agent / Codex
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ProjectWorkspacePage({ projectId: projectIdProp, onNavigate }: { projectId: string; onNavigate: (tab: WorkspaceTab) => void }) {
+  const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
+  const auth = readStoredAuth();
+  const token = auth?.access_token;
+  const [projectId, setProjectId] = useState(projectIdProp);
+  const [question, setQuestion] = useState("");
+  const [conversationId, setConversationId] = useState<string | undefined>(
+    demoMode ? demoQAResponse.conversation_id : undefined,
+  );
+  const [answer, setAnswer] = useState<QAAnswerResponse | null>(demoMode ? demoQAResponse : null);
+  const [workflow, setWorkflow] = useState<WorkflowState | null>(demoMode ? demoWorkflowState : null);
+  const [approval, setApproval] = useState<ApprovalRequest | null>(demoMode ? demoApproval : null);
+  const [corpus, setCorpus] = useState<SharedCorpusSummary | null>(demoMode ? demoCorpus : null);
+  const [sharedHits, setSharedHits] = useState<SharedChunkHit[]>(
+    demoMode ? demoRetrieval.chunk_hits : [],
+  );
   const [selectedEvidence, setSelectedEvidence] = useState<EvidenceViewModel | null>(null);
-  const [mode, setMode] = useState<"discovery" | "formal">("discovery");
+  const [mode, setMode] = useState<QAContextMode>("discovery");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const welcome: ChatMessage = {
+      id: "welcome",
+      role: "assistant",
+      text: "你好，我是 STEM-SCI 研究助手。你可以直接描述一个 Physics-STEM 研究问题，我会先检索知识库，再给出回答、依据和研究边界。",
+      evidence: [],
+    };
+    if (!demoMode) return [welcome];
+    return [
+      welcome,
+      {
+        id: "demo-user-question",
+        role: "user",
+        text: demoQAResponse.question,
+        evidence: [],
+      },
+      {
+        id: "demo-assistant-answer",
+        role: "assistant",
+        text: demoQAResponse.answer,
+        response: demoQAResponse,
+        mode: "discovery",
+        evidence: buildAnswerView(demoQAResponse, null, demoRetrieval.chunk_hits).evidence,
+      },
+    ];
+  });
 
-  useEffect(() => { void api.listSharedCorpora().then((items) => setCorpus(items.find((item) => item.corpus_id === "physics_stem_v1") ?? null)).catch(() => undefined); }, []);
-  const context = useMemo(() => buildResearchContext(workflow, approval, buildAnswerView(answer, null, sharedHits).evidence), [workflow, approval, answer, sharedHits]);
+  useEffect(() => {
+    setProjectId(projectIdProp);
+  }, [projectIdProp]);
+
+  useEffect(() => {
+    void api
+      .listSharedCorpora()
+      .then((items) => setCorpus(items.find((item) => item.corpus_id === "physics_stem_v1") ?? null))
+      .catch(() => undefined);
+  }, []);
+
   const answerView = useMemo(() => buildAnswerView(answer, null, sharedHits), [answer, sharedHits]);
-  const activeEvidence = answerView.evidence;
+  const context = useMemo(
+    () => buildResearchContext(workflow, approval, answerView.evidence),
+    [workflow, approval, answerView.evidence],
+  );
 
-  const ask = async () => {
-    if (!question.trim()) return;
-    setBusy(true); setError("");
+  const ask = async (preset?: string) => {
+    const askedQuestion = (preset ?? question).trim();
+    if (!askedQuestion || busy) return;
+    setBusy(true);
+    setError("");
+    setQuestion("");
+    setMessages((current) => [
+      ...current,
+      { id: newMessageId("user"), role: "user", text: askedQuestion, evidence: [] },
+    ]);
+
     try {
-      const response = await qaApi.answer({ project_id: projectId, question, conversation_id: conversationId, allow_llm: true });
-      setAnswer(response); setConversationId(response.conversation_id);
-      if (response.workflow_action?.workflow_state) setWorkflow(response.workflow_action.workflow_state as unknown as WorkflowState);
-      if (response.workflow_action?.approval_request) setApproval(response.workflow_action.approval_request as unknown as ApprovalRequest);
-      const result = await api.searchSharedCorpus(projectId, response.rewritten_query || question, mode);
-      setSharedHits(result.chunk_hits);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "暂时无法完成研究检索"); } finally { setBusy(false); }
+      const response = token
+        ? await authApi.projectChatAnswer(token, {
+            project_id: projectId,
+            question: askedQuestion,
+            mode,
+            conversation_id: conversationId ?? null,
+            allow_llm: true,
+          })
+        : await qaApi.answer({
+            project_id: projectId,
+            question: askedQuestion,
+            mode,
+            conversation_id: conversationId,
+            allow_llm: true,
+          });
+      setAnswer(response);
+      setConversationId(response.conversation_id);
+      if (response.workflow_action?.workflow_state) {
+        setWorkflow(response.workflow_action.workflow_state as unknown as WorkflowState);
+      }
+      if (response.workflow_action?.approval_request) {
+        setApproval(response.workflow_action.approval_request as unknown as ApprovalRequest);
+      }
+      let nextEvidence = buildAnswerView(response, null, []).evidence;
+      try {
+        const result = await api.searchSharedCorpus(projectId, response.rewritten_query || askedQuestion, mode);
+        setSharedHits(result.chunk_hits);
+        nextEvidence = buildAnswerView(response, null, result.chunk_hits).evidence;
+      } catch {
+        setSharedHits([]);
+      }
+      setMessages((current) => [
+        ...current,
+        {
+          id: newMessageId("assistant"),
+          role: "assistant",
+          text: response.answer,
+          response,
+          mode,
+          evidence: nextEvidence,
+        },
+      ]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "暂时无法完成研究检索");
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const decide = async (decision: "approved" | "rejected", reason: string) => { if (!approval) return; setBusy(true); try { await workflowApi.approve(projectId, decision, "researcher"); const next = await workflowApi.getProject(projectId); setWorkflow(next); setApproval(null); } catch (caught) { setError(caught instanceof Error ? caught.message : "审批未完成"); } finally { setBusy(false); } };
+  const decide = async (decision: "approved" | "rejected", _reason: string) => {
+    if (!approval) return;
+    setBusy(true);
+    try {
+      await workflowApi.approve(projectId, decision, "researcher");
+      const next = await workflowApi.getProject(projectId);
+      setWorkflow(next);
+      setApproval(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "审批未完成");
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  return <div className="workspace"><header className="workspace-intro"><div><span className="eyebrow">RESEARCH COCKPIT / PHYSICS-STEM</span><h1>让每一个研究结论都能回到证据</h1><p>围绕真实物理教育研究问题，完成检索、设计、审批与验证。</p></div><div className="project-chip"><span>当前项目</span><strong>{projectId}</strong></div></header><div className="cockpit-gates"><GateSummary gates={context.gates} /></div><div className="cockpit-grid"><aside className="stage-sidebar"><div className="sidebar-heading"><span className="eyebrow">RESEARCH STAGES</span><h2>研究进度</h2></div><StageTimeline context={context} /><div className="stage-current"><span className="eyebrow">当前阶段</span><strong>{context.stageDefinition.label}</strong><p>主导：{context.stageDefinition.lead.label}</p><p className="muted">支持：{context.stageDefinition.support.map((item) => item.label).join("、")}</p><ArtifactSummary artifacts={context.artifacts} /></div></aside><section className="research-center"><div className="question-block"><div className="section-heading"><div><span className="eyebrow">RESEARCH QUESTION</span><h2>从一个问题开始</h2></div><div className="segmented-control"><button className={mode === "discovery" ? "selected" : ""} onClick={() => setMode("discovery")} type="button">发现探索</button><button className={mode === "formal" ? "selected" : ""} disabled={!corpus?.formal_evidence_ready} onClick={() => setMode("formal")} type="button">正式证据</button></div></div><div className="preset-list">{presets.map((preset) => <button className={question === preset ? "preset selected" : "preset"} key={preset} onClick={() => setQuestion(preset)} type="button">{preset}</button>)}</div><textarea aria-label="研究问题" value={question} onChange={(event) => setQuestion(event.target.value)} rows={3} /><div className="question-actions"><label className="project-field">项目 ID<input value={projectId} onChange={(event) => setProjectId(event.target.value)} /></label><button className="primary-action" disabled={busy || !question.trim()} onClick={() => void ask()} type="button">{busy ? "正在检索…" : "开始研究"}</button></div>{mode === "formal" && !corpus?.formal_evidence_ready && <p className="warning-text">当前仍有证据未通过 Evidence Gate，因此正式证据模式暂不可用。</p>}</div>{answer ? <article className="conclusion-block"><div className="conclusion-meta"><span className="ai-label">AI 生成 · 需依据引用核验</span><span>{answer.answer_mode === "llm" ? "结构化模型回答" : "确定性证据摘要"}</span></div><h2>研究结论</h2><p className="answer-text">{answer.answer}</p><EvidenceCoverage coverage={answerView.coverage} /><div className="conclusion-grid"><div><span className="eyebrow">关键依据</span><strong>{activeEvidence.length ? `${activeEvidence.length} 条材料已关联` : "暂无引用"}</strong></div><div><span className="eyebrow">下一步建议</span><strong>{answer.workflow_action?.next_available_actions?.[0] ?? "进入证据综述并确认研究范围"}</strong></div></div><details className="research-boundary"><summary>研究边界与检索说明</summary><p>{answer.risk_flags.length ? answer.risk_flags.join("；") : "回答仅基于当前检索到的 Physics-STEM 材料。"}</p><code>{answer.rewritten_query}</code></details><div className="button-row"><button className="secondary-action" onClick={() => onNavigate("evidence")} type="button">查看完整证据库</button><button className="secondary-action" onClick={() => onNavigate("workflow")} type="button">进入研究流程</button></div></article> : <div className="empty-research"><span className="empty-number">01</span><h2>输入一个 Physics-STEM 研究问题</h2><p>系统会先检索证据，再给出带有引用和研究边界的结论。</p></div>}</section><aside className="evidence-sidebar"><EvidencePanel evidence={activeEvidence} gates={context.gates} onOpen={setSelectedEvidence} />{approval && <HumanGatePanel approval={approval} busy={busy} onDecide={decide} />}</aside></div>{error && <p className="error-text" role="alert">{error}</p>}<CitationDetailDrawer item={selectedEvidence} onClose={() => setSelectedEvidence(null)} /></div>;
+  return (
+    <div className="workspace">
+      <header className="workspace-intro chat-intro">
+        <div>
+          <span className="eyebrow">PROJECT WORKSPACE / EVIDENCE-AWARE RESEARCH</span>
+          <h1>围绕一篇论文推进研究。</h1>
+          <p>项目资料在左，研究对话在中，证据和审批在右，所有下一步都回到当前项目。</p>
+        </div>
+        <div className="project-chip">
+          <span>当前项目</span>
+          <strong>{projectId}</strong>
+        </div>
+      </header>
+
+      <div className="cockpit-gates">
+        <div className="chat-page-status">
+          <span className="status-live">
+            <i className="status-dot" />
+            本地后端已连接
+          </span>
+          <span className="status-note">{corpus?.formal_evidence_ready ? "正式证据可用" : "当前使用发现探索模式"}</span>
+          <button className="text-action" onClick={() => onNavigate("workspace")} type="button">
+            查看项目证据
+          </button>
+          <button className="text-action" onClick={() => onNavigate("agent")} type="button">
+            Agent / Codex
+          </button>
+        </div>
+      </div>
+
+      <div className="cockpit-grid chat-first-grid">
+        <aside className="stage-sidebar">
+          <div className="sidebar-heading">
+            <div>
+              <span className="eyebrow">RESEARCH WORKFLOW</span>
+              <h2>研究进度</h2>
+            </div>
+          </div>
+          <StageTimeline context={context} />
+          <div className="stage-current">
+            <span className="eyebrow">当前阶段</span>
+            <strong>{context.stageDefinition.label}</strong>
+            <p>主导：{context.stageDefinition.lead.label}</p>
+            <p className="muted">支持：{context.stageDefinition.support.map((item) => item.label).join("、")}</p>
+            <ArtifactSummary artifacts={context.artifacts} />
+          </div>
+        </aside>
+
+        <section className="research-center chat-workspace" aria-label="研究对话">
+          <div className="chat-header">
+            <div>
+              <span className="eyebrow">RESEARCH CHAT</span>
+              <h2>和研究助手对话</h2>
+              <p>回答会显示检索状态、风险提示和对应的原文摘录。</p>
+            </div>
+            <div className="chat-header-meta">
+              <span>{messages.filter((item) => item.role === "user").length} 个问题</span>
+              <span className={mode === "formal" ? "mode-pill mode-formal" : "mode-pill"}>{modeLabel(mode)}</span>
+            </div>
+          </div>
+
+          <div className="chat-thread" aria-live="polite">
+            {messages.map((message) =>
+              message.role === "assistant" ? (
+                <AnswerMessage key={message.id} message={message} onOpenEvidence={setSelectedEvidence} onNavigate={onNavigate} />
+              ) : (
+                <div className="chat-message chat-message-user" key={message.id}>
+                  <div className="chat-bubble user-bubble">{message.text}</div>
+                </div>
+              ),
+            )}
+            {busy && (
+              <div className="chat-message chat-message-assistant">
+                <div className="assistant-avatar">S</div>
+                <div className="chat-bubble assistant-bubble typing-bubble">
+                  <span className="typing-indicator" aria-label="研究助手正在检索">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                  正在检索知识库并整理回答
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="chat-composer">
+            <div className="composer-topline">
+              <label className="project-field">
+                <span>项目 ID</span>
+                <input value={projectId} onChange={(event) => setProjectId(event.target.value)} />
+              </label>
+              <div className="segmented-control" aria-label="回答模式">
+                <button className={mode === "discovery" ? "selected" : ""} onClick={() => setMode("discovery")} type="button">
+                  发现探索
+                </button>
+                <button
+                  className={mode === "formal" ? "selected" : ""}
+                  disabled={!corpus?.formal_evidence_ready}
+                  onClick={() => setMode("formal")}
+                  title={corpus?.formal_evidence_ready ? "使用已定位并核验的正式证据" : "正式证据仍需完成来源定位与核验"}
+                  type="button"
+                >
+                  正式证据
+                </button>
+              </div>
+            </div>
+            <textarea
+              aria-label="输入研究问题"
+              onChange={(event) => setQuestion(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  void ask();
+                }
+              }}
+              placeholder="输入你的研究问题，例如：如何设计一个可检验的 Python 物理建模实验？"
+              rows={3}
+              value={question}
+            />
+            <div className="composer-bottomline">
+              <span>Enter 发送，Shift + Enter 换行</span>
+              <button className="primary-action send-action" disabled={busy || !question.trim()} onClick={() => void ask()} type="button">
+                {busy ? "检索中..." : "发送问题"}
+              </button>
+            </div>
+            <div className="preset-list composer-presets">
+              <span className="preset-label">试试：</span>
+              {presets.map((preset) => (
+                <button className="preset" key={preset} onClick={() => void ask(preset)} type="button">
+                  {preset}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <aside className="evidence-sidebar">
+          <EvidencePanel evidence={answerView.evidence} gates={context.gates} onOpen={setSelectedEvidence} />
+          {approval && <HumanGatePanel approval={approval} busy={busy} onDecide={decide} />}
+        </aside>
+      </div>
+
+      {error && <p className="error-text" role="alert">{error}</p>}
+      <CitationDetailDrawer item={selectedEvidence} onClose={() => setSelectedEvidence(null)} />
+    </div>
+  );
 }

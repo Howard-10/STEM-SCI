@@ -6,12 +6,18 @@ import { HumanGatePanel } from "../components/HumanGatePanel";
 import { StageTimeline } from "../components/StageTimeline";
 import { TechnicalTrace } from "../components/TechnicalTrace";
 import { buildResearchContext, evidenceView } from "../utils/researchViewModel";
+import { demoAgents, demoApproval, demoWorkflowState } from "../demo/data";
 
 export function ResearchWorkflowPage() {
-  const [projectId, setProjectId] = useState(import.meta.env.VITE_PROJECT_ID ?? "physics-ai-demo");
-  const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
-  const [approval, setApproval] = useState<ApprovalRequest | null>(null);
-  const [agents, setAgents] = useState<AgentCapability[]>([]);
+  const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
+  const [projectId, setProjectId] = useState(
+    import.meta.env.VITE_PROJECT_ID && import.meta.env.VITE_PROJECT_ID !== "demo"
+      ? import.meta.env.VITE_PROJECT_ID
+      : "physics-ai-demo",
+  );
+  const [workflow, setWorkflow] = useState<WorkflowState | null>(demoMode ? demoWorkflowState : null);
+  const [approval, setApproval] = useState<ApprovalRequest | null>(demoMode ? demoApproval : null);
+  const [agents, setAgents] = useState<AgentCapability[]>(demoMode ? demoAgents : []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => { void workflowApi.listAgents().then(setAgents).catch(() => undefined); }, []);

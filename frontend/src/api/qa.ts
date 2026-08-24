@@ -1,3 +1,5 @@
+export type QAContextMode = "discovery" | "formal";
+
 export interface QAWorkflowAction {
   action:
     | "STARTED"
@@ -54,27 +56,35 @@ export interface QAAnswerResponse {
 }
 
 const base = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
+const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
+import { demoQAResponse } from "../demo/data";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${base}${path}`, {
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-    ...init,
-  });
-  const payload: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message =
-      typeof payload === "object" && payload !== null && "error" in payload
-        ? String((payload as { error?: { message?: string } }).error?.message ?? "请求失败")
-        : "请求失败";
-    throw new Error(message);
+  try {
+    const response = await fetch(`${base}${path}`, {
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      ...init,
+    });
+    const payload: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message =
+        typeof payload === "object" && payload !== null && "error" in payload
+          ? String((payload as { error?: { message?: string } }).error?.message ?? "请求失败")
+          : "请求失败";
+      throw new Error(message);
+    }
+    return payload as T;
+  } catch (error) {
+    if (demoMode && path === "/qa/answer") return demoQAResponse as T;
+    throw error;
   }
-  return payload as T;
 }
 
 export const qaApi = {
   answer(input: {
     project_id: string;
     question: string;
+    mode?: QAContextMode;
     conversation_id?: string;
     context_bundle_ref?: string;
     top_k?: number;

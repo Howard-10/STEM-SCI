@@ -9,20 +9,42 @@ import type {
   SharedRetrievalResponse,
 } from "../types/context";
 import { isApiError } from "../types/context";
+import { demoBundle, demoCorpus, demoRetrieval } from "../demo/data";
 
 const base = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
+const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
 
 function query(values: Record<string, string>): string {
   return new URLSearchParams(values).toString();
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${base}${path}`, init);
-  const payload: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(isApiError(payload) ? payload.error.message : "Request failed");
+  try {
+    const response = await fetch(`${base}${path}`, init);
+    const payload: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(isApiError(payload) ? payload.error.message : "Request failed");
+    }
+    return payload as T;
+  } catch (error) {
+    if (!demoMode) throw error;
+    return demoFallback<T>(path, init);
   }
-  return payload as T;
+}
+
+function demoFallback<T>(path: string, init?: RequestInit): T {
+  if (path === "/corpora") return [demoCorpus] as T;
+  if (path === "/retrieval/search") {
+    const body = typeof init?.body === "string" ? JSON.parse(init.body) as { project_id?: string } : {};
+    return { ...demoRetrieval, project_id: body.project_id ?? demoRetrieval.project_id } as T;
+  }
+  if (path === "/context/hybrid-build") return demoBundle as T;
+  if (path === "/evidence/search") {
+    return demoBundle.evidence_refs.map((evidence, index) => ({ evidence, score: 0.94 - index * 0.08 })) as T;
+  }
+  if (path.startsWith("/sources")) return [] as T;
+  if (path.startsWith("/context/")) return demoBundle as T;
+  return [] as T;
 }
 
 export const api = {

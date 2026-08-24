@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from .qa_models import MemoryTurn, QAReference
+from .qa_models import ConversationSummary, MemoryTurn, QAReference
 
 
 def _now() -> str:
@@ -42,6 +42,8 @@ class ConversationMemoryStore:
             );
             create index if not exists idx_qa_memory_conversation
                 on qa_memory_turns(conversation_id, created_at desc, memory_id desc);
+            create index if not exists idx_qa_memory_project
+                on qa_memory_turns(project_id, created_at desc, conversation_id);
             """
         )
         self.db.commit()
@@ -100,31 +102,111 @@ class ConversationMemoryStore:
             created_at=created_at,
         )
 
-    def recent_turns(self, conversation_id: str, limit: int = 6) -> list[MemoryTurn]:
+    def recent_turns(
+        self,
+        conversation_id: str,
+        limit: int = 6,
+        project_id: str | None = None,
+    ) -> list[MemoryTurn]:
+        where = "conversation_id=?"
+        params: list[object] = [conversation_id]
+        if project_id is not None:
+            where += " and project_id=?"
+            params.append(project_id)
+        params.append(limit)
         rows = self.db.execute(
-            """
+            f"""
             select * from qa_memory_turns
-            where conversation_id=?
+            where {where}
             order by created_at desc, memory_id desc
             limit ?
             """,
-            (conversation_id, limit),
+            params,
         ).fetchall()
-        turns: list[MemoryTurn] = []
+        return list(reversed([self._turn(row) for row in rows]))
+
+    def conversation_turns(
+        self,
+        *,
+        project_id: str,
+        conversation_id: str,
+        limit: int = 100,
+    ) -> list[MemoryTurn]:
+        rows = self.db.execute(
+            """
+            select * from qa_memory_turns
+            where project_id=? and conversation_id=?
+            order by created_at asc, memory_id asc
+            limit ?
+            """,
+            (project_id, conversation_id, limit),
+        ).fetchall()
+        return [self._turn(row) for row in rows]
+
+    def list_conversations(self, project_id: str, limit: int = 50) -> list[ConversationSummary]:
+        rows = self.db.execute(
+            """
+            select
+                conversation_id,
+                project_id,
+                min(created_at) as created_at,
+                max(created_at) as updated_at,
+                count(*) as turn_count
+            from qa_memory_turns
+            where project_id=?
+            group by conversation_id, project_id
+            order by updated_at desc, conversation_id desc
+            limit ?
+            """,
+            (project_id, limit),
+        ).fetchall()
+        summaries: list[ConversationSummary] = []
         for row in rows:
-            citations = json.loads(row["citations_json"])
-            turns.append(
-                MemoryTurn(
-                    memory_id=row["memory_id"],
-                    conversation_id=row["conversation_id"],
-                    project_id=row["project_id"],
-                    question=row["question"],
-                    rewritten_query=row["rewritten_query"],
-                    answer=row["answer"],
-                    route=row["route"],
-                    citations=[QAReference.model_validate(item) for item in citations],
-                    retrieval_trace_ref=row["retrieval_trace_ref"],
-                    created_at=row["created_at"],
+            last = self.db.execute(
+                """
+                select question, answer from qa_memory_turns
+                where project_id=? and conversation_id=?
+                order by created_at desc, memory_id desc
+                limit 1
+                """,
+                (project_id, row["conversation_id"]),
+            ).fetchone()
+            if last is None:
+                continue
+            title = _preview(str(last["question"]), 48)
+            summaries.append(
+                ConversationSummary(
+                    conversation_id=str(row["conversation_id"]),
+                    project_id=str(row["project_id"]),
+                    title=title,
+                    last_question=str(last["question"]),
+                    last_answer_preview=_preview(str(last["answer"]), 160),
+                    turn_count=int(row["turn_count"]),
+                    created_at=str(row["created_at"]),
+                    updated_at=str(row["updated_at"]),
                 )
             )
-        return list(reversed(turns))
+        return summaries
+
+    @staticmethod
+    def _turn(row: sqlite3.Row) -> MemoryTurn:
+        citations = json.loads(row["citations_json"])
+        return MemoryTurn(
+            memory_id=row["memory_id"],
+            conversation_id=row["conversation_id"],
+            project_id=row["project_id"],
+            question=row["question"],
+            rewritten_query=row["rewritten_query"],
+            answer=row["answer"],
+            route=row["route"],
+            citations=[QAReference.model_validate(item) for item in citations],
+            retrieval_trace_ref=row["retrieval_trace_ref"],
+            created_at=row["created_at"],
+        )
+
+
+def _preview(value: str, limit: int) -> str:
+    normalized = " ".join(value.split())
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[: max(0, limit - 1)].rstrip()}…"

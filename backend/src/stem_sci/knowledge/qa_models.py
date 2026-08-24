@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .models import ContextMode
+
 
 class QAStrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -14,6 +16,7 @@ class QAStrictModel(BaseModel):
 class QAAnswerRequest(QAStrictModel):
     project_id: str = Field(min_length=1, max_length=64)
     question: str = Field(min_length=1, max_length=20_000)
+    mode: ContextMode = ContextMode.DISCOVERY
     conversation_id: str | None = Field(default=None, max_length=128)
     context_bundle_ref: str | None = Field(default=None, max_length=128)
     top_k: int = Field(default=8, ge=1, le=20)
@@ -110,3 +113,14 @@ class MemoryTurn(QAStrictModel):
     citations: list[QAReference] = Field(default_factory=list)
     retrieval_trace_ref: str | None = None
     created_at: str
+
+
+class ConversationSummary(QAStrictModel):
+    conversation_id: str
+    project_id: str
+    title: str
+    last_question: str
+    last_answer_preview: str
+    turn_count: int
+    created_at: str
+    updated_at: str

@@ -132,20 +132,43 @@ export interface RuntimeStatus {
 }
 
 const base = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
+const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${base}${path}`, {
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-    ...init,
-  });
-  const payload: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message = typeof payload === "object" && payload !== null && "error" in payload
-      ? String((payload as { error?: { message?: string } }).error?.message ?? "请求失败")
-      : "请求失败";
-    throw new Error(message);
+  try {
+    const response = await fetch(`${base}${path}`, {
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      ...init,
+    });
+    const payload: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message = typeof payload === "object" && payload !== null && "error" in payload
+        ? String((payload as { error?: { message?: string } }).error?.message ?? "请求失败")
+        : "请求失败";
+      throw new Error(message);
+    }
+    return payload as T;
+  } catch (error) {
+    if (!demoMode) throw error;
+    return demoWorkflowFallback<T>(path, init);
   }
-  return payload as T;
+}
+
+function demoWorkflowFallback<T>(path: string, init?: RequestInit): T {
+  if (path === "/workflow/runtime") return demoRuntime as T;
+  if (path === "/workflow/agents") return demoAgents as T;
+  if (path.includes("/executions")) return demoExecutionRows as T;
+  if (path.includes("/routes")) return demoRouteRows as T;
+  if (path.includes("/artifacts") || path.includes("/artifact-contents") || path.includes("/agent-runs")) {
+    return demoWorkflowState.research_state?.artifact_refs.map((artifact_ref) => ({ artifact_ref, status: "CANDIDATE" })) as T;
+  }
+  if (path.endsWith("/approve") && init?.method === "POST") return demoResearchState as T;
+  if (path.endsWith("/next") && init?.method === "POST") return demoWorkflowRun as T;
+  if ((path.includes("/projects/") && path.endsWith("/workflow")) || path.includes("/workflow/projects/")) {
+    if (init?.method === "POST") return demoPlanningRun as T;
+    return demoWorkflowState as T;
+  }
+  return demoWorkflowState as T;
 }
 
 export const workflowApi = {
@@ -153,19 +176,22 @@ export const workflowApi = {
     return request<RuntimeStatus>("/workflow/runtime");
   },
   startProject(input: { project_id: string; research_intent: string; run_id?: string }) {
-    return request<PlanningRun>("/workflow/projects", { method: "POST", body: JSON.stringify(input) });
+    return request<PlanningRun>(`/projects/${encodeURIComponent(input.project_id)}/workflow`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   },
   getProject(projectId: string) {
-    return request<WorkflowState>(`/workflow/projects/${encodeURIComponent(projectId)}`);
+    return request<WorkflowState>(`/projects/${encodeURIComponent(projectId)}/workflow`);
   },
   approve(projectId: string, decision: string, decidedBy: string) {
-    return request<ResearchState>(`/workflow/projects/${encodeURIComponent(projectId)}/approve`, {
+    return request<ResearchState>(`/projects/${encodeURIComponent(projectId)}/workflow/approve`, {
       method: "POST",
       body: JSON.stringify({ decision, decided_by: decidedBy }),
     });
   },
   runNext(projectId: string) {
-    return request<WorkflowRun>(`/workflow/projects/${encodeURIComponent(projectId)}/next`, { method: "POST" });
+    return request<WorkflowRun>(`/projects/${encodeURIComponent(projectId)}/workflow/next`, { method: "POST" });
   },
   listAgents() {
     return request<AgentCapability[]>("/workflow/agents");
@@ -186,3 +212,14 @@ export const workflowApi = {
     return request<Array<Record<string, unknown>>>(`/workflow/projects/${encodeURIComponent(projectId)}/routes`);
   },
 };
+import {
+  demoAgents,
+  demoApproval,
+  demoExecutionRows,
+  demoPlanningRun,
+  demoResearchState,
+  demoRouteRows,
+  demoRuntime,
+  demoWorkflowRun,
+  demoWorkflowState,
+} from "../demo/data";

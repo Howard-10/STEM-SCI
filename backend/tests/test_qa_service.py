@@ -16,9 +16,12 @@ class FakeKnowledgeService:
     def __init__(self) -> None:
         self.search_calls: list[str] = []
         self.context_calls: list[str] = []
+        self.search_modes: list[ContextMode] = []
+        self.context_modes: list[str] = []
 
     def search(self, request):
         self.search_calls.append(request.query)
+        self.search_modes.append(request.mode)
         from stem_sci.knowledge.models import RetrievalHitSummary
 
         hit = RetrievalHitSummary(
@@ -58,6 +61,7 @@ class FakeKnowledgeService:
 
     def build_context(self, **kwargs):
         self.context_calls.append(kwargs["query"])
+        self.context_modes.append(kwargs["mode"])
         from stem_sci.context.models import ContextBundle
 
         return ContextBundle(
@@ -114,3 +118,23 @@ def test_qa_fallback_retrieves_cites_and_persists_memory(tmp_path: Path) -> None
     assert "Physics Education Study" in second.answer
     assert len(knowledge.search_calls) == 2
     assert len(second.rewritten_query) > len(second.question)
+
+
+def test_qa_propagates_formal_mode_to_retrieval_and_context(tmp_path: Path) -> None:
+    knowledge = FakeKnowledgeService()
+    service = QuestionAnswerService(
+        knowledge_service=knowledge,
+        storage_root=tmp_path,
+    )
+
+    service.answer(
+        QAAnswerRequest(
+            project_id="demo",
+            question="Which evidence supports the study?",
+            mode=ContextMode.FORMAL,
+            allow_llm=False,
+        )
+    )
+
+    assert knowledge.search_modes == [ContextMode.FORMAL]
+    assert knowledge.context_modes == ["formal"]
