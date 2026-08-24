@@ -2,6 +2,7 @@
 
 from .models import (
     DocumentCreateRequest,
+    DocumentFormat,
     DocumentPatchRequest,
     DocumentVersion,
     DocumentVersionCreateRequest,
@@ -11,6 +12,7 @@ from .service import DocumentError, DocumentService
 
 __all__ = [
     "DocumentCreateRequest",
+    "DocumentFormat",
     "DocumentError",
     "DocumentPatchRequest",
     "DocumentService",

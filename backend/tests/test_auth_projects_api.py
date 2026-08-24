@@ -1,5 +1,7 @@
 """API tests for user sessions and project ownership."""
 
+import io
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -222,6 +224,51 @@ def test_project_documents_are_versioned_and_member_scoped(client: TestClient) -
         f"/api/v1/projects/alice-paper/documents/{document_id}",
         headers=_auth(alice_token),
     ).status_code == 404
+
+
+def test_project_document_upload_extracts_docx_text(client: TestClient) -> None:
+    alice = _register(client, "alice", "alice@example.test")
+    alice_token = str(alice["access_token"])
+    created_project = client.post(
+        "/api/v1/projects",
+        headers=_auth(alice_token),
+        json={"project_id": "alice-upload", "title": "Upload", "research_direction": "Physics STEM"},
+    )
+    assert created_project.status_code == 200
+
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, "w") as archive:
+        archive.writestr(
+            "word/document.xml",
+            (
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                "<w:body><w:p><w:r><w:t>研究问题与实验方法</w:t></w:r></w:p></w:body>"
+                "</w:document>"
+            ),
+        )
+
+    uploaded = client.post(
+        "/api/v1/projects/alice-upload/documents/upload",
+        headers=_auth(alice_token),
+        files={
+            "file": (
+                "research-plan.docx",
+                payload.getvalue(),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    assert uploaded.json()["format"] == "docx"
+    document_id = uploaded.json()["document_id"]
+
+    version = client.get(
+        f"/api/v1/projects/alice-upload/documents/{document_id}/versions/1",
+        headers=_auth(alice_token),
+    )
+    assert version.status_code == 200
+    assert "研究问题与实验方法" in version.json()["content"]
 
 
 def test_project_chat_rejects_project_mismatch_before_qa_execution(client: TestClient) -> None:

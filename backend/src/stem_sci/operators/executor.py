@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from stem_sci.agents.contracts import ToolRequest
 from stem_sci.artifacts.execution_store import ExecutionStore, InMemoryExecutionStore
+from stem_sci.context.models import ContextBundle
 from stem_sci.core.enums import RunStatus
 from stem_sci.statistics.python_operator import PythonAnalysisRequest, PythonExecutionOutcome
 
@@ -40,7 +41,7 @@ class OperatorExecutor:
         tool_requests: Sequence[ToolRequest | str],
         *,
         query: str = "",
-        context_bundle=None,
+        context_bundle: ContextBundle | None = None,
     ) -> list[OperatorRun]:
         runs: list[OperatorRun] = []
         for index, raw_request in enumerate(tool_requests):
@@ -70,7 +71,7 @@ class OperatorExecutor:
         request: ToolRequest,
         *,
         query: str = "",
-        context_bundle=None,
+        context_bundle: ContextBundle | None = None,
         agent_run_id: str | None = None,
     ) -> OperatorRun:
         operator_id = request.capability.removesuffix("_request")

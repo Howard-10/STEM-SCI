@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 from uuid import uuid4
 
 from .models import (
@@ -272,7 +273,7 @@ class IdentityService:
 
     def _project_row_for_user(self, user_id: str, project_id: str) -> sqlite3.Row | None:
         with self._connect() as connection:
-            return connection.execute(
+            row = connection.execute(
                 """
                 select p.project_id, p.owner_user_id, p.title, p.research_direction,
                        p.abstract, p.status, p.created_at, p.updated_at, m.role
@@ -282,11 +283,12 @@ class IdentityService:
                 """,
                 (project_id, user_id),
             ).fetchone()
+            return cast(sqlite3.Row | None, row)
 
     def _user_row_by_login(self, login: str) -> sqlite3.Row | None:
         normalized = login.strip().lower()
         with self._connect() as connection:
-            return connection.execute(
+            row = connection.execute(
                 """
                 select user_id, username, email, display_name, password_hash, created_at
                 from users
@@ -294,6 +296,7 @@ class IdentityService:
                 """,
                 (normalized, normalized),
             ).fetchone()
+            return cast(sqlite3.Row | None, row)
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:

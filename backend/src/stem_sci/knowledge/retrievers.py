@@ -178,7 +178,7 @@ class DashScopeQueryEmbedder:
         if not api_key:
             raise RetrievalUnavailable("DASHSCOPE_API_KEY is not configured")
         try:
-            import dashscope  # type: ignore[import-not-found]
+            import dashscope  # type: ignore[import-not-found, unused-ignore]
         except ImportError as error:
             raise RetrievalUnavailable("dashscope dependency is not installed") from error
         dashscope.api_key = api_key
@@ -205,7 +205,7 @@ class DenseRetriever:
         """Search the declared FAISS index with the same 1024-dimensional query model."""
 
         try:
-            import faiss  # type: ignore[import-not-found]
+            import faiss  # type: ignore[import-not-found, unused-ignore]
             import numpy as np
         except ImportError as error:
             raise RetrievalUnavailable("faiss-cpu retrieval dependencies are not installed") from error

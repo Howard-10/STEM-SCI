@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 from uuid import uuid4
 
 from stem_sci.accounts import UserProfile
@@ -282,13 +283,14 @@ class DocumentService:
 
     def _document_row(self, project_id: str, document_id: str) -> sqlite3.Row | None:
         with self._connect() as connection:
-            return connection.execute(
+            row = connection.execute(
                 """
                 select * from project_documents
                 where project_id=? and document_id=? and deleted_at is null
                 """,
                 (project_id, document_id),
             ).fetchone()
+            return cast(sqlite3.Row | None, row)
 
     def _write_version(
         self,

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import logging
 import os
+import io
+import zipfile
+import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 from typing import Annotated
 
@@ -14,6 +17,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from dotenv import load_dotenv
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from pypdf import PdfReader
 
 from .agents import AgentCapability, ReviewFinding
 from .accounts import (
@@ -68,6 +72,7 @@ from .core.state import ResearchState
 from .documents import (
     DocumentCreateRequest,
     DocumentError,
+    DocumentFormat,
     DocumentPatchRequest,
     DocumentService,
     DocumentVersion,
@@ -324,6 +329,67 @@ ProjectIdQuery = Annotated[
 ]
 
 
+async def _read_uploaded_research_document(
+    file: UploadFile, max_bytes: int
+) -> tuple[DocumentFormat, str]:
+    """Extract searchable text from a PDF or DOCX upload."""
+    filename = (file.filename or "").strip()
+    suffix = Path(filename).suffix.lower()
+    if suffix not in {".pdf", ".docx"}:
+        raise DocumentError(
+            415,
+            "unsupported_document_format",
+            "Only PDF and DOCX files are supported",
+        )
+
+    payload = await file.read()
+    if not payload:
+        raise DocumentError(400, "empty_document", "The uploaded document is empty")
+    if len(payload) > max_bytes:
+        raise DocumentError(413, "document_too_large", "The uploaded document exceeds the upload limit")
+
+    document_format: DocumentFormat
+    try:
+        if suffix == ".pdf":
+            reader = PdfReader(io.BytesIO(payload))
+            content = "\n\n".join((page.extract_text() or "").strip() for page in reader.pages).strip()
+            document_format = "pdf"
+        else:
+            with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                xml_payload = archive.read("word/document.xml")
+            root = ElementTree.fromstring(xml_payload)
+            paragraphs: list[str] = []
+            for paragraph in root.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"):
+                text = "".join(
+                    node.text or ""
+                    for node in paragraph.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t")
+                ).strip()
+                if text:
+                    paragraphs.append(text)
+            content = "\n\n".join(paragraphs).strip()
+            document_format = "docx"
+    except (OSError, ValueError, KeyError, zipfile.BadZipFile, ElementTree.ParseError) as exc:
+        raise DocumentError(
+            400,
+            "document_parse_failed",
+            "The uploaded document could not be parsed",
+        ) from exc
+
+    if not content:
+        raise DocumentError(
+            422,
+            "document_text_unavailable",
+            "The uploaded document does not contain extractable text",
+        )
+    if len(content) > 1_000_000:
+        raise DocumentError(
+            413,
+            "document_text_too_large",
+            "The extracted document text exceeds the storage limit",
+        )
+    return document_format, content
+
+
 @app.get("/api/v1/health")
 def health() -> dict[str, object]:
     return {
@@ -417,6 +483,31 @@ def create_project_document(
 ) -> ProjectDocument:
     identity_service.get_project(user, project_id)
     return document_service.create(project_id=project_id, user=user, request=request)
+
+
+@app.post("/api/v1/projects/{project_id}/documents/upload", response_model=ProjectDocument)
+async def upload_project_document(
+    project_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+    file: Annotated[UploadFile, File(...)],
+    title: Annotated[str | None, Form()] = None,
+) -> ProjectDocument:
+    identity_service.get_project(user, project_id)
+    document_format, content = await _read_uploaded_research_document(file, _max_upload_bytes())
+    document_title = (title or Path(file.filename or "uploaded-document").stem).strip()
+    if not document_title:
+        raise DocumentError(422, "document_title_required", "A document title is required")
+    return document_service.create(
+        project_id=project_id,
+        user=user,
+        request=DocumentCreateRequest(
+            title=document_title,
+            document_type="reference",
+            format=document_format,
+            content=content,
+            change_note=f"Uploaded from {file.filename or 'file'}",
+        ),
+    )
 
 
 @app.get("/api/v1/projects/{project_id}/documents/{document_id}", response_model=ProjectDocument)

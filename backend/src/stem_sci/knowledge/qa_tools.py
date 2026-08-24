@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from .models import ContextMode, RetrievalSearchRequest
+from .qa_models import QARoute
 from .service import HybridKnowledgeService
 
 
@@ -583,13 +584,13 @@ def _workflow_action(
     }
 
 
-def route_for_tool(name: str) -> str:
+def route_for_tool(name: str) -> QARoute:
     """Map a tool call to the public QA route vocabulary."""
 
     if name in TOOL_NAMES:
         if name in WORKFLOW_TOOL_NAMES:
             return "workflow_agent"
-        return name
+        return cast(QARoute, name)
     return "direct_answer"
 
 

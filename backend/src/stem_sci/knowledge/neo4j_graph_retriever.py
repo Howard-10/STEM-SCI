@@ -6,7 +6,6 @@ import os
 from collections import defaultdict
 from typing import Any
 
-from .graph_retriever import GraphRetriever
 from .identity import PaperIdentityResolver
 from .models import GraphCandidate
 from .normalization import expanded_query, normalize_text, tokenize
@@ -31,11 +30,11 @@ class Neo4jGraphRetriever:
             raise RuntimeError("neo4j dependency is not installed") from error
 
         self._resolver = resolver
-        self._uri = uri or os.getenv("NEO4J_URI", "bolt://localhost:7688")
-        self._username = username or os.getenv("NEO4J_USERNAME", "neo4j")
-        self._password = password or os.getenv("NEO4J_PASSWORD", "")
-        self._database = database or os.getenv("NEO4J_DATABASE", "neo4j")
-        self._project_id = project_id or os.getenv("NEO4J_PROJECT_ID", "stem-sci")
+        self._uri: str = uri or os.getenv("NEO4J_URI") or "bolt://localhost:7688"
+        self._username: str = username or os.getenv("NEO4J_USERNAME") or "neo4j"
+        self._password: str = password or os.getenv("NEO4J_PASSWORD") or ""
+        self._database: str = database or os.getenv("NEO4J_DATABASE") or "neo4j"
+        self._project_id: str = project_id or os.getenv("NEO4J_PROJECT_ID") or "stem-sci"
         if not self._password:
             raise ValueError("NEO4J_PASSWORD is required for Neo4j graph retrieval")
         self._driver = GraphDatabase.driver(
@@ -132,4 +131,3 @@ class Neo4jGraphRetriever:
         if overlap == 0:
             return phrase_score
         return phrase_score + overlap / len(facet_terms)
-

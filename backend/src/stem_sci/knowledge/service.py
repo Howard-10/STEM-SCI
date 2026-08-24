@@ -16,7 +16,7 @@ from stem_sci.context.service import ContextService
 from stem_sci.settings import allow_unverified_formal_evidence
 
 from .graph_retriever import GraphRetriever
-from .hybrid_retriever import HybridRetriever
+from .hybrid_retriever import GraphSearcher, HybridRetriever
 from .identity import PaperIdentityResolver
 from .manifest import CorpusRegistry
 from .neo4j_graph_retriever import Neo4jGraphRetriever
@@ -30,6 +30,7 @@ from .models import (
     RetrievalMode,
     RetrievalSearchRequest,
     RetrievalSearchResponse,
+    RetrievalTrace,
 )
 from .retrievers import DenseRetriever, LocalMetadataCorpus, SparseRetriever
 
@@ -44,7 +45,7 @@ class HybridKnowledgeService:
     def __init__(self, context_service: ContextService, registry: CorpusRegistry | None = None) -> None:
         self._context_service = context_service
         self._registry = registry or CorpusRegistry()
-        self._graph_cache: dict[str, object] = {}
+        self._graph_cache: dict[str, GraphSearcher] = {}
 
     def list_corpora(self) -> list[CorpusManifest]:
         """Return public manifest metadata; raw source paths remain local-only."""
@@ -157,7 +158,7 @@ class HybridKnowledgeService:
         self,
         manifest: CorpusManifest,
         resolver: PaperIdentityResolver,
-    ) -> tuple[object | None, str | None]:
+    ) -> tuple[GraphSearcher | None, str | None]:
         """Prefer Neo4j when configured, with JSON navigation as an explicit fallback."""
 
         backend = os.getenv("STEM_SCI_GRAPH_BACKEND", "auto").strip().lower()
@@ -376,10 +377,8 @@ class HybridKnowledgeService:
         manifest: CorpusManifest,
         manifest_refs: list[str],
         risks: list[str],
-        trace=None,
+        trace: RetrievalTrace | None = None,
     ) -> RetrievalSearchResponse:
-        from .models import RetrievalTrace
-
         if trace is None:
             trace = RetrievalTrace(
                 query_normalized=request.query,

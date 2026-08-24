@@ -570,7 +570,7 @@ class QuestionAnswerService:
                     model=self._model,
                     prompt_version=self._prompt_version,
                 )
-                parsed = result.parsed_output
+                parsed = _AnswerDraft.model_validate(result.parsed_output)
                 return (
                     QAAnswerRecord(
                         answer=parsed.answer,

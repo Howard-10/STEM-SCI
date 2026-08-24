@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Protocol
 
 from neo4j.exceptions import Neo4jError, ServiceUnavailable
 
 from .models import GraphCandidate, RetrievalHit, RetrievalMode, RetrievalTrace
 from .normalization import expanded_query
 from .retrievers import RetrievalUnavailable
+
+
+class GraphSearcher(Protocol):
+    """Common structural interface for JSON and Neo4j graph navigation."""
+
+    def search(self, query: str, limit: int = 20) -> list[GraphCandidate]:
+        ...
 
 
 class HybridRetriever:
@@ -19,7 +27,7 @@ class HybridRetriever:
         *,
         corpus_id: str,
         manifest_refs: list[str],
-        graph_retriever,
+        graph_retriever: GraphSearcher | None,
         dense_search: Callable[[str, int], list[RetrievalHit]] | None,
         sparse_search: Callable[[str, int], list[RetrievalHit]] | None,
     ) -> None:

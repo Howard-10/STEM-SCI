@@ -8,6 +8,16 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .models import ContextMode
 
+QARoute = Literal[
+    "hybrid_search",
+    "graph_search",
+    "vector_search",
+    "paper_lookup",
+    "workflow_agent",
+    "external_paper_search",
+    "direct_answer",
+]
+
 
 class QAStrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -36,15 +46,7 @@ class QAReference(QAStrictModel):
 
 
 class QARouteDecision(QAStrictModel):
-    route: Literal[
-        "hybrid_search",
-        "graph_search",
-        "vector_search",
-        "paper_lookup",
-        "workflow_agent",
-        "external_paper_search",
-        "direct_answer",
-    ] = "hybrid_search"
+    route: QARoute = "hybrid_search"
     reason: str
     recommended_agent: str | None = None
 
