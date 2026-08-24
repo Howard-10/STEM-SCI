@@ -134,7 +134,7 @@ function errorDetails(payload: unknown) {
   return { code: "request_failed", message: "请求失败" };
 }
 
-async function request<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
+async function send<T>(path: string, init: RequestInit, token?: string): Promise<Response> {
   const headers = new Headers(init.headers);
   if (!headers.has("Content-Type") && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json; charset=utf-8");
@@ -143,7 +143,28 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(`${base}${path}`, { ...init, headers });
+  return fetch(`${base}${path}`, { ...init, headers });
+}
+
+async function request<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
+  const stored = readStoredAuth();
+  const effectiveToken = stored?.access_token ?? token;
+  let response = await send<T>(path, init, effectiveToken);
+
+  if (response.status === 401 && effectiveToken && stored?.refresh_token) {
+    const refreshResponse = await send<AuthState>("/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: stored.refresh_token }),
+    });
+    if (refreshResponse.ok) {
+      const refreshed = (await refreshResponse.json()) as AuthState;
+      saveAuth(refreshed);
+      response = await send<T>(path, init, refreshed.access_token);
+    } else {
+      clearAuth();
+    }
+  }
+
   const payload: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     const details = errorDetails(payload);
@@ -214,6 +235,42 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify(input),
     }, token);
+  },
+  uploadDocument(token: string, projectId: string, file: File, title?: string) {
+    const body = new FormData();
+    body.append("file", file);
+    if (title?.trim()) body.append("title", title.trim());
+    return request<ApiProjectDocument>(
+      `/projects/${encodeURIComponent(projectId)}/documents/upload`,
+      { method: "POST", body },
+      token,
+    );
+  },
+  updateDocument(
+    token: string,
+    projectId: string,
+    documentId: string,
+    input: {
+      title?: string;
+      document_type?: ApiProjectDocument["document_type"];
+      status?: ApiProjectDocument["status"];
+    },
+  ) {
+    return request<ApiProjectDocument>(
+      `/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(documentId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      },
+      token,
+    );
+  },
+  deleteDocument(token: string, projectId: string, documentId: string) {
+    return request<{ status: string }>(
+      `/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(documentId)}`,
+      { method: "DELETE" },
+      token,
+    );
   },
   saveDocumentVersion(token: string, projectId: string, documentId: string, content: string, changeNote: string) {
     return request<ApiDocumentVersion>(`/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(documentId)}/versions`, {

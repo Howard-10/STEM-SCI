@@ -278,7 +278,7 @@ export function ProjectWorkspacePage({ projectId: projectIdProp, onNavigate }: {
   };
 
   return (
-    <div className="workspace">
+    <div className="workspace project-workspace-page">
       <header className="workspace-intro chat-intro">
         <div>
           <span className="eyebrow">PROJECT WORKSPACE / EVIDENCE-AWARE RESEARCH</span>

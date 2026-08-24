@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   authApi,
   clearAuth,
@@ -22,6 +22,14 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   response?: QAAnswerResponse;
+  attachments?: ChatAttachment[];
+};
+
+type ChatAttachment = {
+  id: string;
+  name: string;
+  kind: "PDF" | "WORD" | "IMAGE";
+  sizeLabel: string;
 };
 
 type PaneWidths = {
@@ -109,10 +117,29 @@ export function App() {
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState("");
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [projectForm, setProjectForm] = useState({
+    project_id: "",
+    title: "",
+    research_direction: "",
+    abstract: "",
+  });
+  const [projectBusy, setProjectBusy] = useState(false);
+  const [projectError, setProjectError] = useState("");
   const [documents, setDocuments] = useState<ApiProjectDocument[]>([]);
   const [conversations, setConversations] = useState<ApiConversationSummary[]>([]);
   const [documentsBusy, setDocumentsBusy] = useState(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const chatAttachmentInputRef = useRef<HTMLInputElement>(null);
+  const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([]);
+  const [attachmentError, setAttachmentError] = useState("");
   const [selectedDocument, setSelectedDocument] = useState<SelectedDocument | null>(null);
+  const [documentTitleDraft, setDocumentTitleDraft] = useState("");
+  const [documentContentDraft, setDocumentContentDraft] = useState("");
+  const [documentEditBusy, setDocumentEditBusy] = useState(false);
+  const [documentEditError, setDocumentEditError] = useState("");
   const [selectedCitation, setSelectedCitation] = useState<SelectedCitation | null>(null);
   const [rightPaneVisible, setRightPaneVisible] = useState(true);
   const [paneWidths, setPaneWidths] = useState<PaneWidths>({ sidebar: 246, output: 374 });
@@ -122,9 +149,11 @@ export function App() {
     () => projects.find((project) => project.project_id === projectId) ?? projects[0] ?? null,
     [projectId, projects],
   );
-  const activeDocuments = documents.length
+  const activeDocuments = auth?.access_token
     ? documents
     : demoDocumentsByProject[projectId] ?? demoDocumentsByProject[demoProjectId] ?? [];
+  const draftDocuments = activeDocuments.filter((document) => document.document_type === "manuscript");
+  const projectPapers = activeDocuments.filter((document) => document.document_type !== "manuscript");
   const citations = lastResponse?.citations ?? demoQAResponse.citations;
 
   useEffect(() => {
@@ -132,15 +161,21 @@ export function App() {
       setProjects(demoProjects);
       return;
     }
+    setProjects([]);
     let mounted = true;
     void authApi.listProjects(auth.access_token).then((next) => {
       if (!mounted) return;
-      setProjects(next.length ? next : demoProjects);
+      setProjects(next);
       if (next.length && !next.some((project) => project.project_id === projectId)) {
         setProjectId(next[0].project_id);
+      } else if (!next.length) {
+        setProjectId("");
       }
     }).catch(() => {
-      if (mounted) setProjects(demoProjects);
+      if (mounted) {
+        setProjects([]);
+        setProjectId("");
+      }
     });
     return () => {
       mounted = false;
@@ -170,7 +205,7 @@ export function App() {
       setConversations(nextConversations);
     }).catch(() => {
       if (!mounted) return;
-      setDocuments(demoDocumentsByProject[projectId] ?? demoDocumentsByProject[demoProjectId] ?? []);
+      setDocuments([]);
       setConversations([]);
     }).finally(() => {
       if (mounted) setDocumentsBusy(false);
@@ -208,6 +243,47 @@ export function App() {
     };
   }, [draggingPane]);
 
+  const selectChatFiles = (files: FileList | null) => {
+    if (!files?.length) return;
+    const nextAttachments: ChatAttachment[] = [];
+    for (const file of Array.from(files)) {
+      const lowerName = file.name.toLowerCase();
+      const kind = lowerName.endsWith(".pdf")
+        ? "PDF"
+        : lowerName.endsWith(".doc") || lowerName.endsWith(".docx")
+          ? "WORD"
+          : file.type.startsWith("image/")
+            ? "IMAGE"
+            : null;
+      if (!kind) {
+        setAttachmentError("附件仅支持 PDF、Word 和图片");
+        continue;
+      }
+      if (file.size > 20 * 1024 * 1024) {
+        setAttachmentError("单个附件不能超过 20 MB");
+        continue;
+      }
+      nextAttachments.push({
+        id: `${file.name}-${file.lastModified}-${Math.random().toString(16).slice(2)}`,
+        name: file.name,
+        kind,
+        sizeLabel: file.size >= 1024 * 1024
+          ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
+          : `${Math.max(1, Math.round(file.size / 1024))} KB`,
+      });
+    }
+    setChatAttachments((current) => [...current, ...nextAttachments].slice(0, 5));
+    if (nextAttachments.length && nextAttachments.length + chatAttachments.length <= 5) {
+      setAttachmentError("");
+    }
+    if (chatAttachmentInputRef.current) chatAttachmentInputRef.current.value = "";
+  };
+
+  const removeChatAttachment = (attachmentId: string) => {
+    setChatAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
+    setAttachmentError("");
+  };
+
   const submitQuestion = async (value = question) => {
     const trimmed = value.trim();
     if (!trimmed || busy || !activeProject) return;
@@ -215,8 +291,11 @@ export function App() {
       id: `user-${Date.now()}`,
       role: "user",
       content: trimmed,
+      attachments: chatAttachments,
     }]);
     setQuestion("");
+    setChatAttachments([]);
+    setAttachmentError("");
     setBusy(true);
     try {
       const response = auth?.access_token
@@ -293,9 +372,107 @@ export function App() {
     setMessages([makeWelcome(project?.title ?? "科研项目")]);
   };
 
+  const openCreateProject = () => {
+    setProjectForm({
+      project_id: "",
+      title: "",
+      research_direction: "",
+      abstract: "",
+    });
+    setProjectError("");
+    setCreateProjectOpen(true);
+  };
+
+  const createProject = async () => {
+    if (!auth?.access_token) {
+      setProjectError("请先登录后再创建项目");
+      return;
+    }
+    if (!projectForm.title.trim() || !projectForm.research_direction.trim()) {
+      setProjectError("请填写项目名称和研究方向");
+      return;
+    }
+    setProjectBusy(true);
+    setProjectError("");
+    try {
+      const created = await authApi.createProject(auth.access_token, {
+        project_id: projectForm.project_id.trim() || undefined,
+        title: projectForm.title.trim(),
+        research_direction: projectForm.research_direction.trim(),
+        abstract: projectForm.abstract.trim() || null,
+      });
+      setProjects((current) => [created, ...current.filter((item) => item.project_id !== created.project_id)]);
+      setProjectId(created.project_id);
+      setDocuments([]);
+      setConversations([]);
+      setConversationId(undefined);
+      setMessages([makeWelcome(created.title)]);
+      setLastResponse(demoQAResponse);
+      setCreateProjectOpen(false);
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : "创建项目失败");
+    } finally {
+      setProjectBusy(false);
+    }
+  };
+
+  const uploadDocument = async (file: File) => {
+    if (!auth?.access_token || !projectId) {
+      setUploadError("请先登录并选择一个项目");
+      return;
+    }
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith(".pdf") && !lowerName.endsWith(".docx")) {
+      setUploadError("目前支持 PDF 和 DOCX 文件");
+      return;
+    }
+    setUploadBusy(true);
+    setUploadError("");
+    try {
+      const created = await authApi.uploadDocument(auth.access_token, projectId, file);
+      setDocuments((current) => [created, ...current.filter((item) => item.document_id !== created.document_id)]);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "上传文档失败");
+    } finally {
+      setUploadBusy(false);
+      if (uploadInputRef.current) uploadInputRef.current.value = "";
+    }
+  };
+
+  const createDraft = async () => {
+    if (!auth?.access_token || !projectId) {
+      setUploadError("请先登录并选择一个项目");
+      return;
+    }
+    setDocumentEditBusy(true);
+    setDocumentEditError("");
+    try {
+      const created = await authApi.createDocument(auth.access_token, projectId, {
+        title: "论文草稿",
+        document_type: "manuscript",
+        format: "markdown",
+        content: "# 论文草稿\n\n## 研究问题\n\n## 研究设计\n\n## 结果与讨论\n",
+        change_note: "创建论文草稿",
+      });
+      setDocuments((current) => [
+        created,
+        ...current.filter((item) => item.document_id !== created.document_id),
+      ]);
+      await openDocument(created);
+    } catch (error) {
+      setDocumentEditError(error instanceof Error ? error.message : "创建论文草稿失败");
+    } finally {
+      setDocumentEditBusy(false);
+    }
+  };
+
   const openDocument = async (document: ApiProjectDocument) => {
     setSelectedDocument({ document, version: null });
+    setDocumentTitleDraft(document.title);
+    setDocumentContentDraft("");
+    setDocumentEditError("");
     if (!auth?.access_token) {
+      const content = demoDocumentContents[document.document_id] ?? "演示文档暂无正文。";
       setSelectedDocument({
         document,
         version: {
@@ -303,7 +480,7 @@ export function App() {
           project_id: document.project_id,
           version: document.current_version,
           format: document.format,
-          content: demoDocumentContents[document.document_id] ?? "演示文档暂无正文。",
+          content,
           sha256: document.current_sha256,
           size_bytes: document.size_bytes,
           storage_ref: `demo://${document.document_id}`,
@@ -312,6 +489,7 @@ export function App() {
           created_at: document.updated_at,
         },
       });
+      setDocumentContentDraft(content);
       return;
     }
     try {
@@ -322,8 +500,80 @@ export function App() {
         document.current_version,
       );
       setSelectedDocument({ document, version });
+      setDocumentTitleDraft(document.title);
+      setDocumentContentDraft(version.content);
     } catch {
       setSelectedDocument({ document, version: null });
+      setDocumentEditError("无法读取文档正文");
+    }
+  };
+
+  const saveSelectedDocument = async () => {
+    if (!auth?.access_token || !selectedDocument?.version) return;
+    setDocumentEditBusy(true);
+    setDocumentEditError("");
+    try {
+      let nextDocument = selectedDocument.document;
+      let nextVersion = selectedDocument.version;
+      const nextTitle = documentTitleDraft.trim();
+      if (nextTitle && nextTitle !== nextDocument.title) {
+        nextDocument = await authApi.updateDocument(
+          auth.access_token,
+          projectId,
+          nextDocument.document_id,
+          { title: nextTitle },
+        );
+      }
+      if (documentContentDraft !== selectedDocument.version.content) {
+        nextVersion = await authApi.saveDocumentVersion(
+          auth.access_token,
+          projectId,
+          nextDocument.document_id,
+          documentContentDraft,
+          "在平台编辑论文草稿",
+        );
+        nextDocument = {
+          ...nextDocument,
+          current_version: nextVersion.version,
+          current_sha256: nextVersion.sha256,
+          size_bytes: nextVersion.size_bytes,
+          updated_by: nextVersion.created_by,
+          updated_at: nextVersion.created_at,
+        };
+      }
+      setDocuments((current) =>
+        current.map((item) => item.document_id === nextDocument.document_id ? nextDocument : item),
+      );
+      setSelectedDocument({ document: nextDocument, version: nextVersion });
+      setDocumentTitleDraft(nextDocument.title);
+      setDocumentContentDraft(nextVersion.content);
+    } catch (error) {
+      setDocumentEditError(error instanceof Error ? error.message : "保存论文草稿失败");
+    } finally {
+      setDocumentEditBusy(false);
+    }
+  };
+
+  const deleteSelectedDocument = async () => {
+    if (!auth?.access_token || !selectedDocument) return;
+    if (selectedDocument.document.document_type !== "manuscript") return;
+    if (!window.confirm(`确定删除“${selectedDocument.document.title}”吗？`)) return;
+    setDocumentEditBusy(true);
+    setDocumentEditError("");
+    try {
+      await authApi.deleteDocument(
+        auth.access_token,
+        projectId,
+        selectedDocument.document.document_id,
+      );
+      setDocuments((current) =>
+        current.filter((item) => item.document_id !== selectedDocument.document.document_id),
+      );
+      setSelectedDocument(null);
+    } catch (error) {
+      setDocumentEditError(error instanceof Error ? error.message : "删除论文草稿失败");
+    } finally {
+      setDocumentEditBusy(false);
     }
   };
 
@@ -453,7 +703,7 @@ export function App() {
         <div className="sidebar-section project-section">
           <div className="sidebar-section-heading">
             <span className="sidebar-label">项目</span>
-            <button className="plain-icon-button" type="button" title="新建项目">＋</button>
+            <button className="plain-icon-button" type="button" title="新建项目" onClick={openCreateProject}>＋</button>
           </div>
           <button className="project-select" type="button" onClick={() => setProjectMenuOpen((open) => !open)}>
             <span className="project-avatar">{(activeProject?.title ?? "研").slice(0, 1)}</span>
@@ -567,6 +817,17 @@ export function App() {
               <div className="message-body">
                 <div className="message-meta">{message.role === "user" ? "你" : "STEM-SCI"} <span>·</span> {message.role === "user" ? "研究问题" : "研究助手"}</div>
                 <p>{message.content}</p>
+                {message.attachments && message.attachments.length > 0 && (
+                  <div className="message-attachments" aria-label="本条消息的附件">
+                    {message.attachments.map((attachment) => (
+                      <span className="message-attachment" key={attachment.id}>
+                        <strong>{attachment.kind}</strong>
+                        <span>{attachment.name}</span>
+                        <small>{attachment.sizeLabel}</small>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {message.response && (
                   <div className="message-signal-row">
                     <span className="signal-chip signal-green">证据 {message.response.citations.length} 条</span>
@@ -604,9 +865,46 @@ export function App() {
               placeholder="描述你的研究问题，或粘贴一段论文内容..."
               rows={3}
             />
+            {chatAttachments.length > 0 && (
+              <div className="attachment-preview" aria-label="待发送附件">
+                {chatAttachments.map((attachment) => (
+                  <div className="attachment-chip" key={attachment.id}>
+                    <span className="attachment-chip-kind">{attachment.kind}</span>
+                    <span className="attachment-chip-copy">
+                      <strong>{attachment.name}</strong>
+                      <small>{attachment.sizeLabel}</small>
+                    </span>
+                    <button
+                      className="attachment-remove"
+                      type="button"
+                      title={`移除 ${attachment.name}`}
+                      onClick={() => removeChatAttachment(attachment.id)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {attachmentError && <p className="attachment-error">{attachmentError}</p>}
             <div className="composer-toolbar">
               <div className="composer-tools">
-                <button className="composer-tool" type="button" title="添加论文">＋</button>
+                <button
+                  className="composer-tool composer-attach-tool"
+                  type="button"
+                  title="添加 PDF、Word 或图片"
+                  onClick={() => chatAttachmentInputRef.current?.click()}
+                >
+                  ＋
+                </button>
+                <input
+                  ref={chatAttachmentInputRef}
+                  className="visually-hidden"
+                  type="file"
+                  multiple
+                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*"
+                  onChange={(event) => selectChatFiles(event.target.files)}
+                />
                 <button className="composer-tool" type="button" title="引用知识库">▱ <span>知识库</span></button>
                 <button className="composer-tool" type="button" title="选择证据模式" onClick={() => setMode((current) => current === "discovery" ? "formal" : "discovery")}>
                   ◈ <span>{mode === "formal" ? "正式" : "探索"}</span>
@@ -634,16 +932,79 @@ export function App() {
             <section className="output-section">
               <div className="output-section-heading">
                 <h3>当前项目论文</h3>
-                <span>{documentsBusy ? "加载中..." : `${activeDocuments.length} 篇`}</span>
+                <div className="output-heading-actions">
+                  <span>{documentsBusy ? "加载中..." : `${activeDocuments.length} 篇`}</span>
+                  <button
+                    className="upload-doc-button"
+                    type="button"
+                    title="上传 PDF 或 DOCX"
+                    disabled={uploadBusy || !auth?.access_token || !projectId}
+                    onClick={() => uploadInputRef.current?.click()}
+                  >
+                    {uploadBusy ? "上传中..." : "上传"}
+                  </button>
+                  <input
+                    ref={uploadInputRef}
+                    className="visually-hidden"
+                    type="file"
+                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void uploadDocument(file);
+                    }}
+                  />
+                </div>
               </div>
               <div className="paper-list">
-                {activeDocuments.map((document) => (
+                {projectPapers.map((document) => (
                   <button className="paper-item" type="button" key={document.document_id} onClick={() => void openDocument(document)}>
-                    <span className="paper-file-icon">{document.format === "pdf" ? "PDF" : "MD"}</span>
+                    <span className="paper-file-icon">{document.format.toUpperCase()}</span>
                     <span><strong>{document.title}</strong><small>版本 {document.current_version} · {document.document_type}</small></span>
                     <span className="row-arrow">›</span>
                   </button>
                 ))}
+                {!documentsBusy && !projectPapers.length && (
+                  <div className="empty-documents">
+                    <strong>还没有项目论文</strong>
+                    <span>上传 PDF 或 DOCX 后，论文会出现在这里并可供对话检索。</span>
+                  </div>
+                )}
+                {uploadError && <p className="upload-error">{uploadError}</p>}
+              </div>
+            </section>
+            <section className="output-section draft-section">
+              <div className="output-section-heading">
+                <div>
+                  <h3>论文草稿</h3>
+                  <p className="section-subtitle">可直接编辑，保存后自动生成新版本</p>
+                </div>
+                <button
+                  className="draft-create-button"
+                  type="button"
+                  disabled={documentEditBusy || !auth?.access_token || !projectId}
+                  onClick={() => void createDraft()}
+                >
+                  ＋ 新建
+                </button>
+              </div>
+              <div className="paper-list">
+                {draftDocuments.map((document) => (
+                  <button className="paper-item draft-paper-item" type="button" key={document.document_id} onClick={() => void openDocument(document)}>
+                    <span className="paper-file-icon draft-file-icon">稿</span>
+                    <span>
+                      <strong>{document.title}</strong>
+                      <small>版本 {document.current_version} · 可编辑</small>
+                    </span>
+                    <span className="row-arrow">›</span>
+                  </button>
+                ))}
+                {!documentsBusy && !draftDocuments.length && (
+                  <div className="empty-documents draft-empty">
+                    <strong>还没有论文草稿</strong>
+                    <span>创建草稿后，可以在平台内直接编辑、保存版本或删除。</span>
+                  </div>
+                )}
+                {documentEditError && <p className="upload-error">{documentEditError}</p>}
               </div>
             </section>
             <section className="output-section">
@@ -733,15 +1094,62 @@ export function App() {
           <section className="workspace-drawer document-drawer" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
             <div className="workspace-drawer-header">
               <div>
-                <span className="chat-kicker">项目文档</span>
+                <span className="chat-kicker">
+                  {selectedDocument.document.document_type === "manuscript" ? "论文草稿编辑器" : "项目文档"}
+                </span>
                 <h2>{selectedDocument.document.title}</h2>
                 <small>版本 {selectedDocument.version?.version ?? selectedDocument.document.current_version} · {selectedDocument.document.format}</small>
               </div>
               <button className="header-icon-button" type="button" title="关闭" onClick={() => setSelectedDocument(null)}>×</button>
             </div>
-            <div className="document-content">
-              {selectedDocument.version?.content ?? "正在读取文档内容..."}
-            </div>
+            {selectedDocument.document.document_type === "manuscript" ? (
+              <div className="document-editor">
+                <label className="document-editor-label">
+                  草稿标题
+                  <input
+                    value={documentTitleDraft}
+                    onChange={(event) => setDocumentTitleDraft(event.target.value)}
+                    placeholder="输入论文标题"
+                  />
+                </label>
+                <label className="document-editor-label">
+                  草稿正文
+                  <textarea
+                    value={documentContentDraft}
+                    onChange={(event) => setDocumentContentDraft(event.target.value)}
+                    placeholder="在这里编辑论文草稿..."
+                    disabled={!selectedDocument.version || documentEditBusy}
+                  />
+                </label>
+                {documentEditError && <p className="document-editor-error">{documentEditError}</p>}
+                <div className="document-editor-actions">
+                  <button
+                    className="delete-draft-button"
+                    type="button"
+                    disabled={documentEditBusy}
+                    onClick={() => void deleteSelectedDocument()}
+                  >
+                    删除草稿
+                  </button>
+                  <button
+                    className="primary-inline-button"
+                    type="button"
+                    disabled={
+                      documentEditBusy
+                      || !selectedDocument.version
+                      || !documentTitleDraft.trim()
+                    }
+                    onClick={() => void saveSelectedDocument()}
+                  >
+                    {documentEditBusy ? "保存中..." : "保存新版本"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="document-content">
+                {selectedDocument.version?.content ?? "正在读取文档内容..."}
+              </div>
+            )}
             <div className="document-meta">
               <span>项目隔离：{selectedDocument.document.project_id}</span>
               <span>SHA256：{selectedDocument.document.current_sha256.slice(0, 12)}...</span>
@@ -768,6 +1176,63 @@ export function App() {
               <div><dt>DOI</dt><dd>{selectedCitation.normalized_doi ?? "未提供"}</dd></div>
             </dl>
             <p className="drawer-note">这条证据来自本轮问答返回的检索结果。正式模式下还需要满足来源定位和核验条件。</p>
+          </section>
+        </div>
+      )}
+
+      {createProjectOpen && (
+        <div className="workspace-drawer-backdrop" role="presentation" onClick={() => setCreateProjectOpen(false)}>
+          <section className="workspace-modal create-project-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className="workspace-drawer-header">
+              <div>
+                <span className="chat-kicker">项目管理</span>
+                <h2>新建研究项目</h2>
+                <small>创建后会自动切换到新项目，不会清空已有项目。</small>
+              </div>
+              <button className="header-icon-button" type="button" title="关闭" onClick={() => setCreateProjectOpen(false)}>×</button>
+            </div>
+            <div className="create-project-form">
+              <label>
+                项目名称
+                <input
+                  value={projectForm.title}
+                  onChange={(event) => setProjectForm((current) => ({ ...current, title: event.target.value }))}
+                  placeholder="例如：生成式 AI 物理建模研究"
+                />
+              </label>
+              <label>
+                研究方向
+                <input
+                  value={projectForm.research_direction}
+                  onChange={(event) => setProjectForm((current) => ({ ...current, research_direction: event.target.value }))}
+                  placeholder="例如：师范生 Python 物理建模与生成式 AI 支架"
+                />
+              </label>
+              <label>
+                项目标识（可选）
+                <input
+                  value={projectForm.project_id}
+                  onChange={(event) => setProjectForm((current) => ({ ...current, project_id: event.target.value }))}
+                  placeholder="留空则由后端自动生成"
+                />
+              </label>
+              <label>
+                项目简介（可选）
+                <textarea
+                  value={projectForm.abstract}
+                  onChange={(event) => setProjectForm((current) => ({ ...current, abstract: event.target.value }))}
+                  placeholder="描述这个项目要解决的问题和计划产出"
+                  rows={4}
+                />
+              </label>
+              {projectError && <p className="project-form-error">{projectError}</p>}
+              <div className="modal-actions">
+                <button className="secondary-inline-button" type="button" onClick={() => setCreateProjectOpen(false)}>取消</button>
+                <button className="primary-inline-button" type="button" disabled={projectBusy} onClick={() => void createProject()}>
+                  {projectBusy ? "创建中..." : "创建项目"}
+                </button>
+              </div>
+            </div>
           </section>
         </div>
       )}
