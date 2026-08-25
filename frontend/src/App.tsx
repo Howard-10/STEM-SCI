@@ -57,13 +57,36 @@ const starterPrompts = [
 ];
 
 const agentRows = [
-  ["01", "导师规划", "界定研究问题与范围", "已完成"],
-  ["02", "证据审查", "筛选、核验和组织文献证据", "进行中"],
-  ["03", "研究设计", "形成可审批的研究方案", "待启动"],
-  ["04", "数据分析", "编译分析计划与结果检查", "待启动"],
-  ["05", "论文写作", "生成基于证据的写作草案", "待启动"],
-  ["06", "独立审查", "检查风险、引用和方法", "待启动"],
-];
+  ["01", "mentor_planning", "导师规划", "界定研究问题与范围"],
+  ["02", "evidence_review", "证据审查", "筛选、核验和组织文献证据"],
+  ["03", "research_design", "研究设计", "形成可审批的研究方案"],
+  ["04", "data_analysis", "数据分析", "编译分析计划与结果检查"],
+  ["05", "paper_writing", "论文写作", "生成基于证据的写作草案"],
+  ["06", "independent_review", "独立审查", "检查风险、引用和方法"],
+] as const;
+
+const agentCompletionStages: Record<string, string[]> = {
+  mentor_planning: ["SCOPED", "EVIDENCE_READY", "STUDY_PROTOCOL_APPROVED", "DATA_READY", "ANALYZED", "DRAFTED", "VERIFIED", "RELEASED"],
+  evidence_review: ["EVIDENCE_READY", "STUDY_PROTOCOL_APPROVED", "DATA_READY", "ANALYZED", "DRAFTED", "VERIFIED", "RELEASED"],
+  research_design: ["STUDY_PROTOCOL_APPROVED", "DATA_READY", "ANALYZED", "DRAFTED", "VERIFIED", "RELEASED"],
+  data_analysis: ["ANALYZED", "DRAFTED", "VERIFIED", "RELEASED"],
+  paper_writing: ["DRAFTED", "VERIFIED", "RELEASED"],
+  independent_review: ["VERIFIED", "RELEASED"],
+};
+
+function workflowAgentStatus(
+  agentId: string,
+  workflow: WorkflowState | null,
+): "已完成" | "待审批" | "进行中" | "待启动" {
+  if (!workflow) return "待启动";
+  const currentStage = workflow.current_stage;
+  if (agentCompletionStages[agentId]?.includes(currentStage)) return "已完成";
+  if (workflow.last_route_decision?.selected_route === agentId && currentStage === "WAITING_HUMAN") {
+    return "待审批";
+  }
+  if (workflow.last_route_decision?.selected_route === agentId) return "进行中";
+  return "待启动";
+}
 
 const dataPipelineLabels: Record<string, string> = {
   WAITING_RAW_DATA: "等待原始 CSV",
@@ -1231,15 +1254,21 @@ export function App() {
               <div><strong>研究链路正在审查</strong><p>当前回答已关联证据，正式发布前仍需检查数据和引用。</p></div>
             </section>
             <section className="output-section">
-              <div className="output-section-heading"><h3>六个 Agent</h3><span>1 / 6 活跃</span></div>
+              <div className="output-section-heading">
+                <h3>六个 Agent</h3>
+                <span>{agentRows.filter(([, agentId]) => workflowAgentStatus(agentId, workflow) === "进行中" || workflowAgentStatus(agentId, workflow) === "待审批").length} / 6 活跃</span>
+              </div>
               <div className="agent-list">
-                {agentRows.map(([index, name, description, status]) => (
+                {agentRows.map(([index, agentId, name, description]) => {
+                  const status = workflowAgentStatus(agentId, workflow);
+                  return (
                   <div className="agent-row" key={index}>
                     <span className="agent-index">{index}</span>
                     <span><strong>{name}</strong><small>{description}</small></span>
-                    <span className={status === "进行中" ? "agent-status active" : "agent-status"}>{status}</span>
+                    <span className={status === "进行中" || status === "待审批" ? "agent-status active" : "agent-status"}>{status}</span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
             <section className="output-section">
