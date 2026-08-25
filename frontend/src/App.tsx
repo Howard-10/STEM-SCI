@@ -11,6 +11,7 @@ import {
   type AuthState,
 } from "./api/auth";
 import { qaApi, type QAAnswerResponse, type QAContextMode } from "./api/qa";
+import { workflowApi, type WorkflowState } from "./api/workflow";
 import { demoBundle, demoCorpus, demoQAResponse, demoRuntime } from "./demo/data";
 import { demoDocumentContents, demoDocumentsByProject, demoProjects } from "./demo/projectHub";
 
@@ -63,6 +64,16 @@ const agentRows = [
   ["05", "论文写作", "生成基于证据的写作草案", "待启动"],
   ["06", "独立审查", "检查风险、引用和方法", "待启动"],
 ];
+
+const dataPipelineLabels: Record<string, string> = {
+  WAITING_RAW_DATA: "等待原始 CSV",
+  WAITING_PROCESSING_APPROVAL: "等待数据处理审批",
+  WAITING_FREEZE_APPROVAL: "等待数据冻结审批",
+  WAITING_EXECUTION_APPROVAL: "等待分析执行审批",
+  ANALYZED: "分析结果已验证",
+  REWORK: "需要返工",
+  BLOCKED: "流程已阻断",
+};
 
 const capabilityCards = [
   {
@@ -132,6 +143,7 @@ export function App() {
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const rawCsvInputRef = useRef<HTMLInputElement>(null);
   const chatAttachmentInputRef = useRef<HTMLInputElement>(null);
   const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
@@ -144,6 +156,9 @@ export function App() {
   const [rightPaneVisible, setRightPaneVisible] = useState(true);
   const [paneWidths, setPaneWidths] = useState<PaneWidths>({ sidebar: 246, output: 374 });
   const [draggingPane, setDraggingPane] = useState<"sidebar" | "output" | null>(null);
+  const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
+  const [workflowBusy, setWorkflowBusy] = useState(false);
+  const [workflowError, setWorkflowError] = useState("");
 
   const activeProject = useMemo(
     () => projects.find((project) => project.project_id === projectId) ?? projects[0] ?? null,
@@ -217,6 +232,21 @@ export function App() {
   }, [auth?.access_token, projectId]);
 
   useEffect(() => {
+    let mounted = true;
+    setWorkflowError("");
+    if (!auth?.access_token || !projectId) {
+      setWorkflow(null);
+      return () => { mounted = false; };
+    }
+    void workflowApi.getProject(projectId).then((next) => {
+      if (mounted) setWorkflow(next);
+    }).catch(() => {
+      if (mounted) setWorkflow(null);
+    });
+    return () => { mounted = false; };
+  }, [auth?.access_token, projectId]);
+
+  useEffect(() => {
     if (!draggingPane) return;
     const onPointerMove = (event: PointerEvent) => {
       if (draggingPane === "sidebar") {
@@ -282,6 +312,86 @@ export function App() {
   const removeChatAttachment = (attachmentId: string) => {
     setChatAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
     setAttachmentError("");
+  };
+
+  const refreshWorkflow = async () => {
+    const next = await workflowApi.getProject(projectId);
+    setWorkflow(next);
+    return next;
+  };
+
+  const startWorkflow = async () => {
+    if (!activeProject || workflowBusy) return;
+    setWorkflowBusy(true);
+    setWorkflowError("");
+    try {
+      const result = await workflowApi.startProject({
+        project_id: projectId,
+        research_intent: activeProject.research_direction || activeProject.title,
+      });
+      setWorkflow(result.workflow_state);
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : "研究流程启动失败");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  const runNextWorkflowStage = async () => {
+    setWorkflowBusy(true);
+    setWorkflowError("");
+    try {
+      const result = await workflowApi.runNext(projectId);
+      setWorkflow(result.workflow_state);
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : "无法调度下一阶段");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  const decideWorkflow = async (decision: "approved" | "rejected") => {
+    setWorkflowBusy(true);
+    setWorkflowError("");
+    try {
+      await workflowApi.approve(projectId, decision, auth?.user.username ?? "researcher");
+      await refreshWorkflow();
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : "流程审批失败");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  const uploadRawCsv = async (file: File) => {
+    setWorkflowBusy(true);
+    setWorkflowError("");
+    try {
+      await workflowApi.uploadRawCsv(projectId, file);
+      await refreshWorkflow();
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : "CSV 上传或审查失败");
+    } finally {
+      setWorkflowBusy(false);
+      if (rawCsvInputRef.current) rawCsvInputRef.current.value = "";
+    }
+  };
+
+  const decideDataPipeline = async (decision: "approved" | "rejected") => {
+    setWorkflowBusy(true);
+    setWorkflowError("");
+    try {
+      await workflowApi.decideDataPipeline(
+        projectId,
+        decision,
+        auth?.user.username ?? "researcher",
+      );
+      await refreshWorkflow();
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : "数据 Gate 审批失败");
+    } finally {
+      setWorkflowBusy(false);
+    }
   };
 
   const submitQuestion = async (value = question) => {
@@ -1056,6 +1166,66 @@ export function App() {
 
         {view === "audit" && (
           <div className="output-content">
+            <section className="output-section workflow-control-section">
+              <div className="output-section-heading">
+                <h3>科研工作流</h3>
+                <span className="workflow-stage-code">{workflow?.current_stage ?? "未启动"}</span>
+              </div>
+              {!auth?.access_token ? (
+                <p className="workflow-control-note">登录后可启动六 Agent 工作流并完成数据审批。</p>
+              ) : !workflow ? (
+                <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void startWorkflow()}>
+                  {workflowBusy ? "启动中..." : "启动工作流"}
+                </button>
+              ) : (
+                <div className="workflow-control-body">
+                  <div className="workflow-state-row">
+                    <span>当前阶段</span>
+                    <strong>{workflow.current_stage}</strong>
+                  </div>
+                  {workflow.data_pipeline && (
+                    <div className="workflow-state-row">
+                      <span>数据管线</span>
+                      <strong>{dataPipelineLabels[workflow.data_pipeline.stage] ?? workflow.data_pipeline.stage}</strong>
+                    </div>
+                  )}
+
+                  {workflow.data_pipeline?.stage === "WAITING_RAW_DATA" ? (
+                    <div className="workflow-control-actions">
+                      <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => rawCsvInputRef.current?.click()}>
+                        {workflowBusy ? "审查中..." : "上传原始 CSV"}
+                      </button>
+                      <input
+                        ref={rawCsvInputRef}
+                        className="visually-hidden"
+                        type="file"
+                        accept=".csv,text/csv"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) void uploadRawCsv(file);
+                        }}
+                      />
+                    </div>
+                  ) : workflow.data_pipeline?.pending_approval ? (
+                    <div className="workflow-control-actions">
+                      <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideDataPipeline("approved")}>通过数据 Gate</button>
+                      <button className="secondary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideDataPipeline("rejected")}>退回</button>
+                    </div>
+                  ) : workflow.pending_approval_ref ? (
+                    <div className="workflow-control-actions">
+                      <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("approved")}>通过候选方案</button>
+                      <button className="secondary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("rejected")}>退回</button>
+                    </div>
+                  ) : workflow.current_stage !== "VERIFIED" && workflow.current_stage !== "BLOCKED" && workflow.current_stage !== "REWORK" ? (
+                    <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void runNextWorkflowStage()}>
+                      {workflowBusy ? "调度中..." : "调度下一 Agent"}
+                    </button>
+                  ) : null}
+                  {workflow.data_pipeline?.rework_reason && <p className="workflow-control-error">{workflow.data_pipeline.rework_reason}</p>}
+                </div>
+              )}
+              {workflowError && <p className="workflow-control-error" role="alert">{workflowError}</p>}
+            </section>
             <section className="audit-summary">
               <div className="audit-summary-icon">✓</div>
               <div><strong>研究链路正在审查</strong><p>当前回答已关联证据，正式发布前仍需检查数据和引用。</p></div>

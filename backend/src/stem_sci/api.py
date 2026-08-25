@@ -2,24 +2,23 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import os
-import io
 import zipfile
-import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 from typing import Annotated
+from xml.etree import ElementTree
 
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, Header, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
-from dotenv import load_dotenv
-from starlette.exceptions import HTTPException as StarletteHTTPException
 from pypdf import PdfReader
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .agents import AgentCapability, ReviewFinding
 from .accounts import (
     AuthError,
     AuthTokenPair,
@@ -32,6 +31,7 @@ from .accounts import (
     UserCreateRequest,
     UserProfile,
 )
+from .agents import AgentCapability, ReviewFinding
 from .agents.runtime import GPTProvider, StructuredGenerator
 from .artifacts.artifact_store import SQLiteArtifactStore
 from .artifacts.content_store import ArtifactContent, SQLiteArtifactContentStore
@@ -79,13 +79,6 @@ from .documents import (
     DocumentVersionCreateRequest,
     ProjectDocument,
 )
-from .operators.executor import OperatorExecutor
-from .operators.knowledge import KnowledgeOperatorRuntime
-from .operators.models import OperatorRun, OperatorSpec
-from .operators.registry import OperatorRegistry
-from .provenance.agent_run_store import SQLiteAgentRunStore
-from .provenance.models import AgentRunRecord
-from .settings import ConfigurationReport, validate_environment
 from .knowledge import (
     ConversationSummary,
     CorpusManifest,
@@ -100,6 +93,13 @@ from .knowledge import (
     SharedCorpusSummary,
 )
 from .knowledge.manifest import CorpusRegistry
+from .operators.executor import OperatorExecutor
+from .operators.knowledge import KnowledgeOperatorRuntime
+from .operators.models import OperatorRun, OperatorSpec
+from .operators.registry import OperatorRegistry
+from .provenance.agent_run_store import SQLiteAgentRunStore
+from .provenance.models import AgentRunRecord
+from .settings import ConfigurationReport, validate_environment
 
 DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 DEFAULT_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -730,6 +730,38 @@ def project_workflow_approve(
     return workflow_controller.resume_approval(
         project_id,
         approval,
+        decision=request.decision,
+        decided_by=request.decided_by,
+    )
+
+
+@app.post("/api/v1/projects/{project_id}/workflow/data-pipeline/raw")
+async def project_register_data_pipeline_raw_csv(
+    project_id: str,
+    file: Annotated[UploadFile, File(...)],
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> DataPipelineState:
+    """Authenticated project-scoped CSV upload for the approved data gate."""
+
+    identity_service.get_project(user, project_id)
+    return workflow_controller.register_data_pipeline_raw_csv(
+        project_id,
+        filename=file.filename or "upload.csv",
+        content=await file.read(),
+    )
+
+
+@app.post("/api/v1/projects/{project_id}/workflow/data-pipeline/decide")
+def project_decide_data_pipeline(
+    project_id: str,
+    request: WorkflowApprovalInput,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> DataPipelineState:
+    """Authenticated human decision for processing, freeze, or execution."""
+
+    identity_service.get_project(user, project_id)
+    return workflow_controller.decide_data_pipeline(
+        project_id,
         decision=request.decision,
         decided_by=request.decided_by,
     )

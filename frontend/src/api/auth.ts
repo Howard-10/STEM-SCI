@@ -173,6 +173,8 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string):
   return payload as T;
 }
 
+export const authenticatedRequest = request;
+
 export const authApi = {
   register(input: { username: string; email: string; password: string; display_name?: string | null }) {
     return request<AuthState>("/auth/register", {

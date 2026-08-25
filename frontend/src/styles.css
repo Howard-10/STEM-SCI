@@ -4399,6 +4399,64 @@ body {
   font-size: 11px;
 }
 
+.workflow-control-section {
+  border-top: 3px solid #24282e;
+}
+
+.workflow-stage-code {
+  max-width: 160px;
+  overflow-wrap: anywhere;
+  color: #5c626b;
+  font-size: 9px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.workflow-control-body {
+  display: grid;
+  gap: 10px;
+}
+
+.workflow-state-row {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 8px;
+  border-top: 1px solid var(--workspace-line);
+  padding-top: 9px;
+  font-size: 10px;
+}
+
+.workflow-state-row span,
+.workflow-control-note {
+  color: #777d86;
+}
+
+.workflow-state-row strong {
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.workflow-control-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.workflow-control-actions .secondary-inline-button {
+  width: auto;
+}
+
+.workflow-control-note,
+.workflow-control-error {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.workflow-control-error {
+  color: #b42318;
+}
+
 .agent-row {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr) auto;

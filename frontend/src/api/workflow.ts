@@ -107,6 +107,27 @@ export interface WorkflowState {
   last_agent_run_id: string | null;
   last_route_decision: RouteDecision | null;
   research_state: ResearchState | null;
+  data_pipeline?: DataPipelineState | null;
+  data_pipeline_package_ref?: string | null;
+}
+
+export type DataPipelineStage =
+  | "WAITING_RAW_DATA"
+  | "WAITING_PROCESSING_APPROVAL"
+  | "WAITING_FREEZE_APPROVAL"
+  | "WAITING_EXECUTION_APPROVAL"
+  | "ANALYZED"
+  | "REWORK"
+  | "BLOCKED";
+
+export interface DataPipelineState {
+  project_id: string;
+  stage: DataPipelineStage;
+  pending_approval?: { request_id: string; approval_type: string; artifact_ref: string; reason: string } | null;
+  data_audit_report?: { passed: boolean; risk_flags: string[]; missing_required_variables: string[] } | null;
+  validation_report?: { passed: boolean } | null;
+  statistical_result_card?: Record<string, unknown> | null;
+  rework_reason?: string | null;
 }
 
 export interface PlanningRun {
@@ -131,23 +152,14 @@ export interface RuntimeStatus {
   spss_reason: string | null;
 }
 
-const base = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
-    const response = await fetch(`${base}${path}`, {
+    return await authenticatedRequest<T>(path, {
       headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
       ...init,
     });
-    const payload: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      const message = typeof payload === "object" && payload !== null && "error" in payload
-        ? String((payload as { error?: { message?: string } }).error?.message ?? "请求失败")
-        : "请求失败";
-      throw new Error(message);
-    }
-    return payload as T;
   } catch (error) {
     if (!demoMode) throw error;
     return demoWorkflowFallback<T>(path, init);
@@ -211,6 +223,18 @@ export const workflowApi = {
   listRoutes(projectId: string) {
     return request<Array<Record<string, unknown>>>(`/workflow/projects/${encodeURIComponent(projectId)}/routes`);
   },
+  uploadRawCsv(projectId: string, file: File) {
+    const body = new FormData();
+    body.append("file", file);
+    return request<DataPipelineState>(`/projects/${encodeURIComponent(projectId)}/workflow/data-pipeline/raw`, {
+      method: "POST", body,
+    });
+  },
+  decideDataPipeline(projectId: string, decision: "approved" | "rejected", decidedBy: string) {
+    return request<DataPipelineState>(`/projects/${encodeURIComponent(projectId)}/workflow/data-pipeline/decide`, {
+      method: "POST", body: JSON.stringify({ decision, decided_by: decidedBy }),
+    });
+  },
 };
 import {
   demoAgents,
@@ -223,3 +247,4 @@ import {
   demoWorkflowRun,
   demoWorkflowState,
 } from "../demo/data";
+import { authenticatedRequest } from "./auth";

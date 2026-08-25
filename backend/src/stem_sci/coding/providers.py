@@ -249,6 +249,7 @@ class CodexCliCodingProvider:
         timeout_seconds: int = 90,
     ) -> None:
         self.artifact_store = artifact_store
+        self._command_explicit = command is not None
         self.command = command or os.environ.get("STEM_SCI_CODEX_COMMAND", "codex")
         self.timeout_seconds = timeout_seconds
 
@@ -278,8 +279,12 @@ class CodexCliCodingProvider:
         resolved = shutil.which(self.command)
         if resolved is not None:
             normalized = resolved.replace("\\", "/").lower()
-            if not ("/windowsapps/" in normalized and normalized.endswith("/resources/codex.exe")):
+            if self._command_explicit or not (
+                "/windowsapps/" in normalized and normalized.endswith("/resources/codex.exe")
+            ):
                 return resolved
+        if self._command_explicit:
+            return resolved
         appdata = os.environ.get("APPDATA")
         if appdata:
             for name in ("codex.cmd", "codex.exe", "codex"):
@@ -356,4 +361,4 @@ class CodexCliCodingProvider:
         stripped = output.strip()
         if stripped.startswith("```python") and stripped.endswith("```"):
             return stripped.removeprefix("```python").removesuffix("```").strip()
-        return stripped if stripped.startswith("import ") or stripped.startswith("#") else ""
+        return stripped if stripped.startswith(("import ", "#")) else ""

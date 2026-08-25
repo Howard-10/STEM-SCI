@@ -24,6 +24,10 @@ from stem_sci.agents import (
     PaperWritingAgent,
     ResearchDesignAgent,
 )
+from stem_sci.agents.analysis_contracts import (
+    DataAnalysisPreAnalysisInput,
+    DataAnalysisPreAnalysisOutcome,
+)
 from stem_sci.agents.base import BaseAgent
 from stem_sci.agents.contracts import ApprovalRequest, ReviewFinding
 from stem_sci.agents.evidence_pipeline import (
@@ -31,16 +35,16 @@ from stem_sci.agents.evidence_pipeline import (
     EvidenceReviewPipeline,
     PaperCard,
 )
+from stem_sci.agents.reviewer_contracts import (
+    ManuscriptNumericClaim,
+    ReproducibilityReviewInput,
+    ReproducibilityReviewOutcome,
+)
 from stem_sci.agents.runtime import StructuredGenerator
 from stem_sci.agents.writing_pipeline import (
     LanguageCode,
     PaperWritingPipeline,
     WritingContextBundle,
-)
-from stem_sci.agents.reviewer_contracts import (
-    ManuscriptNumericClaim,
-    ReproducibilityReviewInput,
-    ReproducibilityReviewOutcome,
 )
 from stem_sci.artifacts.artifact_store import ArtifactStore, InMemoryArtifactStore
 from stem_sci.artifacts.content_store import (
@@ -66,6 +70,8 @@ from stem_sci.core.state import ResearchState
 from stem_sci.operators.executor import OperatorExecutor
 from stem_sci.provenance.agent_run_store import AgentRunStore, InMemoryAgentRunStore
 from stem_sci.provenance.models import AgentRunRecord
+from stem_sci.statistics.mode_policy import AnalysisMode
+from stem_sci.statistics.models import AnalysisModelSpecification
 
 from .merger import validate_agent_result
 from .policy.route_store import RouteDecisionStore
@@ -84,6 +90,7 @@ class ControllerWorkflowState(BaseModel):
     last_route_decision: RouteDecision | None = None
     research_state: ResearchState | None = None
     data_pipeline: DataPipelineState | None = None
+    data_pipeline_package_ref: str | None = None
 
 
 class PlanningRequest(BaseModel):
@@ -236,12 +243,6 @@ class ResearchController:
             "draft_analysis_specification",
             "approved study protocol",
         ),
-        ProjectStage.DATA_READY: (
-            "data_analysis",
-            "analysis_execution",
-            "audit_data",
-            "frozen dataset and analysis plan",
-        ),
         ProjectStage.ANALYZED: (
             "paper_writing",
             "manuscript",
@@ -351,6 +352,7 @@ class ResearchController:
         self.artifact_content_store = artifact_content_store or InMemoryArtifactContentStore()
         self.agent_run_store = agent_run_store or InMemoryAgentRunStore()
         self.route_store = route_store
+        self._strict_data_pipeline = data_pipeline_root is not None
         self.data_pipeline = DataPipelineController(
             storage_root=data_pipeline_root or Path(".stem_sci"),
             operator_executor=self.operator_executor,
@@ -389,6 +391,112 @@ class ResearchController:
                 snapshot.pending_approval_json
             )
         return state
+
+    def _build_pre_analysis_input(
+        self, project_id: str, run_id: str, task_type: str, state: ControllerWorkflowState
+    ) -> tuple[DataAnalysisPreAnalysisInput, AnalysisModelSpecification]:
+        """Build the narrow CSV MVP package from the approved protocol boundary.
+
+        The values are deliberately explicit and reference-only.  They provide a
+        runnable default for the current CSV demo while the domain-specific
+        protocol compiler is being filled in; the risk flag is persisted with the
+        Agent result so this cannot be mistaken for a substantive decision.
+        """
+
+        protocol_ref = (
+            state.research_state.protocol_refs[0]
+            if state.research_state is not None and state.research_state.protocol_refs
+            else f"protocol://{project_id}/v1"
+        )
+        preregistered_plan_ref = f"prereg-plan://{project_id}/v1"
+        request = DataAnalysisPreAnalysisInput(
+            agent_run_id=run_id,
+            project_id=project_id,
+            task_ref=f"{project_id}:{task_type}",
+            study_protocol_ref=protocol_ref,
+            preregistered_plan_ref=preregistered_plan_ref,
+            preregistered_plan_status="frozen",
+            preregistration_approval_ref=f"approval://{project_id}/prereg-v1",
+            data_collection_schema_ref=f"schema://{project_id}/collection-v1",
+            variable_dictionary_ref=f"dictionary://{project_id}/v1",
+            analysis_mode=AnalysisMode.PYTHON_ONLY,
+            model_specification_refs=[f"model-spec://{project_id}/main-v1"],
+            required_variables=["group", "transfer_score"],
+            missingness_checks=["report missingness"],
+            range_and_type_checks=["numeric transfer score"],
+            privacy_checks=["reject direct identifiers"],
+            proposed_processing_steps=["approved lossless processing"],
+            missing_data_strategy_ref=f"prereg-plan://{project_id}/missingness",
+            diagnostic_checks=["residual check"],
+            robustness_checks=["pre-specified sensitivity check"],
+        )
+        model_specification = AnalysisModelSpecification(
+            model_spec_id="main-v1",
+            project_id=project_id,
+            model_family="group_mean_difference",
+            outcome_variables=["transfer_score"],
+            predictor_variables=["group"],
+            formula_or_design="mean(transfer_score) by group",
+            rationale="Narrow CSV MVP configuration; replace with the approved model compiler output.",
+        )
+        return request, model_specification
+
+    def _persist_pre_analysis_package(
+        self,
+        project_id: str,
+        outcome: DataAnalysisPreAnalysisOutcome,
+        model_specification: AnalysisModelSpecification,
+    ) -> str:
+        package_ref = f"data-analysis-package://{project_id}/{outcome.agent_result.agent_run_id}"
+        self.artifact_content_store.put(
+            ArtifactContent(
+                project_id=project_id,
+                artifact_id=f"data-analysis-package:{outcome.agent_result.agent_run_id}",
+                version=1,
+                artifact_type="DataAnalysisPreAnalysisPackage",
+                schema_version="v1",
+                body={
+                    "package_ref": package_ref,
+                    "pre_analysis": outcome.model_dump(mode="json"),
+                    "model_specification": model_specification.model_dump(mode="json"),
+                    "source": "controller-narrow-csv-mvp",
+                },
+            )
+        )
+        return package_ref
+
+    def _begin_data_pipeline_from_package(
+        self, project_id: str, workflow_state: ControllerWorkflowState
+    ) -> DataPipelineState:
+        package_ref = workflow_state.data_pipeline_package_ref
+        if not package_ref:
+            raise ValueError("analysis approval has no data pipeline package")
+        package = next(
+            (
+                item
+                for item in self.artifact_content_store.list_project(project_id)
+                if item.artifact_type == "DataAnalysisPreAnalysisPackage"
+                and item.body.get("package_ref") == package_ref
+            ),
+            None,
+        )
+        if package is None:
+            raise ValueError("data pipeline package content is unavailable")
+        pre_analysis = DataAnalysisPreAnalysisOutcome.model_validate(package.body["pre_analysis"])
+        model_specification = AnalysisModelSpecification.model_validate(
+            package.body["model_specification"]
+        )
+        return self.data_pipeline.begin(
+            DataPipelineBeginRequest(
+                project_id=project_id,
+                preregistered_plan_ref=pre_analysis.executable_plan_candidate.preregistered_plan_ref,
+                preregistration_approval_ref=(
+                    f"approval://{project_id}/prereg-v1"
+                ),
+                pre_analysis=pre_analysis,
+                model_specification=model_specification,
+            )
+        )
 
     def _execute_agent_tools(
         self,
@@ -743,6 +851,10 @@ class ResearchController:
         state = self.get_state(project_id)
         if state.current_stage == ProjectStage.WAITING_HUMAN:
             raise ValueError("project is waiting for human approval")
+        if self._strict_data_pipeline and state.current_stage is ProjectStage.DATA_READY:
+            raise ValueError(
+                "data pipeline must reach ANALYZED through data-pipeline endpoints before the next workflow route"
+            )
         if state.current_stage is ProjectStage.REWORK:
             research_state = state.research_state
             target_agent = research_state.rework_target_agent if research_state else None
@@ -811,7 +923,33 @@ class ResearchController:
             policy_version=route.policy_version,
             prompt_template_version=f"{agent_id}-scaffold-v1",
         )
-        result = self.dispatcher.dispatch(agent_id, agent_input, context_bundle)
+        package_ref: str | None = None
+        if (
+            self._strict_data_pipeline
+            and agent_id == "data_analysis"
+            and state.current_stage is ProjectStage.STUDY_PROTOCOL_APPROVED
+        ):
+            if not isinstance(agent, DataAnalysisAgent):
+                raise ValueError("data_analysis registry entry has an invalid implementation")
+            pre_analysis_input, model_specification = self._build_pre_analysis_input(
+                project_id, run_id, task_type, state
+            )
+            outcome = agent.propose_pre_analysis_for(agent_input, pre_analysis_input)
+            result = validate_agent_result(outcome.agent_result, agent.capability())
+            result = result.model_copy(
+                update={
+                    "risk_flags": [*result.risk_flags, "NARROW_MVP_ANALYSIS_DEFAULTS"],
+                    "unresolved_questions": [
+                        *result.unresolved_questions,
+                        "Replace narrow CSV MVP analysis defaults with the approved domain model compiler output.",
+                    ],
+                }
+            )
+            package_ref = self._persist_pre_analysis_package(
+                project_id, outcome, model_specification
+            )
+        else:
+            result = self.dispatcher.dispatch(agent_id, agent_input, context_bundle)
         if not result.candidate_artifact_refs:
             raise ValueError(f"{agent_id} produced no candidate artifacts")
         execution_refs, operator_output_refs, operator_risk_flags = self._execute_agent_tools(
@@ -857,6 +995,7 @@ class ResearchController:
             last_route_decision=route,
             research_state=updated_research,
             data_pipeline=state.data_pipeline,
+            data_pipeline_package_ref=package_ref or state.data_pipeline_package_ref,
         )
         self._states[project_id] = updated_research
         self._workflow_states[project_id] = workflow_state
@@ -920,15 +1059,22 @@ class ResearchController:
                 )
         else:
             rework_target_agent = None
-            next_stage = {
+            approved_stage = {
                 "research_scope": ProjectStage.SCOPED,
                 "evidence_protocol": ProjectStage.EVIDENCE_READY,
                 "study_protocol": ProjectStage.STUDY_PROTOCOL_APPROVED,
-                "analysis_specification": ProjectStage.ANALYZED,
                 "analysis_execution": ProjectStage.ANALYZED,
                 "manuscript": ProjectStage.DRAFTED,
                 "review_report": ProjectStage.VERIFIED,
-            }.get(approval_request.approval_type, ProjectStage.REWORK)
+            }
+            if approval_request.approval_type == "analysis_specification":
+                next_stage = (
+                    ProjectStage.DATA_READY
+                    if self._strict_data_pipeline
+                    else ProjectStage.ANALYZED
+                )
+            else:
+                next_stage = approved_stage.get(approval_request.approval_type, ProjectStage.REWORK)
         approved_protocol_refs: list[str] = []
         validated_result_refs: list[str] = []
         if decision == "approved":
@@ -964,8 +1110,21 @@ class ResearchController:
                 "approval_request_refs": list(state.approval_request_refs),
             }
         )
+        data_pipeline = workflow_state.data_pipeline
+        if (
+            self._strict_data_pipeline
+            and decision == "approved"
+            and approval_request.approval_type == "analysis_specification"
+        ):
+            data_pipeline = self._begin_data_pipeline_from_package(project_id, workflow_state)
+            updated = updated.model_copy(update={"current_stage": ProjectStage.DATA_READY})
         next_workflow = workflow_state.model_copy(
-            update={"current_stage": next_stage, "pending_approval_ref": None, "research_state": updated}
+            update={
+                "current_stage": next_stage,
+                "pending_approval_ref": None,
+                "research_state": updated,
+                "data_pipeline": data_pipeline,
+            }
         )
         self._states[project_id] = updated
         self._workflow_states[project_id] = next_workflow
@@ -1177,7 +1336,7 @@ class ResearchController:
             raise ValueError("reproducibility review requires a validated result card")
         reviewer = self.dispatcher.registry.get("independent_review")
         if not isinstance(reviewer, IndependentReviewAgent):
-            raise ValueError("independent_review registry entry has an invalid implementation")
+            raise TypeError("independent_review registry entry has an invalid implementation")
 
         outcome = reviewer.review_reproducibility(
             ReproducibilityReviewInput(

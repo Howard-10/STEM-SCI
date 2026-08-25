@@ -6,12 +6,19 @@ import os
 import stat
 from pathlib import Path
 
+import pytest
+
 from stem_sci.agents import DataAnalysisAgent, DataAnalysisPreAnalysisInput
-from stem_sci.controller import DataPipelineBeginRequest, DataPipelineStage, PlanningRequest, ResearchController
+from stem_sci.controller import (
+    DataPipelineBeginRequest,
+    DataPipelineStage,
+    PlanningRequest,
+    ResearchController,
+)
 from stem_sci.core.enums import ProjectStage
 from stem_sci.research_data.demo import write_synthetic_demo_seed
-from stem_sci.statistics.models import AnalysisModelSpecification
 from stem_sci.statistics.mode_policy import AnalysisMode
+from stem_sci.statistics.models import AnalysisModelSpecification
 
 
 def _ready_controller(tmp_path: Path, project_id: str) -> ResearchController:
@@ -102,6 +109,61 @@ def test_controller_runs_approved_csv_pipeline_to_verified_result(tmp_path: Path
     assert pipeline.code_artifact_ref != f"code-artifact://{project_id}/mvp-v1"
     assert pipeline.code_review_ref is not None
     assert controller.get_state(project_id).current_stage is ProjectStage.ANALYZED
+
+
+def test_analysis_specification_approval_starts_waiting_raw_data_pipeline(tmp_path: Path) -> None:
+    """Analysis approval must open the deterministic data gate, not fake ANAYLZED."""
+
+    project_id = "controller-analysis-approval"
+    controller = _ready_controller(tmp_path, project_id)
+
+    analysis = controller.run_next(project_id)
+    assert analysis.approval_request.approval_type == "analysis_specification"
+    controller.resume_approval(
+        project_id,
+        analysis.approval_request,
+        decision="approved",
+        decided_by="researcher",
+    )
+
+    state = controller.get_state(project_id)
+    assert state.current_stage is ProjectStage.DATA_READY
+    assert state.data_pipeline is not None
+    assert state.data_pipeline.stage is DataPipelineStage.WAITING_RAW_DATA
+    assert state.data_pipeline.statistical_result_card is None
+
+    source = write_synthetic_demo_seed(tmp_path / "auto-demo.csv")
+    pipeline = controller.register_data_pipeline_raw_csv(
+        project_id, filename="auto-demo.csv", content=source.read_bytes()
+    )
+    assert pipeline.stage is DataPipelineStage.WAITING_PROCESSING_APPROVAL
+    for expected_stage in (
+        DataPipelineStage.WAITING_FREEZE_APPROVAL,
+        DataPipelineStage.WAITING_EXECUTION_APPROVAL,
+        DataPipelineStage.ANALYZED,
+    ):
+        pipeline = controller.decide_data_pipeline(
+            project_id, decision="approved", decided_by="researcher"
+        )
+        assert pipeline.stage is expected_stage
+    assert controller.get_state(project_id).current_stage is ProjectStage.ANALYZED
+    writing = controller.run_next(project_id)
+    assert writing.approval_request.approval_type == "manuscript"
+
+
+def test_workflow_does_not_route_writing_before_data_pipeline_is_analyzed(tmp_path: Path) -> None:
+    project_id = "controller-analysis-gate"
+    controller = _ready_controller(tmp_path, project_id)
+    analysis = controller.run_next(project_id)
+    controller.resume_approval(
+        project_id,
+        analysis.approval_request,
+        decision="approved",
+        decided_by="researcher",
+    )
+
+    with pytest.raises(ValueError, match="data pipeline"):
+        controller.run_next(project_id)
 
 
 def test_verified_result_card_is_available_to_the_writing_context(tmp_path: Path) -> None:
