@@ -35,7 +35,7 @@
   "pdf_root_relative_path": "data/local/literature_pdfs",
   "locator_index": {
     "relative_path": "data/catalogs/physics_stem/locator.json",
-    "sha256": "13fa7ec087c71c175739341b654a53da43de434fc68baa494fa11835dda370d4",
+    "sha256": "936642ebcef551404cee98acd4b58f0134735f998a7227ffb00a639878f8a2d2",
     "required": true
   },
   "published_at": "2026-08-09T15:04:13Z"
