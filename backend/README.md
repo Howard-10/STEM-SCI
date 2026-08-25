@@ -99,6 +99,8 @@ STEM_SCI_VECTOR_KB_ROOT=C:\path\to\vector_kb
 STEM_SCI_PDF_ROOT=C:\path\to\literature_pdfs
 ```
 
+<<<<<<< HEAD
+=======
 To rebuild the page/character locator after replacing the local PDF batch, run this
 from the repository root. The command updates only traceability metadata and the
 manifest hash; it never copies PDF files into Git:
@@ -115,6 +117,7 @@ The locator keeps exact whitespace-normalized matches as `source_verified`.
 Aggressively normalized matches remain `model_generated_unverified` until a person
 checks the original PDF, so they are excluded from formal evidence.
 
+>>>>>>> origin/main
 To use the imported Neo4j sparse graph instead of the JSON graph artifact:
 
 ```text

@@ -131,6 +131,8 @@ export interface RuntimeStatus {
   spss_reason: string | null;
 }
 
+<<<<<<< HEAD
+=======
 export type DataPipelineStage =
   | "WAITING_RAW_DATA"
   | "WAITING_PROCESSING_APPROVAL"
@@ -193,11 +195,17 @@ export interface ControllerWorkflowState {
   research_state: ResearchState | null;
 }
 
+>>>>>>> origin/main
 const base = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
+<<<<<<< HEAD
+    const response = await fetch(`${base}${path}`, {
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      ...init,
+=======
     const headers = new Headers(init?.headers);
     if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
@@ -205,6 +213,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(`${base}${path}`, {
       ...init,
       headers,
+>>>>>>> origin/main
     });
     const payload: unknown = await response.json().catch(() => null);
     if (!response.ok) {
@@ -223,6 +232,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 function demoWorkflowFallback<T>(path: string, init?: RequestInit): T {
   if (path === "/workflow/runtime") return demoRuntime as T;
   if (path === "/workflow/agents") return demoAgents as T;
+<<<<<<< HEAD
+=======
   if (path.startsWith("/workflow/projects/") && path.endsWith("/data-pipeline/raw")) {
     demoPipelineState = {
       ...demoPipelineState,
@@ -310,6 +321,7 @@ function demoWorkflowFallback<T>(path: string, init?: RequestInit): T {
       research_state: demoWorkflowState.research_state,
     } as T;
   }
+>>>>>>> origin/main
   if (path.includes("/executions")) return demoExecutionRows as T;
   if (path.includes("/routes")) return demoRouteRows as T;
   if (path.includes("/artifacts") || path.includes("/artifact-contents") || path.includes("/agent-runs")) {
@@ -324,6 +336,8 @@ function demoWorkflowFallback<T>(path: string, init?: RequestInit): T {
   return demoWorkflowState as T;
 }
 
+<<<<<<< HEAD
+=======
 let demoPipelineState: DataPipelineState = {
   project_id: "physics-ai-demo",
   stage: "WAITING_RAW_DATA",
@@ -347,6 +361,7 @@ let demoPipelineState: DataPipelineState = {
   blocked_target_ids: [],
 };
 
+>>>>>>> origin/main
 export const workflowApi = {
   getRuntime() {
     return request<RuntimeStatus>("/workflow/runtime");
@@ -360,11 +375,14 @@ export const workflowApi = {
   getProject(projectId: string) {
     return request<WorkflowState>(`/projects/${encodeURIComponent(projectId)}/workflow`);
   },
+<<<<<<< HEAD
+=======
   getControllerProject(projectId: string) {
     return request<ControllerWorkflowState>(
       `/workflow/projects/${encodeURIComponent(projectId)}`,
     );
   },
+>>>>>>> origin/main
   approve(projectId: string, decision: string, decidedBy: string) {
     return request<ResearchState>(`/projects/${encodeURIComponent(projectId)}/workflow/approve`, {
       method: "POST",
@@ -374,6 +392,8 @@ export const workflowApi = {
   runNext(projectId: string) {
     return request<WorkflowRun>(`/projects/${encodeURIComponent(projectId)}/workflow/next`, { method: "POST" });
   },
+<<<<<<< HEAD
+=======
   runPublicNext(projectId: string) {
     return request<WorkflowRun>(
       `/workflow/projects/${encodeURIComponent(projectId)}/next`,
@@ -397,6 +417,7 @@ export const workflowApi = {
       },
     );
   },
+>>>>>>> origin/main
   listAgents() {
     return request<AgentCapability[]>("/workflow/agents");
   },

@@ -239,7 +239,11 @@ def build_locator_index(
 
     resolver = PaperIdentityResolver.from_catalog_path(identity_map_path)
     corpus = LocalMetadataCorpus.from_metadata_path(metadata_path, resolver)
+<<<<<<< HEAD
+    expected = {record.vector_filename.casefold() for record in corpus.records}
+=======
     expected = {record.source_filename.casefold() for record in corpus.records}
+>>>>>>> origin/main
     audit, pdf_paths = _pdf_inventory(pdf_root, expected)
     if not audit.ready:
         raise ValueError(f"PDF corpus audit failed: {audit.model_dump_json()}")
@@ -250,7 +254,11 @@ def build_locator_index(
     locator_records: list[ChunkLocator] = []
     for paper_records in records_by_paper.values():
         paper_records.sort(key=lambda item: (item.chunk_index, item.canonical_chunk_id))
+<<<<<<< HEAD
+        pdf_path = pdf_paths[paper_records[0].vector_filename.casefold()]
+=======
         pdf_path = pdf_paths[paper_records[0].source_filename.casefold()]
+>>>>>>> origin/main
         raw = pdf_path.read_bytes()
         with pdfplumber.open(pdf_path) as pdf_document:
             pages = [page.extract_text() or "" for page in pdf_document.pages]
@@ -336,3 +344,7 @@ def write_locator_index(index: LocatorIndex, output_path: Path) -> str:
     payload = index.model_dump_json(indent=2) + "\n"
     output_path.write_text(payload, encoding="utf-8")
     return _sha256_bytes(output_path.read_bytes())
+<<<<<<< HEAD
+
+=======
+>>>>>>> origin/main

@@ -11,6 +11,12 @@ import {
   type AuthState,
 } from "./api/auth";
 import { qaApi, type QAAnswerResponse, type QAContextMode } from "./api/qa";
+<<<<<<< HEAD
+import { demoBundle, demoCorpus, demoQAResponse, demoRuntime } from "./demo/data";
+import { demoDocumentContents, demoDocumentsByProject, demoProjects } from "./demo/projectHub";
+
+type WorkspaceView = "knowledge" | "codex" | "audit";
+=======
 import {
   workflowApi,
   type ControllerWorkflowState,
@@ -21,6 +27,7 @@ import { demoBundle, demoCorpus, demoQAResponse, demoRuntime } from "./demo/data
 import { demoDocumentContents, demoDocumentsByProject, demoProjects } from "./demo/projectHub";
 
 type WorkspaceView = "knowledge" | "codex" | "analysis" | "audit";
+>>>>>>> origin/main
 export type WorkspaceTab = "home" | "workspace" | "editor" | "agent" | "audit";
 
 type ChatMessage = {
@@ -62,6 +69,15 @@ const starterPrompts = [
 ];
 
 const agentRows = [
+<<<<<<< HEAD
+  ["01", "导师规划", "界定研究问题与范围", "已完成"],
+  ["02", "证据审查", "筛选、核验和组织文献证据", "进行中"],
+  ["03", "研究设计", "形成可审批的研究方案", "待启动"],
+  ["04", "数据分析", "编译分析计划与结果检查", "待启动"],
+  ["05", "论文写作", "生成基于证据的写作草案", "待启动"],
+  ["06", "独立审查", "检查风险、引用和方法", "待启动"],
+];
+=======
   ["01", "mentor_planning", "导师规划", "界定研究问题与范围"],
   ["02", "evidence_review", "证据审查", "筛选、核验和组织文献证据"],
   ["03", "research_design", "研究设计", "形成可审批的研究方案"],
@@ -96,6 +112,7 @@ function agentStatus(snapshot: ControllerWorkflowState | null, agentId: string):
   }
   return "待启动";
 }
+>>>>>>> origin/main
 
 const capabilityCards = [
   {
@@ -165,6 +182,8 @@ export function App() {
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const uploadInputRef = useRef<HTMLInputElement>(null);
+<<<<<<< HEAD
+=======
   const analysisInputRef = useRef<HTMLInputElement>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>(demoRuntime);
   const [workflowSnapshot, setWorkflowSnapshot] = useState<ControllerWorkflowState | null>(null);
@@ -172,6 +191,7 @@ export function App() {
   const [analysisStage, setAnalysisStage] = useState("STUDY_PROTOCOL_APPROVED");
   const [analysisBusy, setAnalysisBusy] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
+>>>>>>> origin/main
   const chatAttachmentInputRef = useRef<HTMLInputElement>(null);
   const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
@@ -257,6 +277,8 @@ export function App() {
   }, [auth?.access_token, projectId]);
 
   useEffect(() => {
+<<<<<<< HEAD
+=======
     let mounted = true;
     setAnalysisError("");
     void Promise.all([
@@ -278,6 +300,7 @@ export function App() {
   }, [projectId]);
 
   useEffect(() => {
+>>>>>>> origin/main
     if (!draggingPane) return;
     const onPointerMove = (event: PointerEvent) => {
       if (draggingPane === "sidebar") {
@@ -500,6 +523,8 @@ export function App() {
     }
   };
 
+<<<<<<< HEAD
+=======
   const refreshAnalysisState = async () => {
     if (!projectId) return;
     const controllerState = await workflowApi.getControllerProject(projectId);
@@ -562,6 +587,7 @@ export function App() {
     }
   };
 
+>>>>>>> origin/main
   const createDraft = async () => {
     if (!auth?.access_token || !projectId) {
       setUploadError("请先登录并选择一个项目");
@@ -817,10 +843,13 @@ export function App() {
             <span className="ui-icon">⌘</span>
             Codex
           </button>
+<<<<<<< HEAD
+=======
           <button className={view === "analysis" ? "sidebar-link sidebar-link-active" : "sidebar-link"} type="button" onClick={() => setView("analysis")}>
             <span className="ui-icon">◫</span>
             数据分析
           </button>
+>>>>>>> origin/main
           <button className={view === "audit" ? "sidebar-link sidebar-link-active" : "sidebar-link"} type="button" onClick={() => setView("audit")}>
             <span className="ui-icon">✓</span>
             数据审查
@@ -1049,7 +1078,11 @@ export function App() {
         <div className="output-header">
           <div>
             <span className="chat-kicker">研究上下文</span>
+<<<<<<< HEAD
+            <h2>{view === "knowledge" ? "知识库" : view === "codex" ? "Codex 工作区" : "数据审查"}</h2>
+=======
             <h2>{view === "knowledge" ? "知识库" : view === "codex" ? "Codex 工作区" : view === "analysis" ? "数据分析" : "数据审查"}</h2>
+>>>>>>> origin/main
           </div>
           <button className="header-icon-button" type="button" title="隐藏右侧面板，进入双栏模式" onClick={() => setRightPaneVisible(false)}>→</button>
         </div>
@@ -1164,6 +1197,9 @@ export function App() {
               <span className="codex-symbol">⌘</span>
               <h3>面向研究的代码工作区</h3>
               <p>在当前项目中编写、解释和审查 Python 分析代码。代码执行仍然需要经过数据审查和人工确认。</p>
+<<<<<<< HEAD
+              <button className="primary-inline-button" type="button">打开代码编辑器 <span>→</span></button>
+=======
               <button
                 className="primary-inline-button"
                 type="button"
@@ -1174,13 +1210,20 @@ export function App() {
               >
                 转到数据分析 <span>→</span>
               </button>
+>>>>>>> origin/main
             </section>
             <section className="output-section">
               <div className="output-section-heading"><h3>运行环境</h3><span className="review-tag">开发模式</span></div>
               <div className="runtime-list">
+<<<<<<< HEAD
+                <div><span>代码提供方</span><strong>{demoRuntime.coding_provider}</strong></div>
+                <div><span>Codex CLI</span><strong>{demoRuntime.codex_available ? "可用" : "未配置"}</strong></div>
+                <div><span>SPSS</span><strong>{demoRuntime.spss_available ? "可用" : "未配置"}</strong></div>
+=======
                 <div><span>代码提供方</span><strong>{runtimeStatus.coding_provider}</strong></div>
                 <div><span>Codex CLI</span><strong>{runtimeStatus.codex_available ? "可用" : runtimeStatus.codex_reason ?? "未配置"}</strong></div>
                 <div><span>SPSS</span><strong>{runtimeStatus.spss_available ? "可用" : runtimeStatus.spss_reason ?? "未配置"}</strong></div>
+>>>>>>> origin/main
               </div>
             </section>
             <section className="output-section">
@@ -1190,6 +1233,8 @@ export function App() {
           </div>
         )}
 
+<<<<<<< HEAD
+=======
         {view === "analysis" && (
           <div className="output-content">
             <section className="analysis-summary">
@@ -1341,6 +1386,7 @@ export function App() {
           </div>
         )}
 
+>>>>>>> origin/main
         {view === "audit" && (
           <div className="output-content">
             <section className="audit-summary">
@@ -1348,6 +1394,17 @@ export function App() {
               <div><strong>研究链路正在审查</strong><p>当前回答已关联证据，正式发布前仍需检查数据和引用。</p></div>
             </section>
             <section className="output-section">
+<<<<<<< HEAD
+              <div className="output-section-heading"><h3>六个 Agent</h3><span>1 / 6 活跃</span></div>
+              <div className="agent-list">
+                {agentRows.map(([index, name, description, status]) => (
+                  <div className="agent-row" key={index}>
+                    <span className="agent-index">{index}</span>
+                    <span><strong>{name}</strong><small>{description}</small></span>
+                    <span className={status === "进行中" ? "agent-status active" : "agent-status"}>{status}</span>
+                  </div>
+                ))}
+=======
               <div className="output-section-heading">
                 <h3>六个 Agent</h3>
                 <span>
@@ -1367,6 +1424,7 @@ export function App() {
                   </div>
                   );
                 })}
+>>>>>>> origin/main
               </div>
             </section>
             <section className="output-section">
@@ -1374,6 +1432,8 @@ export function App() {
               <div className="review-list">
                 {lastResponse.risk_flags.map((flag) => <div className="review-item" key={flag}><span>!</span><p>{flag}</p></div>)}
               </div>
+<<<<<<< HEAD
+=======
               {workflowSnapshot?.pending_approval_ref && (
                 <div className="audit-pending-note">
                   <strong>当前存在 Human Gate</strong>
@@ -1383,6 +1443,7 @@ export function App() {
                   </p>
                 </div>
               )}
+>>>>>>> origin/main
               <button className="secondary-inline-button" type="button">查看完整审查记录 <span>→</span></button>
             </section>
           </div>
