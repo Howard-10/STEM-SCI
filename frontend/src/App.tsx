@@ -12,6 +12,8 @@ import {
 } from "./api/auth";
 import { qaApi, type QAAnswerResponse, type QAContextMode } from "./api/qa";
 import { workflowApi, type WorkflowState } from "./api/workflow";
+import { api } from "./api/client";
+import type { SearchResult } from "./types/context";
 import { demoBundle, demoCorpus, demoQAResponse, demoRuntime } from "./demo/data";
 import { demoDocumentContents, demoDocumentsByProject, demoProjects } from "./demo/projectHub";
 
@@ -167,6 +169,7 @@ export function App() {
   const [uploadError, setUploadError] = useState("");
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const rawCsvInputRef = useRef<HTMLInputElement>(null);
+  const evidenceInputRef = useRef<HTMLInputElement>(null);
   const chatAttachmentInputRef = useRef<HTMLInputElement>(null);
   const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
@@ -182,6 +185,9 @@ export function App() {
   const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
   const [workflowBusy, setWorkflowBusy] = useState(false);
   const [workflowError, setWorkflowError] = useState("");
+  const [evidenceRows, setEvidenceRows] = useState<SearchResult[]>([]);
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
+  const [evidenceError, setEvidenceError] = useState("");
 
   const activeProject = useMemo(
     () => projects.find((project) => project.project_id === projectId) ?? projects[0] ?? null,
@@ -341,6 +347,52 @@ export function App() {
     const next = await workflowApi.getProject(projectId);
     setWorkflow(next);
     return next;
+  };
+
+  const searchProjectEvidence = async () => {
+    if (!projectId || !activeProject) return;
+    setEvidenceBusy(true);
+    setEvidenceError("");
+    try {
+      const query = activeProject.research_direction || activeProject.title;
+      setEvidenceRows(await api.search(projectId, query));
+    } catch (error) {
+      setEvidenceError(error instanceof Error ? error.message : "无法读取项目证据");
+    } finally {
+      setEvidenceBusy(false);
+    }
+  };
+
+  const uploadEvidenceSource = async (file: File) => {
+    setEvidenceBusy(true);
+    setEvidenceError("");
+    try {
+      await api.importSource(projectId, file);
+      await searchProjectEvidence();
+    } catch (error) {
+      setEvidenceError(error instanceof Error ? error.message : "证据来源上传失败");
+    } finally {
+      setEvidenceBusy(false);
+      if (evidenceInputRef.current) evidenceInputRef.current.value = "";
+    }
+  };
+
+  const verifyProjectEvidence = async (evidenceId: string) => {
+    setEvidenceBusy(true);
+    setEvidenceError("");
+    try {
+      await api.verifySource(
+        projectId,
+        evidenceId,
+        auth?.user.username ?? "researcher",
+        "已人工核对上传来源与对应原文片段。",
+      );
+      await searchProjectEvidence();
+    } catch (error) {
+      setEvidenceError(error instanceof Error ? error.message : "证据核验失败");
+    } finally {
+      setEvidenceBusy(false);
+    }
   };
 
   const startWorkflow = async () => {
@@ -1189,6 +1241,52 @@ export function App() {
 
         {view === "audit" && (
           <div className="output-content">
+            <section className="output-section evidence-control-section">
+              <div className="output-section-heading">
+                <div>
+                  <h3>Evidence Gate</h3>
+                  <p className="section-subtitle">上传来源并逐条核验后，才能通过证据审查。</p>
+                </div>
+                <span>{evidenceRows.filter((item) => item.evidence.verification_status === "source_verified" || item.evidence.verification_status === "human_verified").length} 条已核验</span>
+              </div>
+              <div className="workflow-control-actions">
+                <button className="secondary-inline-button" disabled={evidenceBusy || !projectId} type="button" onClick={() => evidenceInputRef.current?.click()}>
+                  {evidenceBusy ? "处理中..." : "上传 PDF / TXT"}
+                </button>
+                <button className="secondary-inline-button" disabled={evidenceBusy || !projectId} type="button" onClick={() => void searchProjectEvidence()}>
+                  刷新证据
+                </button>
+                <input
+                  ref={evidenceInputRef}
+                  className="visually-hidden"
+                  type="file"
+                  accept=".pdf,.txt,.md,.json,application/pdf,text/plain,application/json"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void uploadEvidenceSource(file);
+                  }}
+                />
+              </div>
+              {evidenceRows.length > 0 && (
+                <div className="evidence-control-list">
+                  {evidenceRows.map((item) => {
+                    const verified = item.evidence.verification_status === "source_verified" || item.evidence.verification_status === "human_verified";
+                    return (
+                      <div className="evidence-control-row" key={item.evidence.evidence_id}>
+                        <div>
+                          <strong>{item.evidence.excerpt.slice(0, 90)}{item.evidence.excerpt.length > 90 ? "..." : ""}</strong>
+                          <small>{item.evidence.verification_status}</small>
+                        </div>
+                        <button className={verified ? "verified-tag" : "review-tag"} disabled={verified || evidenceBusy} type="button" onClick={() => void verifyProjectEvidence(item.evidence.evidence_id)}>
+                          {verified ? "已核验" : "核验来源"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {evidenceError && <p className="workflow-control-error" role="alert">{evidenceError}</p>}
+            </section>
             <section className="output-section workflow-control-section">
               <div className="output-section-heading">
                 <h3>科研工作流</h3>

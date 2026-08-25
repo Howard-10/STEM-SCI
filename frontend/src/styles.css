@@ -4457,6 +4457,50 @@ body {
   color: #b42318;
 }
 
+.evidence-control-section {
+  border-top: 3px solid #b7791f;
+}
+
+.evidence-control-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.evidence-control-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid var(--workspace-line);
+  padding-top: 8px;
+}
+
+.evidence-control-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.evidence-control-row strong {
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evidence-control-row small {
+  color: #777d86;
+  font-size: 9px;
+}
+
+.evidence-control-row button {
+  border: 0;
+  cursor: pointer;
+  font-size: 9px;
+}
+
 .agent-row {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr) auto;
