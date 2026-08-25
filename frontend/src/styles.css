@@ -1,0 +1,31 @@
+.latex-launch-button { position: fixed !important; right: 24px; bottom: 24px; z-index: 2100 !important; display: block !important; border: 0 !important; border-radius: 999px !important; padding: 13px 18px !important; background: #e0a458 !important; color: #1c2025 !important; font-weight: 800 !important; box-shadow: 0 12px 30px rgba(28,32,37,.22); }
+.latex-launch-button:hover { background: #f0bd75 !important; transform: translateY(-1px); }
+.latex-modal { position: fixed; inset: 0; z-index: 2200; overflow: auto; background: #f2eee6; }
+.latex-close-button { position: fixed; top: 18px; right: 24px; z-index: 2210; border: 0; border-radius: 999px; padding: 10px 16px; background: #252a31; color: #fff; }
+.latex-modal .latex-page { min-height: 100vh; padding: 42px clamp(18px, 5vw, 72px) 64px; background: #f4f0e8; }
+.latex-modal .latex-page .page-hero { display: flex; max-width: 1240px; margin: 0 auto 26px; padding: 0; border: 0; }
+.latex-modal .latex-page .page-hero h1 { margin: 8px 0; color: #252a31; font-size: clamp(32px, 5vw, 54px); }
+.latex-modal .latex-page .page-hero p { color: #77808a; font-size: 15px; }
+.latex-modal .latex-layout { display: grid; grid-template-columns: minmax(340px, .85fr) minmax(460px, 1.15fr); gap: 24px; max-width: 1240px; margin: 0 auto; padding: 0; }
+.latex-modal .latex-form-panel, .latex-modal .latex-output-panel { min-width: 0; border: 1px solid #d9d7d0; background: #fffdf9; box-shadow: 0 12px 34px rgba(40,43,48,.08); }
+.latex-modal .latex-form-panel { display: grid; gap: 15px; padding: 24px; }
+.latex-modal .latex-output-panel { padding: 24px; }
+.latex-modal .latex-form-panel .panel-heading, .latex-modal .latex-output-panel .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-bottom: 2px; }
+.latex-modal .latex-form-panel .panel-heading h2, .latex-modal .latex-output-panel .panel-heading h2 { margin: 5px 0 0; color: #252a31; font-size: 21px; }
+.latex-modal .latex-form-panel .editor-field { display: grid; gap: 7px; color: #58636d; font-size: 12px; font-weight: 800; }
+.latex-modal .latex-form-panel .editor-field input, .latex-modal .latex-form-panel .editor-field select, .latex-modal .latex-form-panel .editor-field textarea { width: 100%; border: 1px solid #cfd4d7; border-radius: 7px; background: #fff; color: #252a31; padding: 11px 12px; outline: none; }
+.latex-modal .latex-form-panel .editor-field input:focus, .latex-modal .latex-form-panel .editor-field select:focus, .latex-modal .latex-form-panel .editor-field textarea:focus { border-color: #416b84; box-shadow: 0 0 0 3px rgba(65,107,132,.12); }
+.latex-modal .latex-form-panel .formatter-body { min-height: 260px; resize: vertical; font: 13px/1.7 "SFMono-Regular", Consolas, monospace; }
+.latex-modal .template-note { margin: -5px 0 0; padding: 10px 12px; border-left: 3px solid #e0a458; background: #fff8ed; color: #7d6846; font-size: 12px; line-height: 1.5; }
+.latex-modal .template-health { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; border: 1px solid #f0c7c2; border-radius: 6px; background: #fff4f2; color: #b25c50; font-size: 12px; line-height: 1.45; }
+.latex-modal .template-health button { flex: 0 0 auto; border: 1px solid #d68b82; border-radius: 5px; padding: 6px 9px; background: #fff; color: #9d4e45; font-size: 11px; font-weight: 800; }
+.latex-modal .latex-generate-button { width: 100%; border: 0; border-radius: 7px; background: #252a31; color: #fff; padding: 12px 15px; font-weight: 800; }
+.latex-modal .latex-generate-button:hover { background: #416b84; }
+.latex-modal .latex-output-panel .formatter-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 18px 0 14px; padding: 12px 14px; border: 1px solid #d9e5dc; border-radius: 7px; background: #f3faf4; color: #2d6540; }
+.latex-modal .latex-output-panel .formatter-status span { color: #69757f; font: 11px monospace; }
+.latex-modal .latex-output-panel .latex-preview { max-height: 700px; overflow: auto; margin: 0; padding: 18px; border-radius: 8px; background: #20252b; color: #e8edf1; white-space: pre-wrap; font: 12px/1.7 "SFMono-Regular", Consolas, monospace; }
+.latex-modal .latex-output-panel .formatter-warning { margin: 8px 0; padding: 9px 12px; border-radius: 5px; background: #fff7e7; color: #8a5b16; font-size: 12px; }
+.latex-modal .latex-output-panel .empty-state { display: grid; min-height: 280px; place-items: center; align-content: center; color: #77808a; text-align: center; }
+.latex-modal .latex-output-panel .empty-state strong { color: #252a31; }
+@media (max-width: 900px) { .latex-modal .latex-layout { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .latex-modal .latex-page { padding: 26px 12px 56px; } .latex-modal .latex-layout { gap: 14px; } .latex-modal .latex-form-panel, .latex-modal .latex-output-panel { padding: 17px; } .latex-modal .latex-output-panel .formatter-status { align-items: flex-start; flex-direction: column; } .latex-launch-button { right: 14px; bottom: 14px; } }

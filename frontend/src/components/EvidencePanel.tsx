@@ -1,0 +1,5 @@
+import type { EvidenceViewModel, GateViewModel } from "../types/research";
+import { CitationItem } from "./CitationItem";
+import { GateSummary } from "./GateSummary";
+
+export function EvidencePanel({ evidence, gates, onOpen }: { evidence: EvidenceViewModel[]; gates: GateViewModel[]; onOpen: (item: EvidenceViewModel) => void }) { const evidenceGate = gates.filter((gate) => gate.kind === "evidence"); return <section className="evidence-panel"><div className="panel-heading"><div><span className="eyebrow">EVIDENCE</span><h2>关键依据</h2></div><GateSummary gates={evidenceGate} compact /></div>{evidence.length ? <div className="citation-list">{evidence.slice(0, 5).map((item) => <CitationItem item={item} key={item.id} onOpen={() => onOpen(item)} />)}</div> : <div className="empty-state evidence-empty"><strong>等待证据检索</strong><span>提交研究问题后，这里会显示可追溯文献和原文摘录。</span></div>}<div className="graph-note"><span aria-hidden="true">⌁</span><span>关联研究建议仅用于发现论文，不计入正式 Evidence Coverage。</span></div></section>; }
