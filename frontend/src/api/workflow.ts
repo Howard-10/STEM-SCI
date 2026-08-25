@@ -190,7 +190,9 @@ export const workflowApi = {
   startProject(input: { project_id: string; research_intent: string; run_id?: string }) {
     return request<PlanningRun>(`/projects/${encodeURIComponent(input.project_id)}/workflow`, {
       method: "POST",
-      body: JSON.stringify(input),
+      // Project ID is part of the path. The authenticated project endpoint
+      // intentionally rejects unknown body fields.
+      body: JSON.stringify({ research_intent: input.research_intent, run_id: input.run_id }),
     });
   },
   getProject(projectId: string) {
