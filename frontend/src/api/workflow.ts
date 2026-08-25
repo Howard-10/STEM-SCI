@@ -131,14 +131,89 @@ export interface RuntimeStatus {
   spss_reason: string | null;
 }
 
+<<<<<<< HEAD
+=======
+export type DataPipelineStage =
+  | "WAITING_RAW_DATA"
+  | "WAITING_PROCESSING_APPROVAL"
+  | "REWORK"
+  | "WAITING_FREEZE_APPROVAL"
+  | "WAITING_EXECUTION_APPROVAL"
+  | "ANALYZED"
+  | "BLOCKED";
+
+export interface DataPipelineApproval {
+  request_id: string;
+  approval_type: string;
+  artifact_ref: string;
+  reason: string;
+}
+
+export interface DataPipelineState {
+  project_id: string;
+  stage: DataPipelineStage;
+  preregistered_plan_ref: string;
+  preregistration_approval_ref: string;
+  code_artifact_ref: string | null;
+  code_specification_ref: string | null;
+  code_review_ref: string | null;
+  spss_code_artifact_ref: string | null;
+  spss_execution_run_ref: string | null;
+  result_consistency_report_ref: string | null;
+  raw_dataset: Record<string, unknown> | null;
+  data_audit_report: {
+    passed: boolean;
+    missing_required_variables: string[];
+    risk_flags: string[];
+  } | null;
+  processed_dataset: Record<string, unknown> | null;
+  frozen_dataset: Record<string, unknown> | null;
+  executable_plan: {
+    analysis_mode: "PYTHON_ONLY" | "SPSS_PYTHON_DUAL";
+    executable_plan_id: string;
+  } | null;
+  validation_report: {
+    passed: boolean;
+    execution_run_refs: string[];
+  } | null;
+  statistical_result_card: {
+    result_id: string;
+    execution_status: string;
+    values: Record<string, number>;
+  } | null;
+  pending_approval: DataPipelineApproval | null;
+  rework_reason: string | null;
+  blocked_target_ids: string[];
+}
+
+export interface ControllerWorkflowState {
+  project_id: string;
+  current_stage: string;
+  pending_approval_ref: string | null;
+  last_route_decision: RouteDecision | null;
+  data_pipeline: DataPipelineState | null;
+  research_state: ResearchState | null;
+}
+
+>>>>>>> origin/main
 const base = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
 const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
+<<<<<<< HEAD
     const response = await fetch(`${base}${path}`, {
       headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
       ...init,
+=======
+    const headers = new Headers(init?.headers);
+    if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    const response = await fetch(`${base}${path}`, {
+      ...init,
+      headers,
+>>>>>>> origin/main
     });
     const payload: unknown = await response.json().catch(() => null);
     if (!response.ok) {
@@ -157,6 +232,96 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 function demoWorkflowFallback<T>(path: string, init?: RequestInit): T {
   if (path === "/workflow/runtime") return demoRuntime as T;
   if (path === "/workflow/agents") return demoAgents as T;
+<<<<<<< HEAD
+=======
+  if (path.startsWith("/workflow/projects/") && path.endsWith("/data-pipeline/raw")) {
+    demoPipelineState = {
+      ...demoPipelineState,
+      stage: "WAITING_PROCESSING_APPROVAL",
+      raw_dataset: {
+        dataset_id: "raw-demo-upload",
+        version: 1,
+        sha256: "demo-upload",
+      },
+      data_audit_report: {
+        passed: true,
+        missing_required_variables: [],
+        risk_flags: [],
+      },
+      pending_approval: {
+        request_id: "data-approval-demo-processing",
+        approval_type: "data_processing",
+        artifact_ref: "processing-plan-candidate://demo",
+        reason: "请确认数据处理计划后继续。",
+      },
+    };
+    return demoPipelineState as T;
+  }
+  if (path.startsWith("/workflow/projects/") && path.endsWith("/data-pipeline/decide")) {
+    const body = typeof init?.body === "string"
+      ? JSON.parse(init.body) as { decision?: string }
+      : {};
+    const transitions: Record<string, DataPipelineStage> = {
+      data_processing: "WAITING_FREEZE_APPROVAL",
+      data_freeze: "WAITING_EXECUTION_APPROVAL",
+      analysis_execution: "ANALYZED",
+    };
+    const approvalType = demoPipelineState.pending_approval?.approval_type ?? "data_processing";
+    const nextStage = body.decision === "approved"
+      ? transitions[approvalType] ?? "ANALYZED"
+      : "REWORK";
+    demoPipelineState = {
+      ...demoPipelineState,
+      stage: nextStage,
+      pending_approval: nextStage === "ANALYZED" || nextStage === "REWORK"
+        ? null
+        : {
+          request_id: `data-approval-demo-${nextStage.toLowerCase()}`,
+          approval_type: nextStage === "WAITING_FREEZE_APPROVAL" ? "data_freeze" : "analysis_execution",
+          artifact_ref: `candidate://demo/${nextStage}`,
+          reason: "请确认下一阶段操作后继续。",
+        },
+      processed_dataset: nextStage === "WAITING_EXECUTION_APPROVAL" || nextStage === "ANALYZED"
+        ? { ref: "dataset://processed-demo/1" }
+        : demoPipelineState.processed_dataset,
+      frozen_dataset: nextStage === "WAITING_EXECUTION_APPROVAL" || nextStage === "ANALYZED"
+        ? { ref: "dataset://frozen-demo/1" }
+        : demoPipelineState.frozen_dataset,
+      executable_plan: nextStage === "WAITING_EXECUTION_APPROVAL" || nextStage === "ANALYZED"
+        ? { analysis_mode: "PYTHON_ONLY", executable_plan_id: "demo-plan" }
+        : demoPipelineState.executable_plan,
+      validation_report: nextStage === "ANALYZED"
+        ? { passed: true, execution_run_refs: ["execution://demo-python"] }
+        : demoPipelineState.validation_report,
+      statistical_result_card: nextStage === "ANALYZED"
+        ? {
+          result_id: "demo-result-card",
+          execution_status: "execution_verified",
+          values: { analysis_sample_size: 48, transfer_mean_difference_group_2_minus_group_1: 0.42 },
+        }
+        : demoPipelineState.statistical_result_card,
+    };
+    return demoPipelineState as T;
+  }
+  if (path.startsWith("/workflow/projects/") && path.endsWith("/data-pipeline/start")) {
+    demoPipelineState = {
+      ...demoPipelineState,
+      stage: "WAITING_RAW_DATA",
+      project_id: path.split("/")[3] || demoPipelineState.project_id,
+    };
+    return demoPipelineState as T;
+  }
+  if (path.startsWith("/workflow/projects/") && !path.includes("/data-pipeline/")) {
+    return {
+      project_id: path.split("/")[3] || "physics-ai-demo",
+      current_stage: demoPipelineState.stage === "WAITING_RAW_DATA" ? "DATA_READY" : "STUDY_PROTOCOL_APPROVED",
+      pending_approval_ref: demoPipelineState.pending_approval?.request_id ?? null,
+      last_route_decision: null,
+      data_pipeline: demoPipelineState,
+      research_state: demoWorkflowState.research_state,
+    } as T;
+  }
+>>>>>>> origin/main
   if (path.includes("/executions")) return demoExecutionRows as T;
   if (path.includes("/routes")) return demoRouteRows as T;
   if (path.includes("/artifacts") || path.includes("/artifact-contents") || path.includes("/agent-runs")) {
@@ -171,6 +336,32 @@ function demoWorkflowFallback<T>(path: string, init?: RequestInit): T {
   return demoWorkflowState as T;
 }
 
+<<<<<<< HEAD
+=======
+let demoPipelineState: DataPipelineState = {
+  project_id: "physics-ai-demo",
+  stage: "WAITING_RAW_DATA",
+  preregistered_plan_ref: "prereg-plan://physics-ai-demo/v1",
+  preregistration_approval_ref: "approval://physics-ai-demo/prereg-v1",
+  code_artifact_ref: null,
+  code_specification_ref: null,
+  code_review_ref: null,
+  spss_code_artifact_ref: null,
+  spss_execution_run_ref: null,
+  result_consistency_report_ref: null,
+  raw_dataset: null,
+  data_audit_report: null,
+  processed_dataset: null,
+  frozen_dataset: null,
+  executable_plan: null,
+  validation_report: null,
+  statistical_result_card: null,
+  pending_approval: null,
+  rework_reason: null,
+  blocked_target_ids: [],
+};
+
+>>>>>>> origin/main
 export const workflowApi = {
   getRuntime() {
     return request<RuntimeStatus>("/workflow/runtime");
@@ -184,6 +375,14 @@ export const workflowApi = {
   getProject(projectId: string) {
     return request<WorkflowState>(`/projects/${encodeURIComponent(projectId)}/workflow`);
   },
+<<<<<<< HEAD
+=======
+  getControllerProject(projectId: string) {
+    return request<ControllerWorkflowState>(
+      `/workflow/projects/${encodeURIComponent(projectId)}`,
+    );
+  },
+>>>>>>> origin/main
   approve(projectId: string, decision: string, decidedBy: string) {
     return request<ResearchState>(`/projects/${encodeURIComponent(projectId)}/workflow/approve`, {
       method: "POST",
@@ -193,6 +392,32 @@ export const workflowApi = {
   runNext(projectId: string) {
     return request<WorkflowRun>(`/projects/${encodeURIComponent(projectId)}/workflow/next`, { method: "POST" });
   },
+<<<<<<< HEAD
+=======
+  runPublicNext(projectId: string) {
+    return request<WorkflowRun>(
+      `/workflow/projects/${encodeURIComponent(projectId)}/next`,
+      { method: "POST" },
+    );
+  },
+  uploadRawCsv(projectId: string, file: File) {
+    const body = new FormData();
+    body.append("file", file);
+    return request<DataPipelineState>(
+      `/workflow/projects/${encodeURIComponent(projectId)}/data-pipeline/raw`,
+      { method: "POST", body },
+    );
+  },
+  decideDataPipeline(projectId: string, decision: "approved" | "rejected", decidedBy: string) {
+    return request<DataPipelineState>(
+      `/workflow/projects/${encodeURIComponent(projectId)}/data-pipeline/decide`,
+      {
+        method: "POST",
+        body: JSON.stringify({ decision, decided_by: decidedBy }),
+      },
+    );
+  },
+>>>>>>> origin/main
   listAgents() {
     return request<AgentCapability[]>("/workflow/agents");
   },

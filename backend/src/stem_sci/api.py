@@ -932,6 +932,7 @@ def build(request: ContextBuildRequest) -> ContextBundle:
 @app.get("/api/v1/context/{context_id}")
 def context(context_id: str, project_id: ProjectIdQuery) -> ContextBundle:
     return service.get_bundle(project_id, context_id)
+<<<<<<< HEAD
 # latex integration marker
 
 from .latex import LatexGenerateRequest, LatexGenerateResponse, LatexService, LatexTemplate
@@ -944,3 +945,5 @@ def latex_templates() -> list[LatexTemplate]:
 @app.post("/api/v1/latex/generate", response_model=LatexGenerateResponse)
 def generate_latex(request: LatexGenerateRequest) -> LatexGenerateResponse:
     return _latex_service.generate(request)
+=======
+>>>>>>> origin/main

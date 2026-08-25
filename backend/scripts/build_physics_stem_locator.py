@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+<<<<<<< HEAD
+=======
+import os
+>>>>>>> origin/main
 import sys
 from pathlib import Path
 
@@ -22,6 +26,14 @@ def main() -> int:
         type=Path,
         default=REPOSITORY_ROOT / "data/catalogs/physics_stem/locator.json",
     )
+<<<<<<< HEAD
+=======
+    parser.add_argument(
+        "--metadata",
+        type=Path,
+        help="Optional path to vector metadata.json; otherwise STEM_SCI_VECTOR_KB_ROOT is used.",
+    )
+>>>>>>> origin/main
     parser.add_argument("--update-manifest", action="store_true")
     args = parser.parse_args()
 
@@ -29,12 +41,37 @@ def main() -> int:
         REPOSITORY_ROOT / "data/catalogs/physics_stem/physics_stem_v1.manifest.json"
     )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+<<<<<<< HEAD
+=======
+    metadata_path = args.metadata
+    if metadata_path is None:
+        metadata_path = REPOSITORY_ROOT / manifest["vector_metadata"]["relative_path"]
+        vector_root = os.getenv("STEM_SCI_VECTOR_KB_ROOT", "").strip()
+        if vector_root and manifest["vector_metadata"]["relative_path"].startswith(
+            "data/local/vector_kb/"
+        ):
+            metadata_path = (
+                Path(vector_root).expanduser().resolve()
+                / manifest["vector_metadata"]["relative_path"].removeprefix(
+                    "data/local/vector_kb/"
+                )
+            )
+    if not metadata_path.is_file():
+        raise FileNotFoundError(
+            "Vector metadata.json was not found. Pass --metadata or set "
+            "STEM_SCI_VECTOR_KB_ROOT."
+        )
+>>>>>>> origin/main
     audit, locator = build_locator_index(
         corpus_id=manifest["corpus_id"],
         corpus_version=manifest["corpus_version"],
         pdf_root=args.pdf_root.resolve(),
         identity_map_path=REPOSITORY_ROOT / manifest["identity_map"]["relative_path"],
+<<<<<<< HEAD
         metadata_path=REPOSITORY_ROOT / manifest["vector_metadata"]["relative_path"],
+=======
+        metadata_path=metadata_path.resolve(),
+>>>>>>> origin/main
     )
     digest = write_locator_index(locator, args.output.resolve())
     if args.update_manifest:
