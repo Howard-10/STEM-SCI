@@ -19,8 +19,8 @@ import {
   type RuntimeStatus,
 } from "./api/workflow";
 import { api } from "./api/client";
-import type { SearchResult } from "./types/context";
-import { demoBundle, demoCorpus, demoQAResponse, demoRuntime } from "./demo/data";
+import type { SearchResult, SharedCorpusSummary } from "./types/context";
+import { demoBundle, demoQAResponse, demoRuntime } from "./demo/data";
 import { demoDocumentContents, demoDocumentsByProject, demoProjects } from "./demo/projectHub";
 
 type WorkspaceView = "knowledge" | "codex" | "analysis" | "audit";
@@ -228,6 +228,7 @@ export function App() {
   const [evidenceRows, setEvidenceRows] = useState<SearchResult[]>([]);
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [evidenceError, setEvidenceError] = useState("");
+  const [corpusSummary, setCorpusSummary] = useState<SharedCorpusSummary | null>(null);
 
   const activeProject = useMemo(
     () => projects.find((project) => project.project_id === projectId) ?? projects[0] ?? null,
@@ -265,6 +266,18 @@ export function App() {
       mounted = false;
     };
   }, [auth?.access_token]);
+
+  useEffect(() => {
+    let mounted = true;
+    void api.listSharedCorpora().then((corpora) => {
+      if (mounted) setCorpusSummary(corpora[0] ?? null);
+    }).catch(() => {
+      if (mounted) setCorpusSummary(null);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -1333,12 +1346,20 @@ export function App() {
               </div>
             </section>
             <section className="output-section compact-section">
-              <div className="output-section-heading"><h3>知识库状态</h3><span className="ready-text">可检索</span></div>
+              <div className="output-section-heading">
+                <h3>知识库状态</h3>
+                <span className={corpusSummary?.discovery_ready ? "ready-text" : "review-tag"}>
+                  {corpusSummary?.formal_evidence_ready ? "正式证据可用" : corpusSummary?.discovery_ready ? "发现模式可用" : "资源缺失"}
+                </span>
+              </div>
               <div className="corpus-stats">
-                <div><strong>{demoCorpus.paper_count}</strong><small>篇论文</small></div>
-                <div><strong>{demoCorpus.vector_chunk_count}</strong><small>文本块</small></div>
+                <div><strong>{corpusSummary?.paper_count ?? "—"}</strong><small>篇论文</small></div>
+                <div><strong>{corpusSummary?.vector_chunk_count ?? "—"}</strong><small>文本块</small></div>
                 <div><strong>{demoBundle.evidence_refs.length}</strong><small>本轮证据</small></div>
               </div>
+              {corpusSummary?.risk_flags.length ? (
+                <p className="workflow-control-error">{corpusSummary.risk_flags.join("；")}</p>
+              ) : null}
             </section>
           </div>
         )}
