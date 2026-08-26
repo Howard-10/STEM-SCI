@@ -4,6 +4,7 @@ from pathlib import Path
 
 from stem_sci.knowledge.models import (
     ContextMode,
+    GraphCandidate,
     RetrievalMode,
     RetrievalSearchResponse,
     RetrievalTrace,
@@ -138,3 +139,52 @@ def test_qa_propagates_formal_mode_to_retrieval_and_context(tmp_path: Path) -> N
 
     assert knowledge.search_modes == [ContextMode.FORMAL]
     assert knowledge.context_modes == ["formal"]
+
+
+def test_qa_graph_only_fallback_returns_exploratory_paper_candidates(tmp_path: Path) -> None:
+    class GraphOnlyKnowledgeService(FakeKnowledgeService):
+        def search(self, request):
+            trace = RetrievalTrace(
+                query_normalized=request.query,
+                retrieval_mode=RetrievalMode.GRAPH_ONLY,
+                corpus_id="physics_stem_v1",
+                manifest_refs=["manifest:physics_stem_v1:test"],
+                graph_candidates=[
+                    GraphCandidate(
+                        canonical_paper_id="paper-ai",
+                        graph_paper_id="Generative AI in Physics Education",
+                        navigation_score=1.0,
+                        matched_facets=["Physics Education", "Instructional Scaffolding"],
+                        supporting_edge_refs=["graph:paper-ai:0"],
+                    )
+                ],
+                dense_available=False,
+                sparse_available=False,
+                graph_available=True,
+            )
+            return RetrievalSearchResponse(
+                project_id=request.project_id,
+                corpus_id="physics_stem_v1",
+                requested_mode=ContextMode.DISCOVERY,
+                retrieval_status="DEGRADED",
+                degraded_mode=RetrievalMode.GRAPH_ONLY,
+                candidate_papers=trace.graph_candidates,
+                chunk_hits=[],
+                retrieval_trace=trace,
+                risk_flags=["graph_only_discovery"],
+                manifest_refs=trace.manifest_refs,
+            )
+
+    service = QuestionAnswerService(
+        knowledge_service=GraphOnlyKnowledgeService(),
+        storage_root=tmp_path,
+    )
+    response = service.answer(
+        QAAnswerRequest(project_id="demo", question="physics AI research", allow_llm=False)
+    )
+
+    assert "探索性论文候选" in response.answer
+    assert "Generative AI in Physics Education" in response.answer
+    assert "不能作为正式证据" in response.answer
+    assert response.citations[0].source_type == "paper"
+    assert response.confidence > 0

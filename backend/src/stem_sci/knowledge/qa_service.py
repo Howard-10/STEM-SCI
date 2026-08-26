@@ -594,6 +594,23 @@ class QuestionAnswerService:
         retrieval: RetrievalSearchResponse,
         citations: list[QAReference],
     ) -> QAAnswerRecord:
+        if not retrieval.chunk_hits and retrieval.candidate_papers:
+            candidates = retrieval.candidate_papers[:3]
+            lines = [
+                f"- {candidate.graph_paper_id}（匹配方向：{'、'.join(candidate.matched_facets[:3]) or '相关主题'}）"
+                for candidate in candidates
+            ]
+            return QAAnswerRecord(
+                answer=(
+                    "当前全文资源尚未挂载，以下是基于知识图谱的探索性论文候选：\n"
+                    + "\n".join(lines)
+                    + "\n\n这些候选只能用于确定研究方向，不能作为正式证据；补入论文 PDF 和向量索引后再进行原文核验。"
+                ),
+                citation_indices=list(range(1, min(3, len(citations)) + 1)),
+                confidence=0.25,
+                needs_follow_up=True,
+                follow_up_question="请补入对应论文原文，或继续限定研究对象、变量和时间范围。",
+            )
         if not retrieval.chunk_hits:
             return QAAnswerRecord(
                 answer=f"当前知识库没有找到足够证据回答：{question}",
