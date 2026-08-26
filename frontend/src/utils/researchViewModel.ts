@@ -139,7 +139,32 @@ export function evidenceView(item: EvidenceInput): EvidenceViewModel {
   }
   if ("paper_title" in item && "canonical_chunk_id" in item) {
     const citation = item as unknown as QAAnswerResponse["citations"][number];
-    return { id: citation.canonical_chunk_id, title: citation.paper_title, source: citation.source_filename, excerpt: citation.excerpt, doi: citation.normalized_doi, pdfPath: citation.pdf_relative_path ?? null, page: null, verification: citation.source_type === "paper" ? "证据不足" : "待核验", gateTone: citation.source_type === "paper" ? "insufficient" : "pending", sourceType: citation.source_type, technicalRef: citation.canonical_chunk_id };
+    const verified = citation.verification_status === "source_verified"
+      || citation.verification_status === "human_verified";
+    const page = citation.page_start
+      ? `第 ${citation.page_start}${citation.page_end && citation.page_end !== citation.page_start ? `-${citation.page_end}` : ""} 页`
+      : null;
+    return {
+      id: citation.canonical_chunk_id,
+      title: citation.paper_title,
+      source: citation.source_filename,
+      excerpt: citation.excerpt,
+      doi: citation.normalized_doi,
+      pdfPath: citation.pdf_relative_path ?? null,
+      page,
+      verification: citation.source_type === "paper"
+        ? "证据不足"
+        : verified
+          ? "已核验"
+          : "待核验",
+      gateTone: citation.source_type === "paper"
+        ? "insufficient"
+        : verified
+          ? "verified"
+          : "pending",
+      sourceType: citation.source_type,
+      technicalRef: citation.canonical_chunk_id,
+    };
   }
   const evidence = item as EvidenceRef;
   const verified = evidence.verification_status === "source_verified" || evidence.verification_status === "human_verified";

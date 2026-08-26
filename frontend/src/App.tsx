@@ -118,6 +118,27 @@ const completedAgentsByStage: Record<string, string[]> = {
   RELEASED: ["mentor_planning", "evidence_review", "research_design", "data_analysis", "paper_writing", "independent_review"],
 };
 
+function isFormalCitation(citation: SelectedCitation) {
+  return (
+    citation.verification_status === "source_verified"
+    || citation.verification_status === "human_verified"
+  ) && citation.locator_status === "RESOLVED";
+}
+
+function citationStatusLabel(citation: SelectedCitation) {
+  if (citation.source_type === "paper") return "候选论文";
+  if (isFormalCitation(citation)) {
+    return citation.verification_status === "human_verified" ? "人工核验" : "来源已核验";
+  }
+  if (citation.locator_status === "RESOLVED") return "已定位，待核验";
+  return "待定位/核验";
+}
+
+function citationPageLabel(citation: SelectedCitation) {
+  if (citation.page_start == null) return "页码待补充";
+  return `第 ${citation.page_start}${citation.page_end && citation.page_end !== citation.page_start ? `-${citation.page_end}` : ""} 页`;
+}
+
 function agentStatus(snapshot: ControllerWorkflowState | null, agentId: string): string {
   if (!snapshot) return "读取中";
   const routeAgent = snapshot.last_route_decision?.selected_route;
@@ -220,6 +241,7 @@ export function App() {
   const [documentEditBusy, setDocumentEditBusy] = useState(false);
   const [documentEditError, setDocumentEditError] = useState("");
   const [selectedCitation, setSelectedCitation] = useState<SelectedCitation | null>(null);
+  const [selectedTurnId, setSelectedTurnId] = useState<string | null>(null);
   const [rightPaneVisible, setRightPaneVisible] = useState(true);
   const [paneWidths, setPaneWidths] = useState<PaneWidths>({ sidebar: 246, output: 374 });
   const [draggingPane, setDraggingPane] = useState<"sidebar" | "output" | null>(null);
@@ -240,7 +262,11 @@ export function App() {
     : demoDocumentsByProject[projectId] ?? demoDocumentsByProject[demoProjectId] ?? [];
   const draftDocuments = activeDocuments.filter((document) => document.document_type === "manuscript");
   const projectPapers = activeDocuments.filter((document) => document.document_type !== "manuscript");
-  const citations = lastResponse?.citations ?? demoQAResponse.citations;
+  const selectedTurnResponse = messages.find(
+    (message) => message.id === selectedTurnId && message.role === "assistant",
+  )?.response;
+  const activeResponse = selectedTurnResponse ?? lastResponse;
+  const citations = activeResponse?.citations ?? demoQAResponse.citations;
 
   useEffect(() => {
     if (!auth?.access_token) {
@@ -276,7 +302,11 @@ export function App() {
   useEffect(() => {
     let mounted = true;
     void api.listSharedCorpora().then((corpora) => {
-      if (mounted) setCorpusSummary(corpora[0] ?? null);
+      if (mounted) {
+        const summary = corpora[0] ?? null;
+        setCorpusSummary(summary);
+        if (summary?.formal_evidence_ready) setMode("formal");
+      }
     }).catch(() => {
       if (mounted) setCorpusSummary(null);
     });
@@ -593,8 +623,10 @@ export function App() {
         });
       setConversationId(response.conversation_id);
       setLastResponse(response);
+      const assistantMessageId = `assistant-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      setSelectedTurnId(assistantMessageId);
       setMessages((current) => [...current, {
-        id: `assistant-${Date.now()}`,
+        id: assistantMessageId,
         role: "assistant",
         content: response.answer,
         response,
@@ -642,6 +674,8 @@ export function App() {
     setProjectMenuOpen(false);
     setConversationId(undefined);
     setConversations([]);
+    setSelectedTurnId(null);
+    setLastResponse(demoQAResponse);
     const project = projects.find((item) => item.project_id === nextProjectId);
     setMessages([makeWelcome(project?.title ?? "科研项目")]);
   };
@@ -682,6 +716,7 @@ export function App() {
       setConversationId(undefined);
       setMessages([makeWelcome(created.title)]);
       setLastResponse(demoQAResponse);
+      setSelectedTurnId(null);
       setCreateProjectOpen(false);
     } catch (error) {
       setProjectError(error instanceof Error ? error.message : "创建项目失败");
@@ -933,6 +968,8 @@ export function App() {
             project_id: turn.project_id,
             conversation_id: turn.conversation_id,
             question: turn.question,
+            turn_id: turn.turn_id ?? turn.memory_id,
+            mode: turn.mode ?? "discovery",
             rewritten_query: turn.rewritten_query,
             route: {
               route: turn.route,
@@ -957,11 +994,14 @@ export function App() {
       });
       if (nextMessages.length) {
         setMessages(nextMessages);
+        setSelectedTurnId(nextMessages[nextMessages.length - 1]?.id ?? null);
         const last = turns[turns.length - 1];
         setLastResponse({
           project_id: last.project_id,
           conversation_id: last.conversation_id,
           question: last.question,
+          turn_id: last.turn_id ?? last.memory_id,
+          mode: last.mode ?? "discovery",
           rewritten_query: last.rewritten_query,
           route: {
             route: last.route,
@@ -992,6 +1032,7 @@ export function App() {
     setConversationId(undefined);
     setMessages([makeWelcome(activeProject?.title ?? "科研项目")]);
     setLastResponse(demoQAResponse);
+    setSelectedTurnId(null);
   };
 
   const workspaceStyle = {
@@ -1011,7 +1052,7 @@ export function App() {
           </div>
         </div>
 
-        <button className="new-conversation" type="button" onClick={() => setMessages([makeWelcome(activeProject?.title ?? "科研项目")])}>
+        <button className="new-conversation" type="button" onClick={resetConversation}>
           <span className="ui-icon">＋</span>
           新建对话
         </button>
@@ -1088,7 +1129,7 @@ export function App() {
               <small>刚刚 · {(activeProject?.title ?? "科研项目").slice(0, 12)}</small>
             </button>
           )}
-          <button className="recent-chat" type="button" onClick={() => setMessages([makeWelcome(activeProject?.title ?? "科研项目")])}>
+          <button className="recent-chat" type="button" onClick={resetConversation}>
             <strong>新建研究问题</strong>
             <small>开始新的研究对话</small>
           </button>
@@ -1152,7 +1193,21 @@ export function App() {
             </section>
           )}
           {messages.map((message) => (
-            <article className={message.role === "user" ? "chat-message user-message" : "chat-message assistant-message"} key={message.id}>
+            <article
+              className={`${message.role === "user" ? "chat-message user-message" : "chat-message assistant-message"}${message.id === selectedTurnId ? " message-selected" : ""}`}
+              key={message.id}
+              onClick={() => {
+                if (message.role === "assistant" && message.response) setSelectedTurnId(message.id);
+              }}
+              onKeyDown={(event) => {
+                if ((event.key === "Enter" || event.key === " ") && message.role === "assistant" && message.response) {
+                  event.preventDefault();
+                  setSelectedTurnId(message.id);
+                }
+              }}
+              role={message.role === "assistant" && message.response ? "button" : undefined}
+              tabIndex={message.role === "assistant" && message.response ? 0 : undefined}
+            >
               {message.role === "assistant" && <div className="assistant-mark">S</div>}
               <div className="message-body">
                 <div className="message-meta">{message.role === "user" ? "你" : "STEM-SCI"} <span>·</span> {message.role === "user" ? "研究问题" : "研究助手"}</div>
@@ -1170,7 +1225,9 @@ export function App() {
                 )}
                 {message.response && (
                   <div className="message-signal-row">
-                    <span className="signal-chip signal-green">证据 {message.response.citations.length} 条</span>
+                    <span className="signal-chip signal-green">
+                      {message.response.mode === "formal" ? "正式证据" : "探索证据"} {message.response.citations.length} 条
+                    </span>
                     <span className="signal-chip">{message.response.route.recommended_agent ?? "检索链路"}</span>
                     <span className="signal-chip">{message.response.answer_mode === "llm" ? "模型已综合" : "确定性摘要"}</span>
                   </div>
@@ -1246,7 +1303,16 @@ export function App() {
                   onChange={(event) => selectChatFiles(event.target.files)}
                 />
                 <button className="composer-tool" type="button" title="引用知识库">▱ <span>知识库</span></button>
-                <button className="composer-tool" type="button" title="选择证据模式" onClick={() => setMode((current) => current === "discovery" ? "formal" : "discovery")}>
+                <button
+                  className="composer-tool"
+                  type="button"
+                  disabled={mode === "discovery" && !corpusSummary?.formal_evidence_ready}
+                  title={corpusSummary?.formal_evidence_ready ? "切换正式证据或探索模式" : "正式证据尚未满足来源定位和核验条件"}
+                  onClick={() => {
+                    if (mode === "discovery" && !corpusSummary?.formal_evidence_ready) return;
+                    setMode((current) => current === "discovery" ? "formal" : "discovery");
+                  }}
+                >
                   ◈ <span>{mode === "formal" ? "正式" : "探索"}</span>
                 </button>
               </div>
@@ -1348,14 +1414,34 @@ export function App() {
               </div>
             </section>
             <section className="output-section">
-              <div className="output-section-heading"><h3>相关证据</h3><span>{citations.length} 条</span></div>
+              <div className="output-section-heading">
+                <div>
+                  <h3>{activeResponse?.mode === "formal" ? "本轮正式证据" : "本轮探索证据"}</h3>
+                  <p className="section-subtitle">
+                    {selectedTurnResponse ? "当前显示所选回答轮次的证据" : "当前回答轮次的证据"}
+                  </p>
+                </div>
+                <span>{citations.length} 条</span>
+              </div>
               <div className="evidence-list">
                 {citations.map((citation, index) => (
-                  <button className="evidence-item" type="button" key={citation.canonical_chunk_id} onClick={() => setSelectedCitation(citation)}>
-                    <div className="evidence-item-topline"><span className="citation-number">{index + 1}</span><span className={index === 0 ? "verified-tag" : "review-tag"}>{index === 0 ? "已核验" : "待核验"}</span></div>
+                  <button
+                    className="evidence-item"
+                    type="button"
+                    key={`${activeResponse?.turn_id ?? activeResponse?.memory_ref ?? "turn"}-${index}-${citation.canonical_chunk_id}`}
+                    onClick={() => setSelectedCitation(citation)}
+                  >
+                    <div className="evidence-item-topline">
+                      <span className="citation-number">{citation.citation_index || index + 1}</span>
+                      <span className={isFormalCitation(citation) ? "verified-tag" : "review-tag"}>
+                        {citationStatusLabel(citation)}
+                      </span>
+                    </div>
                     <strong>{citation.paper_title}</strong>
                     <p>{citation.excerpt}</p>
-                    <small>{citation.source_filename} · Chunk {citation.chunk_index}</small>
+                    <small>
+                      {citation.source_filename} · Chunk {citation.chunk_index} · {citationPageLabel(citation)}
+                    </small>
                   </button>
                 ))}
               </div>
@@ -1370,7 +1456,7 @@ export function App() {
               <div className="corpus-stats">
                 <div><strong>{corpusSummary?.paper_count ?? "—"}</strong><small>篇论文</small></div>
                 <div><strong>{corpusSummary?.vector_chunk_count ?? "—"}</strong><small>文本块</small></div>
-                <div><strong>{demoBundle.evidence_refs.length}</strong><small>本轮证据</small></div>
+                <div><strong>{citations.length}</strong><small>本轮证据</small></div>
               </div>
               {corpusSummary?.risk_flags.length ? (
                 <p className="workflow-control-error">{corpusSummary.risk_flags.join("；")}</p>
@@ -1698,9 +1784,9 @@ export function App() {
               </div>
             </section>
             <section className="output-section">
-              <div className="output-section-heading"><h3>本轮审查</h3><span>{lastResponse.risk_flags.length} 项提醒</span></div>
+              <div className="output-section-heading"><h3>本轮审查</h3><span>{activeResponse?.risk_flags.length ?? 0} 项提醒</span></div>
               <div className="review-list">
-                {lastResponse.risk_flags.map((flag) => <div className="review-item" key={flag}><span>!</span><p>{flag}</p></div>)}
+                {(activeResponse?.risk_flags ?? []).map((flag) => <div className="review-item" key={flag}><span>!</span><p>{flag}</p></div>)}
               </div>
               {workflowSnapshot?.pending_approval_ref && (
                 <div className="audit-pending-note">
@@ -1805,11 +1891,20 @@ export function App() {
             <blockquote>{selectedCitation.excerpt}</blockquote>
             <dl className="citation-meta-list">
               <div><dt>来源文件</dt><dd>{selectedCitation.source_filename}</dd></div>
+              <div><dt>回答引用序号</dt><dd>{selectedCitation.citation_index || "未提供"}</dd></div>
               <div><dt>Chunk</dt><dd>{selectedCitation.canonical_chunk_id}</dd></div>
               <div><dt>论文标识</dt><dd>{selectedCitation.canonical_paper_id}</dd></div>
               <div><dt>DOI</dt><dd>{selectedCitation.normalized_doi ?? "未提供"}</dd></div>
+              <div><dt>证据状态</dt><dd>{citationStatusLabel(selectedCitation)}</dd></div>
+              <div><dt>来源定位</dt><dd>{selectedCitation.source_locator_method ?? "UNRESOLVED"}</dd></div>
+              <div><dt>PDF 页码</dt><dd>{citationPageLabel(selectedCitation)}</dd></div>
+              <div><dt>字符范围</dt><dd>{selectedCitation.char_start != null && selectedCitation.char_end != null ? `${selectedCitation.char_start}-${selectedCitation.char_end}` : "待补充"}</dd></div>
             </dl>
-            <p className="drawer-note">这条证据来自本轮问答返回的检索结果。正式模式下还需要满足来源定位和核验条件。</p>
+            <p className="drawer-note">
+              {isFormalCitation(selectedCitation)
+                ? "这条材料已通过来源定位和核验，可以进入正式证据链。"
+                : "这条材料目前只能用于探索，正式模式下还需要来源定位和核验。"}
+            </p>
           </section>
         </div>
       )}

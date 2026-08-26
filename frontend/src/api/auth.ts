@@ -60,6 +60,8 @@ export type ApiConversationSummary = {
 
 export type ApiMemoryTurn = {
   memory_id: string;
+  turn_id?: string | null;
+  mode?: QAContextMode;
   conversation_id: string;
   project_id: string;
   question: string;
@@ -67,6 +69,7 @@ export type ApiMemoryTurn = {
   answer: string;
   route: string;
   citations: Array<{
+    citation_index?: number;
     paper_title: string;
     source_filename: string;
     canonical_paper_id: string;
@@ -74,6 +77,20 @@ export type ApiMemoryTurn = {
     chunk_index: number;
     excerpt: string;
     normalized_doi: string | null;
+    pdf_relative_path?: string | null;
+    pdf_sha256?: string | null;
+    locator_status?: "RESOLVED" | "UNRESOLVED";
+    source_locator_method?: "PAGE_TEXT_EXACT" | "NORMALIZED_TEXT_MATCH" | "UNRESOLVED";
+    verification_status?:
+      | "demo_seed"
+      | "model_generated_unverified"
+      | "source_verified"
+      | "human_verified";
+    page_start?: number | null;
+    page_end?: number | null;
+    char_start?: number | null;
+    char_end?: number | null;
+    retrieval_modalities?: string[];
     source_type: "chunk" | "paper";
   }>;
   retrieval_trace_ref: string | null;
