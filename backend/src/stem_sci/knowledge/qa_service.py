@@ -644,6 +644,7 @@ class QuestionAnswerService:
                     chunk_index=hit.chunk_index,
                     excerpt=hit.excerpt,
                     normalized_doi=normalize_doi(hit.normalized_doi),
+                    pdf_relative_path=hit.pdf_relative_path,
                 )
             )
         for candidate in retrieval.candidate_papers:

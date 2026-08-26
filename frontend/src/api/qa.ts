@@ -40,6 +40,7 @@ export interface QAAnswerResponse {
     chunk_index: number;
     excerpt: string;
     normalized_doi: string | null;
+    pdf_relative_path?: string | null;
     source_type: "chunk" | "paper";
   }>;
   retrieval_status: string;
@@ -55,7 +56,7 @@ export interface QAAnswerResponse {
   workflow_action: QAWorkflowAction | null;
 }
 
-const base = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000/api/v1";
+const base = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
 import { demoQAResponse } from "../demo/data";
 

@@ -274,6 +274,7 @@ class KnowledgeOperatorRuntime:
                 "chunk_id": item.chunk_id,
                 "canonical_chunk_id": item.canonical_chunk_id,
                 "canonical_paper_id": item.canonical_paper_id,
+                "pdf_relative_path": item.pdf_relative_path,
                 "excerpt": item.excerpt,
                 "verification_status": item.verification_status.value,
             }

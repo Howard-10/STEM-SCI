@@ -171,6 +171,7 @@ function makeWelcome(projectTitle: string): ChatMessage {
 export function App() {
   const [auth, setAuth] = useState<AuthState | null>(() => readStoredAuth());
   const [projects, setProjects] = useState<ApiResearchProject[]>(demoProjects);
+  const [projectsReady, setProjectsReady] = useState(!readStoredAuth()?.access_token);
   const [projectId, setProjectId] = useState(demoProjects[0]?.project_id ?? demoProjectId);
   const [view, setView] = useState<WorkspaceView>("knowledge");
   const [mode, setMode] = useState<QAContextMode>("discovery");
@@ -244,8 +245,10 @@ export function App() {
   useEffect(() => {
     if (!auth?.access_token) {
       setProjects(demoProjects);
+      setProjectsReady(true);
       return;
     }
+    setProjectsReady(false);
     setProjects([]);
     let mounted = true;
     void authApi.listProjects(auth.access_token).then((next) => {
@@ -260,7 +263,10 @@ export function App() {
       if (mounted) {
         setProjects([]);
         setProjectId("");
+        setProjectsReady(true);
       }
+    }).finally(() => {
+      if (mounted) setProjectsReady(true);
     });
     return () => {
       mounted = false;
@@ -316,7 +322,7 @@ export function App() {
   useEffect(() => {
     let mounted = true;
     setWorkflowError("");
-    if (!auth?.access_token || !projectId) {
+    if (!auth?.access_token || !projectId || !projectsReady) {
       setWorkflow(null);
       return () => { mounted = false; };
     }
@@ -331,6 +337,15 @@ export function App() {
   useEffect(() => {
     let mounted = true;
     setAnalysisError("");
+    if (!auth?.access_token || !projectId || !projectsReady) {
+      setRuntimeStatus(demoRuntime);
+      setWorkflowSnapshot(null);
+      setAnalysisStage("STUDY_PROTOCOL_APPROVED");
+      setAnalysisState(null);
+      return () => {
+        mounted = false;
+      };
+    }
     void Promise.all([
       workflowApi.getRuntime(),
       workflowApi.getControllerProject(projectId),

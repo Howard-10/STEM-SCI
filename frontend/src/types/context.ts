@@ -41,6 +41,7 @@ export interface EvidenceRef {
   verification_status: VerificationStatus;
   canonical_paper_id?: string | null;
   canonical_chunk_id?: string | null;
+  pdf_relative_path?: string | null;
   corpus_id?: string | null;
   retrieval_modalities?: string[];
 }
@@ -117,6 +118,13 @@ export interface SharedChunkHit {
   sparse_rank?: number | null;
   rrf_score: number;
   locator_status: "RESOLVED" | "UNRESOLVED";
+  pdf_relative_path?: string | null;
+  pdf_sha256?: string | null;
+  page_start?: number | null;
+  page_end?: number | null;
+  char_start?: number | null;
+  char_end?: number | null;
+  verification_status?: VerificationStatus;
   retrieval_modalities: Array<"dense" | "sparse" | "graph_navigation">;
 }
 

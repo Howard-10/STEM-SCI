@@ -315,6 +315,7 @@ class HybridKnowledgeService:
                     corpus_id=response.corpus_id,
                     canonical_paper_id=hit.canonical_paper_id,
                     canonical_chunk_id=hit.canonical_chunk_id,
+                    pdf_relative_path=hit.pdf_relative_path,
                     retrieval_modalities=[str(modality) for modality in hit.retrieval_modalities],
                 )
             )
@@ -456,6 +457,7 @@ class HybridKnowledgeService:
                 if locator is not None
                 else VerificationStatus.MODEL_GENERATED_UNVERIFIED.value
             ),
+            pdf_relative_path=locator.pdf_relative_path if locator is not None else None,
             pdf_sha256=locator.pdf_sha256 if locator is not None else None,
             page_start=locator.page_start if locator is not None else None,
             page_end=locator.page_end if locator is not None else None,

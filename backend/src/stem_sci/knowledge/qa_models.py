@@ -42,6 +42,7 @@ class QAReference(QAStrictModel):
     chunk_index: int
     excerpt: str
     normalized_doi: str | None = None
+    pdf_relative_path: str | None = None
     source_type: Literal["chunk", "paper"] = "chunk"
 
 

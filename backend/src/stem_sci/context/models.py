@@ -79,6 +79,7 @@ class EvidenceRef(StrictModel):
     corpus_id: str | None = None
     canonical_paper_id: str | None = None
     canonical_chunk_id: str | None = None
+    pdf_relative_path: str | None = None
     retrieval_modalities: list[str] = Field(default_factory=list)
 
 

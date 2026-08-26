@@ -207,6 +207,7 @@ class RetrievalHitSummary(StrictKnowledgeModel):
     verification_status: Literal[
         "demo_seed", "model_generated_unverified", "source_verified", "human_verified"
     ] = "model_generated_unverified"
+    pdf_relative_path: str | None = None
     pdf_sha256: str | None = None
     page_start: int | None = None
     page_end: int | None = None
