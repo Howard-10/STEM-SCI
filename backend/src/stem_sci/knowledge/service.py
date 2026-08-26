@@ -89,6 +89,56 @@ class HybridKnowledgeService:
         ):
             return self._unavailable(request, manifest, manifest_refs, readiness.risk_flags)
         if request.mode is ContextMode.DISCOVERY and not readiness.discovery_ready:
+            # The graph is useful for topic navigation even when local full-text
+            # assets have not been mounted. Keep this explicitly degraded and
+            # return no text evidence, so it cannot cross the formal gate.
+            can_use_graph_only = any(
+                risk.startswith("asset_missing:") for risk in readiness.risk_flags
+            )
+            if not can_use_graph_only:
+                return self._unavailable(request, manifest, manifest_refs, readiness.risk_flags)
+            try:
+                resolver = PaperIdentityResolver.from_catalog_path(
+                    self._registry.asset_path(manifest.identity_map)
+                )
+                graph, graph_issue = self._graph_retriever(manifest, resolver)
+                graph_candidates = graph.search(request.query, limit=request.limit) if graph else []
+            except (OSError, ValueError, Neo4jError, ServiceUnavailable):
+                graph_candidates = []
+                graph_issue = "graph_navigation_unavailable"
+            if graph_candidates:
+                risks = sorted(
+                    set(
+                        [
+                            *readiness.risk_flags,
+                            "graph_only_discovery",
+                            *( [graph_issue] if graph_issue else [] ),
+                        ]
+                    )
+                )
+                trace = RetrievalTrace(
+                    query_normalized=request.query,
+                    retrieval_mode=RetrievalMode.GRAPH_ONLY,
+                    corpus_id=manifest.corpus_id,
+                    manifest_refs=manifest_refs,
+                    graph_candidates=graph_candidates,
+                    risk_flags=risks,
+                    dense_available=False,
+                    sparse_available=False,
+                    graph_available=True,
+                )
+                return RetrievalSearchResponse(
+                    project_id=request.project_id,
+                    corpus_id=manifest.corpus_id,
+                    requested_mode=request.mode,
+                    retrieval_status="DEGRADED",
+                    degraded_mode=RetrievalMode.GRAPH_ONLY,
+                    candidate_papers=graph_candidates,
+                    chunk_hits=[],
+                    retrieval_trace=trace,
+                    risk_flags=risks,
+                    manifest_refs=manifest_refs,
+                )
             return self._unavailable(request, manifest, manifest_refs, readiness.risk_flags)
 
         resolver = PaperIdentityResolver.from_catalog_path(

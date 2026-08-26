@@ -239,6 +239,29 @@ def test_readiness_allows_discovery_but_blocks_formal_without_locator(registry: 
     assert "formal_locator_index_unavailable" in readiness.risk_flags
 
 
+def test_discovery_degrades_to_graph_navigation_when_text_assets_are_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_assets(tmp_path)
+    (tmp_path / "data/local/vector_kb/vectordb/metadata.json").unlink()
+    monkeypatch.setenv("STEM_SCI_GRAPH_BACKEND", "json")
+    service = HybridKnowledgeService(ContextService(tmp_path / "state"), CorpusRegistry(tmp_path))
+
+    response = service.search(
+        RetrievalSearchRequest(
+            project_id="alpha",
+            query="generative AI scaffolding physics",
+            mode=ContextMode.DISCOVERY,
+        )
+    )
+
+    assert response.retrieval_status == "DEGRADED"
+    assert response.degraded_mode is RetrievalMode.GRAPH_ONLY
+    assert response.candidate_papers
+    assert response.chunk_hits == []
+    assert "graph_only_discovery" in response.risk_flags
+
+
 def test_graph_navigation_is_bounded_and_unverified(registry: CorpusRegistry) -> None:
     manifest = registry.load_manifest()
     resolver = PaperIdentityResolver.from_catalog_path(registry.asset_path(manifest.identity_map))
