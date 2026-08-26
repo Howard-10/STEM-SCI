@@ -44,7 +44,9 @@ class CorpusRegistry:
                 AssetCheck(
                     relative_path=manifest.pdf_root_relative_path,
                     state="MISSING",
-                    required=True,
+                    # PDFs are required for formal source verification, but
+                    # discovery can use the local vector metadata and index.
+                    required=False,
                 )
             )
         checks.extend(self._content_checks(manifest))
@@ -143,7 +145,7 @@ class CorpusRegistry:
                 AssetCheck(
                     relative_path=manifest.pdf_root_relative_path,
                     state="READY" if count == manifest.paper_count else "CONTENT_MISMATCH",
-                    required=True,
+                    required=False,
                 )
             )
         return checks

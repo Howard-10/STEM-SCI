@@ -587,3 +587,14 @@ def test_pdf_tamper_blocks_formal_but_keeps_discovery_ready(tmp_path: Path) -> N
     )
     assert response.retrieval_status == "UNAVAILABLE"
     assert response.chunk_hits == []
+
+
+def test_missing_pdfs_keeps_vector_discovery_ready_but_blocks_formal(tmp_path: Path) -> None:
+    _write_assets(tmp_path)
+    for pdf in (tmp_path / "data/local/literature_pdfs").glob("*.pdf"):
+        pdf.unlink()
+    registry = CorpusRegistry(tmp_path)
+
+    readiness = registry.readiness()
+    assert readiness.discovery_ready is True
+    assert readiness.formal_evidence_ready is False
