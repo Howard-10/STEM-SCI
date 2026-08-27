@@ -597,6 +597,43 @@ export function App() {
     setAttachmentError("");
     setBusy(true);
     try {
+      const workflowCommand = /^(确定|确认|同意|开始|继续|通过)[。！! ]*$/u.test(trimmed);
+      if (workflowCommand && auth?.access_token && activeProject) {
+        if (workflow?.pending_approval_ref) {
+          await workflowApi.approve(projectId, "approved", auth.user.username);
+          await refreshWorkflow();
+          await reloadWorkflowTimeline();
+          setMessages((current) => [...current, {
+            id: `assistant-workflow-approved-${Date.now()}`,
+            role: "assistant",
+            content: "当前阶段成果已确认。请再次输入“继续”或点击“调度下一 Agent”进入下一阶段。",
+          }]);
+          return;
+        }
+        if (workflow) {
+          const next = await workflowApi.runNext(projectId);
+          setWorkflow(next.workflow_state);
+          await reloadWorkflowTimeline();
+          setMessages((current) => [...current, {
+            id: `assistant-workflow-next-${Date.now()}`,
+            role: "assistant",
+            content: "已开始下一阶段 Agent 调度，完成后将生成可审核的阶段报告。",
+          }]);
+          return;
+        }
+        const planning = await workflowApi.startProject({
+          project_id: projectId,
+          research_intent: activeProject.research_direction || activeProject.title,
+        });
+        setWorkflow(planning.workflow_state);
+        setWorkflowTimeline(await workflowApi.getTimeline(projectId));
+        setMessages((current) => [...current, {
+          id: `assistant-workflow-start-${Date.now()}`,
+          role: "assistant",
+          content: "已开始导师规划。请审核研究边界、问题树与可行性方案。",
+        }]);
+        return;
+      }
       let targetProjectId = projectId;
       if (!activeProject) {
         if (!auth?.access_token) throw new Error("请先登录并创建研究项目");
