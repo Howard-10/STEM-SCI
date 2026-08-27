@@ -192,9 +192,11 @@ class EvidenceReviewAgent(BaseAgent):
                 },
             ),
         ]
+        existing_types = {artifact.artifact_type for artifact in artifacts}
         for artifact_type, body in fallback_payloads:
-            if artifact_type in allowed:
+            if artifact_type in allowed and artifact_type not in existing_types:
                 artifacts.append(self._artifact(agent_input.task_ref, artifact_type, body))
+                existing_types.add(artifact_type)
         # Even without an LLM, a real evidence run must produce source-bound
         # review material. These candidates are deliberately bounded to the
         # retrieved excerpts; they are what lets the researcher verify and,
@@ -203,70 +205,73 @@ class EvidenceReviewAgent(BaseAgent):
             evidence_snapshot = [
                 item.model_dump(mode="json") for item in context.evidence_refs
             ]
-            if "PaperCardCollection" in allowed:
-                artifacts.append(
-                    self._artifact(
-                        agent_input.task_ref,
-                        "PaperCardCollection",
+            evidence_ids = [item.evidence_id for item in context.evidence_refs]
+            evidence_payloads: dict[str, dict[str, object]] = {
+                "PaperCardCollection": {
+                    "cards": [
                         {
-                            "cards": [
-                                {
-                                    "paper_card_id": f"paper-card:{item.source_id}",
-                                    "project_id": context.project_id,
-                                    "source_ref": item.source_id,
-                                    "title": item.source_id,
-                                    "main_findings": [item.excerpt],
-                                    "evidence_refs": [item.evidence_id],
-                                }
-                                for item in context.evidence_refs
-                            ],
-                            "evidence_refs": [item.evidence_id for item in context.evidence_refs],
-                            "evidence_snapshot": evidence_snapshot,
-                            "status": "CANDIDATE",
-                        },
-                    )
-                )
-            if "EvidenceMatrixCandidate" in allowed:
-                artifacts.append(
-                    self._artifact(
-                        agent_input.task_ref,
-                        "EvidenceMatrixCandidate",
-                        {
-                            "rows": [
-                                {
-                                    "row_id": f"evidence-row:{item.evidence_id}",
-                                    "project_id": context.project_id,
-                                    "research_question": context.query,
-                                    "source_ref": item.source_id,
-                                    "relation": "MENTIONING",
-                                    "finding": item.excerpt,
-                                    "applicability_boundary": "仅代表该原文片段，尚未形成跨来源结论。",
-                                    "evidence_refs": [item.evidence_id],
-                                }
-                                for item in context.evidence_refs
-                            ],
-                            "evidence_refs": [item.evidence_id for item in context.evidence_refs],
-                            "evidence_snapshot": evidence_snapshot,
-                            "status": "CANDIDATE",
-                        },
-                    )
-                )
-            if "BoundedEvidenceSynthesis" in allowed:
-                artifacts.append(
-                    self._artifact(
-                        agent_input.task_ref,
-                        "BoundedEvidenceSynthesis",
-                        {
-                            "synthesis_id": f"bounded-synthesis:{agent_input.agent_run_id}",
+                            "paper_card_id": f"paper-card:{item.source_id}",
                             "project_id": context.project_id,
-                            "summary": "本轮仅整理检索到的原文片段，不外推跨来源结论。",
-                            "evidence_refs": [item.evidence_id for item in context.evidence_refs],
-                            "evidence_snapshot": evidence_snapshot,
-                            "corpus_limit": "仅限当前检索上下文和可定位原文片段。",
-                            "status": "CANDIDATE",
-                        },
-                    )
+                            "source_ref": item.source_id,
+                            "title": item.source_id,
+                            "main_findings": [item.excerpt],
+                            "evidence_refs": [item.evidence_id],
+                        }
+                        for item in context.evidence_refs
+                    ],
+                    "evidence_refs": evidence_ids,
+                    "evidence_snapshot": evidence_snapshot,
+                    "status": "CANDIDATE",
+                },
+                "EvidenceMatrixCandidate": {
+                    "rows": [
+                        {
+                            "row_id": f"evidence-row:{item.evidence_id}",
+                            "project_id": context.project_id,
+                            "research_question": context.query,
+                            "source_ref": item.source_id,
+                            "relation": "MENTIONING",
+                            "finding": item.excerpt,
+                            "applicability_boundary": "仅代表该原文片段，尚未形成跨来源结论。",
+                            "evidence_refs": [item.evidence_id],
+                        }
+                        for item in context.evidence_refs
+                    ],
+                    "evidence_refs": evidence_ids,
+                    "evidence_snapshot": evidence_snapshot,
+                    "status": "CANDIDATE",
+                },
+                "BoundedEvidenceSynthesis": {
+                    "synthesis_id": f"bounded-synthesis:{agent_input.agent_run_id}",
+                    "project_id": context.project_id,
+                    "summary": "本轮仅整理检索到的原文片段，不外推跨来源结论。",
+                    "evidence_refs": evidence_ids,
+                    "evidence_snapshot": evidence_snapshot,
+                    "corpus_limit": "仅限当前检索上下文和可定位原文片段。",
+                    "status": "CANDIDATE",
+                },
+            }
+            for artifact_type, payload in evidence_payloads.items():
+                if artifact_type not in allowed:
+                    continue
+                existing_index = next(
+                    (
+                        index
+                        for index, artifact in enumerate(artifacts)
+                        if artifact.artifact_type == artifact_type
+                    ),
+                    None,
                 )
+                enriched = self._artifact(agent_input.task_ref, artifact_type, payload)
+                if existing_index is None:
+                    artifacts.append(enriched)
+                else:
+                    # Keep the pipeline's typed payload, but guarantee that
+                    # formalization has the exact source snapshot it validates.
+                    existing = artifacts[existing_index]
+                    artifacts[existing_index] = existing.model_copy(
+                        update={"body": {**existing.body, **payload}}
+                    )
         return AgentResult(
             agent_run_id=agent_input.agent_run_id,
             agent_id=self.agent_id,

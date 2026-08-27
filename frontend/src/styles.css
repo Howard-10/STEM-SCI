@@ -3501,6 +3501,29 @@ body {
   font-weight: 700;
 }
 
+.agent-output-failure {
+  display: grid;
+  gap: 3px;
+  border-left: 3px solid #b45e47;
+  background: #fff7f5;
+  padding: 8px 9px;
+  color: #7d4034;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.agent-output-failure strong {
+  font-size: 10px;
+}
+
+.agent-output-failure span {
+  overflow-wrap: anywhere;
+}
+
+.agent-output-failure small {
+  color: #96675e;
+}
+
 .agent-question-history {
   display: grid;
   gap: 6px;

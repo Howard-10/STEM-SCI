@@ -1135,6 +1135,13 @@ export function App() {
           {output.target_pages.map(targetPageLabel).join("、") || "项目产出箱"}
         </small>
         {output.agent_run_id && <small className="agent-execution-record">已执行 · {output.agent_version || output.agent_run_id}</small>}
+        {output.error && (
+          <div className="agent-output-failure" role="alert">
+            <strong>执行失败</strong>
+            <span>{output.error}</span>
+            <small>本次没有生成可审查产物。修复后请重新生成一轮 Agent 计划。</small>
+          </div>
+        )}
         {primaryPreview && (
           <div className="agent-output-readable-preview">
             <strong>直接回答{output.summary_mode === "llm" ? " · 模型整理" : " · 规则整理"}</strong>

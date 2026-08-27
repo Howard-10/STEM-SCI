@@ -17,6 +17,9 @@ from stem_sci.controller import (
     AgentTaskStatus,
     ResearchController,
 )
+from stem_sci.agents.evidence import EvidenceReviewAgent
+from stem_sci.agents.contracts import AgentInput
+from stem_sci.context.models import ContextBundle, EvidenceRef, SourceLocation, VerificationStatus
 
 
 def test_natural_language_agent_plan_requires_approval_before_execution() -> None:
@@ -386,3 +389,52 @@ def test_evidence_promotion_requires_a_stable_source_chunk_reference() -> None:
     )
 
     assert decision["risk_flags"] == ["FORMAL_EVIDENCE_MISSING_SOURCE_CHUNK_REF"]
+
+
+def test_evidence_fallback_deduplicates_typed_candidate_artifacts() -> None:
+    agent = EvidenceReviewAgent()
+    context = ContextBundle(
+        context_id="ctx-evidence-dedup",
+        project_id="evidence-dedup-demo",
+        task_ref="task-evidence-dedup",
+        query="牛顿第二定律与物理建模",
+        evidence_refs=[
+            EvidenceRef(
+                evidence_id="evidence-dedup-1",
+                project_id="evidence-dedup-demo",
+                source_id="source-1",
+                chunk_id="chunk-1",
+                excerpt="模型需要明确系统边界和受力关系。",
+                location=SourceLocation(chunk_index=2, char_start=10, char_end=28),
+                verification_status=VerificationStatus.SOURCE_VERIFIED,
+            )
+        ],
+        source_refs=["source-1"],
+        unresolved_questions=[],
+        risk_flags=[],
+        verification_summary={"source_verified": 1},
+        token_budget=500,
+        estimated_tokens=20,
+        context_hash="d" * 64,
+        generated_at=datetime.now(UTC),
+    )
+    agent_input = AgentInput(
+        agent_run_id="evidence-dedup-run",
+        task_ref="task-evidence-dedup",
+        context_bundle_ref="ctx-evidence-dedup",
+        allowed_tool_capabilities=list(agent.allowed_tool_capabilities),
+        allowed_output_types=list(agent.allowed_output_types),
+        policy_version="v1",
+        prompt_template_version="evidence-v1",
+    )
+
+    result = agent._deterministic_result(agent_input, context)
+    refs = [artifact.candidate_ref for artifact in result.candidate_artifacts]
+
+    assert len(refs) == len(set(refs))
+    matrix = next(
+        artifact
+        for artifact in result.candidate_artifacts
+        if artifact.artifact_type == "EvidenceMatrixCandidate"
+    )
+    assert matrix.body["evidence_snapshot"]
