@@ -5086,6 +5086,17 @@
             ],
             "title": "Canonical Chunk Id"
           },
+          "pdf_relative_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Relative Path"
+          },
           "retrieval_modalities": {
             "items": {
               "type": "string"
@@ -6640,6 +6651,17 @@
             ],
             "title": "Normalized Doi"
           },
+          "pdf_relative_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Relative Path"
+          },
           "source_type": {
             "type": "string",
             "enum": [
@@ -7569,6 +7591,17 @@
             ],
             "title": "Verification Status",
             "default": "model_generated_unverified"
+          },
+          "pdf_relative_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Relative Path"
           },
           "pdf_sha256": {
             "anyOf": [

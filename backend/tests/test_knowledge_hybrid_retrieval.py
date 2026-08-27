@@ -555,6 +555,7 @@ def test_valid_locator_allows_source_verified_formal_evidence(
     assert response.chunk_hits
     assert all(hit.locator_status == "RESOLVED" for hit in response.chunk_hits)
     assert all(hit.verification_status == "source_verified" for hit in response.chunk_hits)
+    assert all(hit.pdf_relative_path in {"p1.pdf", "p2.pdf"} for hit in response.chunk_hits)
     assert all(hit.page_start == 1 for hit in response.chunk_hits)
 
     bundle = service.build_context(
@@ -569,6 +570,7 @@ def test_valid_locator_allows_source_verified_formal_evidence(
         item.verification_status is VerificationStatus.SOURCE_VERIFIED
         for item in bundle.evidence_refs
     )
+    assert all(item.pdf_relative_path in {"p1.pdf", "p2.pdf"} for item in bundle.evidence_refs)
     assert all(item.location.page_start == 1 for item in bundle.evidence_refs)
 
 

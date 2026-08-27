@@ -131,16 +131,48 @@ function artifactViews(refs: string[]): ResearchArtifact[] {
 export function evidenceView(item: EvidenceInput): EvidenceViewModel {
   if ("source_filename" in item) {
     const hit = item as unknown as SharedChunkHit;
-    return { id: hit.canonical_chunk_id, title: hit.paper_title, source: hit.source_filename, excerpt: hit.excerpt, doi: hit.normalized_doi ?? null, page: hit.locator_status === "RESOLVED" ? "已定位" : null, verification: "待核验", gateTone: "pending", sourceType: "chunk", technicalRef: hit.canonical_chunk_id };
+    const verified = hit.verification_status === "source_verified" || hit.verification_status === "human_verified";
+    const page = hit.page_start
+      ? `第 ${hit.page_start}${hit.page_end && hit.page_end !== hit.page_start ? `-${hit.page_end}` : ""} 页`
+      : (hit.locator_status === "RESOLVED" ? "已定位" : null);
+    return { id: hit.canonical_chunk_id, title: hit.paper_title, source: hit.source_filename, excerpt: hit.excerpt, doi: hit.normalized_doi ?? null, pdfPath: hit.pdf_relative_path ?? null, page, verification: verified ? "已核验" : "待核验", gateTone: verified ? "verified" : "pending", sourceType: "chunk", technicalRef: hit.canonical_chunk_id };
   }
   if ("paper_title" in item && "canonical_chunk_id" in item) {
     const citation = item as unknown as QAAnswerResponse["citations"][number];
-    return { id: citation.canonical_chunk_id, title: citation.paper_title, source: citation.source_filename, excerpt: citation.excerpt, doi: citation.normalized_doi, page: null, verification: citation.source_type === "paper" ? "证据不足" : "待核验", gateTone: citation.source_type === "paper" ? "insufficient" : "pending", sourceType: citation.source_type, technicalRef: citation.canonical_chunk_id };
+    const verified = citation.verification_status === "source_verified"
+      || citation.verification_status === "human_verified";
+    const page = citation.page_start
+      ? `第 ${citation.page_start}${citation.page_end && citation.page_end !== citation.page_start ? `-${citation.page_end}` : ""} 页`
+      : null;
+    return {
+      id: citation.canonical_chunk_id,
+      title: citation.paper_title,
+      source: citation.source_filename,
+      excerpt: citation.excerpt,
+      doi: citation.normalized_doi,
+      pdfPath: citation.pdf_relative_path ?? null,
+      page,
+      verification: citation.source_type === "paper"
+        ? "证据不足"
+        : verified
+          ? "已核验"
+          : "待核验",
+      gateTone: citation.source_type === "paper"
+        ? "insufficient"
+        : verified
+          ? "verified"
+          : "pending",
+      sourceType: citation.source_type,
+      technicalRef: citation.canonical_chunk_id,
+    };
   }
   const evidence = item as EvidenceRef;
   const verified = evidence.verification_status === "source_verified" || evidence.verification_status === "human_verified";
-  return { id: evidence.evidence_id, title: evidence.canonical_paper_id ?? evidence.source_id, source: evidence.source_id, excerpt: evidence.excerpt, doi: null, page: evidence.location.page_start ? `第 ${evidence.location.page_start} 页` : null, verification: verified ? "已核验" : "待核验", gateTone: verified ? "verified" : "pending", sourceType: "local", technicalRef: evidence.evidence_id };
-}
+  const page = evidence.location.page_start
+    ? `第 ${evidence.location.page_start}${evidence.location.page_end && evidence.location.page_end !== evidence.location.page_start ? `-${evidence.location.page_end}` : ""} 页`
+    : null;
+  return { id: evidence.evidence_id, title: evidence.canonical_paper_id ?? evidence.source_id, source: evidence.source_id, excerpt: evidence.excerpt, doi: null, pdfPath: evidence.pdf_relative_path ?? null, page, verification: verified ? "已核验" : "待核验", gateTone: verified ? "verified" : "pending", sourceType: "local", technicalRef: evidence.evidence_id };
+  }
 
 export function buildEvidenceCoverage(evidence: EvidenceViewModel[], claimLevelAvailable = false): EvidenceCoverage {
   const supportedClaims = evidence.filter((item) => item.gateTone !== "insufficient").length;

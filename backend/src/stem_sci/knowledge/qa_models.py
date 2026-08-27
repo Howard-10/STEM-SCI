@@ -35,6 +35,7 @@ class QAAnswerRequest(QAStrictModel):
 
 
 class QAReference(QAStrictModel):
+    citation_index: int = Field(default=0, ge=0)
     paper_title: str
     source_filename: str
     canonical_paper_id: str
@@ -42,6 +43,25 @@ class QAReference(QAStrictModel):
     chunk_index: int
     excerpt: str
     normalized_doi: str | None = None
+    pdf_relative_path: str | None = None
+    pdf_sha256: str | None = None
+    locator_status: Literal["RESOLVED", "UNRESOLVED"] = "UNRESOLVED"
+    source_locator_method: Literal[
+        "PAGE_TEXT_EXACT",
+        "NORMALIZED_TEXT_MATCH",
+        "UNRESOLVED",
+    ] = "UNRESOLVED"
+    verification_status: Literal[
+        "demo_seed",
+        "model_generated_unverified",
+        "source_verified",
+        "human_verified",
+    ] = "model_generated_unverified"
+    page_start: int | None = None
+    page_end: int | None = None
+    char_start: int | None = None
+    char_end: int | None = None
+    retrieval_modalities: list[str] = Field(default_factory=list)
     source_type: Literal["chunk", "paper"] = "chunk"
 
 
@@ -86,6 +106,8 @@ class QAAnswerRecord(QAStrictModel):
 class QAAnswerResponse(QAStrictModel):
     project_id: str
     conversation_id: str
+    turn_id: str | None = None
+    mode: ContextMode = ContextMode.DISCOVERY
     question: str
     rewritten_query: str
     route: QARouteDecision
@@ -106,6 +128,8 @@ class QAAnswerResponse(QAStrictModel):
 
 class MemoryTurn(QAStrictModel):
     memory_id: str
+    turn_id: str | None = None
+    mode: ContextMode = ContextMode.DISCOVERY
     conversation_id: str
     project_id: str
     question: str

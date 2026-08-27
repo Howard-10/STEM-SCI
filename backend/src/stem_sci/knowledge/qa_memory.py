@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from .models import ContextMode
 from .qa_models import ConversationSummary, MemoryTurn, QAReference
 
 
@@ -36,6 +37,7 @@ class ConversationMemoryStore:
                 rewritten_query text not null,
                 answer text not null,
                 route text not null,
+                mode text not null default 'discovery',
                 citations_json text not null,
                 retrieval_trace_ref text,
                 created_at text not null
@@ -46,6 +48,14 @@ class ConversationMemoryStore:
                 on qa_memory_turns(project_id, created_at desc, conversation_id);
             """
         )
+        columns = {
+            str(row["name"])
+            for row in self.db.execute("pragma table_info(qa_memory_turns)").fetchall()
+        }
+        if "mode" not in columns:
+            self.db.execute(
+                "alter table qa_memory_turns add column mode text not null default 'discovery'"
+            )
         self.db.commit()
 
     def append_turn(
@@ -59,6 +69,7 @@ class ConversationMemoryStore:
         route: str,
         citations: list[QAReference],
         retrieval_trace_ref: str | None,
+        mode: ContextMode = ContextMode.DISCOVERY,
     ) -> MemoryTurn:
         memory_id = f"mem_{uuid4().hex}"
         created_at = _now()
@@ -72,8 +83,8 @@ class ConversationMemoryStore:
             """
             insert into qa_memory_turns(
                 memory_id, conversation_id, project_id, question, rewritten_query,
-                answer, route, citations_json, retrieval_trace_ref, created_at
-            ) values (?,?,?,?,?,?,?,?,?,?)
+                answer, route, mode, citations_json, retrieval_trace_ref, created_at
+            ) values (?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 memory_id,
@@ -83,6 +94,7 @@ class ConversationMemoryStore:
                 rewritten_query,
                 answer,
                 route,
+                mode.value,
                 citations_json,
                 retrieval_trace_ref,
                 created_at,
@@ -91,6 +103,8 @@ class ConversationMemoryStore:
         self.db.commit()
         return MemoryTurn(
             memory_id=memory_id,
+            turn_id=memory_id,
+            mode=mode,
             conversation_id=conversation_id,
             project_id=project_id,
             question=question,
@@ -193,6 +207,8 @@ class ConversationMemoryStore:
         citations = json.loads(row["citations_json"])
         return MemoryTurn(
             memory_id=row["memory_id"],
+            turn_id=row["memory_id"],
+            mode=ContextMode(str(row["mode"] or ContextMode.DISCOVERY)),
             conversation_id=row["conversation_id"],
             project_id=row["project_id"],
             question=row["question"],

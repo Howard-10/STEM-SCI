@@ -156,12 +156,15 @@ class QuestionAnswerService:
             rewritten_query=rewritten_query,
             answer=answer_record.answer,
             route=route.route,
+            mode=request.mode,
             citations=selected_citations,
             retrieval_trace_ref=trace_ref,
         )
         return QAAnswerResponse(
             project_id=request.project_id,
             conversation_id=conversation_id,
+            turn_id=memory_turn.memory_id,
+            mode=request.mode,
             question=request.question,
             rewritten_query=rewritten_query,
             route=route,
@@ -644,6 +647,16 @@ class QuestionAnswerService:
                     chunk_index=hit.chunk_index,
                     excerpt=hit.excerpt,
                     normalized_doi=normalize_doi(hit.normalized_doi),
+                    pdf_relative_path=hit.pdf_relative_path,
+                    pdf_sha256=hit.pdf_sha256,
+                    locator_status=hit.locator_status,
+                    source_locator_method=hit.source_locator_method,
+                    verification_status=hit.verification_status,
+                    page_start=hit.page_start,
+                    page_end=hit.page_end,
+                    char_start=hit.char_start,
+                    char_end=hit.char_end,
+                    retrieval_modalities=[str(modality) for modality in hit.retrieval_modalities],
                 )
             )
         for candidate in retrieval.candidate_papers:
@@ -660,9 +673,16 @@ class QuestionAnswerService:
                     chunk_index=0,
                     excerpt="图谱导航候选论文，不能单独作为正式证据。",
                     source_type="paper",
+                    locator_status="UNRESOLVED",
+                    source_locator_method="UNRESOLVED",
+                    verification_status="model_generated_unverified",
+                    retrieval_modalities=["graph_navigation"],
                 )
             )
-        return citations
+        return [
+            citation.model_copy(update={"citation_index": index})
+            for index, citation in enumerate(citations, start=1)
+        ]
 
     @staticmethod
     def _select_citations(
@@ -676,7 +696,11 @@ class QuestionAnswerService:
             for index in indices
             if 1 <= index <= len(citations)
         ]
-        return selected or citations[: min(3, len(citations))]
+        selected = selected or citations[: min(3, len(citations))]
+        return sorted(
+            selected,
+            key=lambda citation: citation.citation_index or citations.index(citation) + 1,
+        )
 
     @staticmethod
     def _clamp_indices(indices: list[int], size: int) -> list[int]:

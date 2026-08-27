@@ -34,7 +34,15 @@ class FakeKnowledgeService:
             chunk_index=0,
             section_hint="Abstract",
             excerpt="The study reports improved conceptual understanding.",
-            locator_status="UNRESOLVED",
+            locator_status="RESOLVED",
+            source_locator_method="PAGE_TEXT_EXACT",
+            verification_status="source_verified",
+            page_start=4,
+            page_end=4,
+            char_start=20,
+            char_end=78,
+            pdf_relative_path="papers/paper.pdf",
+            pdf_sha256="b" * 64,
             retrieval_modalities=["sparse"],
         )
         trace = RetrievalTrace(
@@ -50,7 +58,7 @@ class FakeKnowledgeService:
         return RetrievalSearchResponse(
             project_id=request.project_id,
             corpus_id="physics_stem_v1",
-            requested_mode=ContextMode.DISCOVERY,
+            requested_mode=request.mode,
             retrieval_status="DEGRADED",
             degraded_mode=RetrievalMode.SPARSE_ONLY,
             candidate_papers=[],
@@ -104,6 +112,12 @@ def test_qa_fallback_retrieves_cites_and_persists_memory(tmp_path: Path) -> None
     assert response.answer_mode == "fallback"
     assert response.citations[0].canonical_chunk_id == "chunk-1"
     assert response.memory_ref is not None
+    assert response.turn_id == response.memory_ref
+    assert response.mode is ContextMode.DISCOVERY
+    assert response.citations[0].citation_index == 1
+    assert response.citations[0].verification_status == "source_verified"
+    assert response.citations[0].page_start == 4
+    assert response.citations[0].source_locator_method == "PAGE_TEXT_EXACT"
     assert response.context_bundle_ref == "ctx-test"
     assert knowledge.search_calls
     assert knowledge.context_calls

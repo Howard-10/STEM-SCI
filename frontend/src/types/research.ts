@@ -68,6 +68,7 @@ export interface EvidenceViewModel {
   source: string;
   excerpt: string;
   doi: string | null;
+  pdfPath?: string | null;
   page: string | null;
   verification: "已核验" | "待核验" | "证据不足";
   gateTone: GateTone;

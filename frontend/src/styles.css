@@ -848,6 +848,13 @@ h3 { font-size: 15px; }
 .assistant-message {
   justify-self: start;
 }
+.assistant-message.message-selected .message-body {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgb(31 94 168 / 10%);
+}
+.assistant-message[role="button"] {
+  cursor: pointer;
+}
 .evidence-strip {
   display: flex;
   flex-wrap: wrap;
