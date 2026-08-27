@@ -234,6 +234,11 @@ export function App() {
   const [evidenceError, setEvidenceError] = useState("");
   const [corpusSummary, setCorpusSummary] = useState<SharedCorpusSummary | null>(null);
 
+  useEffect(() => {
+    if (!auth?.access_token || !projectId) return;
+    void workflowApi.getTimeline(projectId).then(setWorkflowTimeline).catch(() => setWorkflowTimeline(null));
+  }, [auth?.access_token, projectId]);
+
   const activeProject = useMemo(
     () => projects.find((project) => project.project_id === projectId) ?? projects[0] ?? null,
     [projectId, projects],
@@ -597,7 +602,7 @@ export function App() {
     setAttachmentError("");
     setBusy(true);
     try {
-      const workflowCommand = /^(确定|确认|同意|开始|继续|通过)[。！! ]*$/u.test(trimmed);
+      const workflowCommand = /^(确定|确认|同意|开始|继续|通过|下一步|进入下一阶段|开始进行导师规划|确认规划|确认方案|通过候选方案|调度下一 ?Agent)[。！!。 ]*$/iu.test(trimmed);
       if (workflowCommand && auth?.access_token && activeProject) {
         if (workflow?.pending_approval_ref) {
           await workflowApi.approve(projectId, "approved", auth.user.username);
