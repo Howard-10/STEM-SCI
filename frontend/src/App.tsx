@@ -17,7 +17,9 @@ import {
   type ControllerWorkflowState,
   type DataPipelineState,
   type RuntimeStatus,
+  type WorkflowTimeline,
 } from "./api/workflow";
+import { buildWorkflowConversation } from "./workflow/conversation";
 import { api } from "./api/client";
 import type { SearchResult, SharedCorpusSummary } from "./types/context";
 import { demoBundle, demoQAResponse, demoRuntime } from "./demo/data";
@@ -225,6 +227,8 @@ export function App() {
   const [workflow, setWorkflow] = useState<WorkflowState | null>(null);
   const [workflowBusy, setWorkflowBusy] = useState(false);
   const [workflowError, setWorkflowError] = useState("");
+  const [workflowTimeline, setWorkflowTimeline] = useState<WorkflowTimeline | null>(null);
+  const [workflowFeedback, setWorkflowFeedback] = useState("");
   const [evidenceRows, setEvidenceRows] = useState<SearchResult[]>([]);
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [evidenceError, setEvidenceError] = useState("");
@@ -312,6 +316,39 @@ export function App() {
       mounted = false;
     };
   }, [auth?.access_token, projectId]);
+
+  const reloadWorkflowTimeline = async () => {
+    if (!auth?.access_token || !projectId) {
+      setWorkflowTimeline(null);
+      return;
+    }
+    try {
+      setWorkflowTimeline(await workflowApi.getTimeline(projectId));
+    } catch {
+      setWorkflowTimeline(null);
+    }
+  };
+
+  const submitWorkflowFeedback = async (agentId: string, action: "rerun" | "pause") => {
+    if (!workflowTimeline || !workflowFeedback.trim()) return;
+    setWorkflowBusy(true);
+    setWorkflowError("");
+    try {
+      const result = await workflowApi.submitFeedback(projectId, {
+        agent_id: agentId,
+        stage: workflowTimeline.workflow_state.current_stage,
+        action,
+        feedback: workflowFeedback.trim(),
+      });
+      setWorkflow(result.workflow_state);
+      setWorkflowFeedback("");
+      await reloadWorkflowTimeline();
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : "无法保存阶段反馈");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -479,6 +516,7 @@ export function App() {
         research_intent: activeProject.research_direction || activeProject.title,
       });
       setWorkflow(result.workflow_state);
+      await reloadWorkflowTimeline();
     } catch (error) {
       setWorkflowError(error instanceof Error ? error.message : "研究流程启动失败");
     } finally {
@@ -492,6 +530,7 @@ export function App() {
     try {
       const result = await workflowApi.runNext(projectId);
       setWorkflow(result.workflow_state);
+      await reloadWorkflowTimeline();
     } catch (error) {
       setWorkflowError(error instanceof Error ? error.message : "无法调度下一阶段");
     } finally {
@@ -505,6 +544,7 @@ export function App() {
     try {
       await workflowApi.approve(projectId, decision, auth?.user.username ?? "researcher");
       await refreshWorkflow();
+      await reloadWorkflowTimeline();
     } catch (error) {
       setWorkflowError(error instanceof Error ? error.message : "流程审批失败");
     } finally {
@@ -1162,6 +1202,37 @@ export function App() {
                 )}
               </div>
             </article>
+          ))}
+          {workflowTimeline && buildWorkflowConversation(workflowTimeline).map((item, index) => (
+            item.kind === "workflow-route" ? (
+              <article className="chat-message assistant-message workflow-conversation-card" key="workflow-route">
+                <div className="assistant-mark">S</div>
+                <div className="message-body">
+                  <div className="message-meta">STEM-SCI <span>·</span> 项目执行路线</div>
+                  <p>工作流会在每个阶段完成后暂停，等待你的审核与决定。</p>
+                  <ol>{item.steps.map((step) => <li key={step.agentId}><strong>{step.name}</strong>：{step.task}</li>)}</ol>
+                </div>
+              </article>
+            ) : (
+              <article className="chat-message assistant-message workflow-conversation-card" key={`workflow-${item.agentId}-${index}`}>
+                <div className="assistant-mark">S</div>
+                <div className="message-body">
+                  <div className="message-meta">STEM-SCI <span>·</span> {item.agentName} 阶段报告</div>
+                  <p>{item.pendingApproval ? "本阶段已完成，等待你审核候选成果。" : "已保留本阶段运行记录。"}</p>
+                  {item.artifacts.length ? item.artifacts.map((artifact, artifactIndex) => (
+                    <details key={`${artifact.artifactType}-${artifactIndex}`}>
+                      <summary>{artifact.artifactType}</summary>
+                      <pre>{JSON.stringify(artifact.body, null, 2)}</pre>
+                    </details>
+                  )) : <p>输出内容不可用。</p>}
+                  {item.pendingApproval && <div className="workflow-feedback-actions">
+                    <textarea value={workflowFeedback} onChange={(event) => setWorkflowFeedback(event.target.value)} placeholder="补充你的研究思路或修改意见..." rows={2} />
+                    <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedback(item.agentId, "pause")}>保存意见并暂停</button>
+                    <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedback(item.agentId, "rerun")}>基于意见重新执行当前 Agent</button>
+                  </div>}
+                </div>
+              </article>
+            )
           ))}
           {busy && (
             <article className="chat-message assistant-message">

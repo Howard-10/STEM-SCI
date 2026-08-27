@@ -194,6 +194,16 @@ export interface ControllerWorkflowState {
   data_pipeline: DataPipelineState | null;
   research_state: ResearchState | null;
 }
+
+export interface WorkflowTimeline {
+  project_id: string;
+  research_intent: string;
+  workflow_state: ControllerWorkflowState;
+  agent_runs: Array<{ agent_run_id: string; agent_id: string; started_at: string; output_artifact_refs: string[] }>;
+  artifact_contents: Array<{ artifact_id: string; artifact_type: string; body: Record<string, unknown> }>;
+  routes: RouteDecision[];
+  feedback: Array<{ feedback_id: string; agent_id: string; stage: string; action: "continue" | "rerun" | "pause"; feedback: string; created_by: string; created_at: string }>;
+}
 const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -349,6 +359,15 @@ export const workflowApi = {
   },
   getProject(projectId: string) {
     return request<WorkflowState>(`/projects/${encodeURIComponent(projectId)}/workflow`);
+  },
+  getTimeline(projectId: string) {
+    return request<WorkflowTimeline>(`/projects/${encodeURIComponent(projectId)}/workflow/timeline`);
+  },
+  submitFeedback(projectId: string, input: { agent_id: string; stage: string; action: "continue" | "rerun" | "pause"; feedback: string }) {
+    return request<{ workflow_state: WorkflowState; workflow_run: WorkflowRun | null }>(
+      `/projects/${encodeURIComponent(projectId)}/workflow/feedback`,
+      { method: "POST", body: JSON.stringify(input) },
+    );
   },
   getControllerProject(projectId: string) {
     return request<ControllerWorkflowState>(
