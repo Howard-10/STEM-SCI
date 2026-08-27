@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import logging
 import os
 import zipfile
@@ -11,7 +12,7 @@ from typing import Annotated
 from xml.etree import ElementTree
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Form, Header, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -53,6 +54,15 @@ from .context.provider import HybridContextProvider, LocalContextProvider
 from .context.service import ContextInputError, ContextNotFoundError, ContextService
 from .controller import (
     AgentDispatcher,
+    AgentExecutionPlan,
+    AgentExecutionMode,
+    AgentOutputDecisionRequest,
+    AgentPageMaterial,
+    AgentOutputSummary,
+    FormalEvidenceRecord,
+    AgentPlanApprovalRequest,
+    AgentTaskApprovalRequest,
+    AgentPlanRequest,
     AgentRegistry,
     ControllerWorkflowState,
     DataPipelineBeginRequest,
@@ -62,6 +72,9 @@ from .controller import (
     ReproducibilityReviewRequest,
     ReproducibilityReviewRunResult,
     ResearchController,
+    SQLiteAgentPlanStore,
+    SQLiteAgentPageMaterialStore,
+    SQLiteFormalEvidenceStore,
     SQLiteDecisionStore,
     SQLiteWorkflowStore,
     WorkflowRunResult,
@@ -176,12 +189,24 @@ def _configured_agent_registry() -> AgentRegistry:
     )
 
 
+def _configured_workflow_planner() -> tuple[StructuredGenerator | None, str | None]:
+    """Reuse the configured LLM for plan proposals when available."""
+
+    if not os.getenv("STEM_SCI_LLM_API_KEY", "").strip():
+        return None, None
+    provider = GPTProvider.from_env()
+    return StructuredGenerator(provider), provider.default_model
+
+
 operator_registry = OperatorRegistry.default()
 execution_store = SQLiteExecutionStore(workflow_database)
 artifact_store = SQLiteArtifactStore(workflow_database)
 artifact_content_store = SQLiteArtifactContentStore(workflow_database)
 agent_run_store = SQLiteAgentRunStore(workflow_database)
 route_store = SQLiteRouteDecisionStore(workflow_database)
+agent_plan_store = SQLiteAgentPlanStore(workflow_database)
+agent_page_material_store = SQLiteAgentPageMaterialStore(workflow_database)
+formal_evidence_store = SQLiteFormalEvidenceStore(workflow_database)
 knowledge_operator_runtime = KnowledgeOperatorRuntime(
     knowledge_service,
     artifact_store=artifact_store,
@@ -192,6 +217,7 @@ workflow_operator_executor = OperatorExecutor(
     execution_store=execution_store,
     handlers=knowledge_operator_runtime.handlers(),
 )
+planner_generator, planner_model = _configured_workflow_planner()
 
 
 def _configured_qa_service() -> QuestionAnswerService:
@@ -216,7 +242,9 @@ def _configured_qa_service() -> QuestionAnswerService:
 
 
 def _configured_context_provider() -> LocalContextProvider | HybridContextProvider:
-    configured = os.getenv("STEM_SCI_CONTEXT_PROVIDER", "local").strip().lower()
+    # Use the declared Physics-STEM corpus for Agent evidence review unless
+    # local project evidence is explicitly requested.
+    configured = os.getenv("STEM_SCI_CONTEXT_PROVIDER", "hybrid").strip().lower()
     if configured == "local":
         return LocalContextProvider(service)
     if configured == "hybrid":
@@ -234,6 +262,11 @@ workflow_controller = ResearchController(
     artifact_content_store=artifact_content_store,
     agent_run_store=agent_run_store,
     route_store=route_store,
+    agent_plan_store=agent_plan_store,
+    agent_page_material_store=agent_page_material_store,
+    formal_evidence_store=formal_evidence_store,
+    planner_generator=planner_generator,
+    planner_model=planner_model,
     data_pipeline_root=storage_root,
 )
 qa_service = _configured_qa_service()
@@ -316,7 +349,10 @@ async def handle_unexpected(_: Request, error: Exception) -> JSONResponse:
     # Keep provider/database details out of the HTTP response, but retain the
     # traceback in the backend console for local debugging.
     logger.exception("Unhandled API exception: %s", error)
-    return _error(500, "internal_error", "An internal error occurred")
+    message = "An internal error occurred"
+    if os.getenv("STEM_SCI_ENV", "development").strip().lower() == "development":
+        message = f"{message}: {error}"
+    return _error(500, "internal_error", message)
 
 
 ProjectIdForm = Annotated[
@@ -710,13 +746,257 @@ def project_workflow(
     return workflow_controller.get_state(project_id)
 
 
+@app.post("/api/v1/projects/{project_id}/workflow/plans")
+def project_workflow_plan(
+    project_id: str,
+    request: AgentPlanRequest,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> AgentExecutionPlan:
+    """Generate a reviewable Agent task plan without running any Agent."""
+
+    identity_service.get_project(user, project_id)
+    if request.project_id != project_id:
+        raise ContextInputError("project_mismatch", "path project_id does not match request project_id")
+    return workflow_controller.plan_agent_tasks(request)
+
+
+@app.get("/api/v1/projects/{project_id}/workflow/plans")
+def project_workflow_plans(
+    project_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> list[AgentExecutionPlan]:
+    identity_service.get_project(user, project_id)
+    return workflow_controller.list_agent_plans(project_id)
+
+
+@app.get("/api/v1/projects/{project_id}/workflow/plans/{plan_id}")
+def project_workflow_plan_detail(
+    project_id: str,
+    plan_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> AgentExecutionPlan:
+    identity_service.get_project(user, project_id)
+    return workflow_controller.get_agent_plan(project_id, plan_id)
+
+
+@app.get("/api/v1/projects/{project_id}/workflow/plans/{plan_id}/outputs")
+def project_workflow_plan_outputs(
+    project_id: str,
+    plan_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> list[dict[str, object]]:
+    """Read outputs for one reviewed plan using the plan-scoped URL."""
+
+    identity_service.get_project(user, project_id)
+    # Return JSON-compatible dictionaries explicitly.  This avoids a runtime
+    # response-model validation failure on older Pydantic/FastAPI combinations
+    # while preserving the same public response shape.
+    items = workflow_controller.list_agent_outputs(project_id, plan_id)
+    return [item.model_dump(mode="json") for item in items]
+
+
+@app.post("/api/v1/projects/{project_id}/workflow/plans/{plan_id}/approve")
+def project_workflow_plan_approve(
+    project_id: str,
+    plan_id: str,
+    request: AgentPlanApprovalRequest,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> AgentExecutionPlan:
+    identity_service.get_project(user, project_id)
+    audited_request = request.model_copy(update={"decided_by": user.username})
+    return workflow_controller.approve_agent_plan(project_id, plan_id, audited_request)
+
+
+@app.post("/api/v1/projects/{project_id}/workflow/plans/{plan_id}/execute")
+def project_workflow_plan_execute(
+    project_id: str,
+    plan_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> AgentExecutionPlan:
+    identity_service.get_project(user, project_id)
+    return workflow_controller.execute_agent_plan(project_id, plan_id)
+
+
+@app.post("/api/v1/projects/{project_id}/workflow/plans/{plan_id}/continue")
+def project_workflow_plan_continue(
+    project_id: str,
+    plan_id: str,
+    request: AgentTaskApprovalRequest,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> AgentExecutionPlan:
+    """Approve one stepwise candidate or return the plan for conversational rework."""
+
+    identity_service.get_project(user, project_id)
+    audited_request = request.model_copy(update={"decided_by": user.username})
+    return workflow_controller.continue_agent_plan(project_id, plan_id, audited_request)
+
+
+@app.get("/api/v1/projects/{project_id}/workflow/agent-outputs")
+def project_workflow_agent_outputs(
+    project_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+    plan_id: str | None = None,
+    conversation_id: str | None = None,
+    turn_id: str | None = None,
+) -> list[dict[str, object]]:
+    identity_service.get_project(user, project_id)
+    return [
+        item.model_dump(mode="json")
+        for item in workflow_controller.list_agent_outputs(
+            project_id,
+            plan_id,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+        )
+    ]
+
+
+@app.get("/api/v1/projects/{project_id}/workflow/page-materials")
+def project_workflow_page_materials(
+    project_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+    target: str | None = None,
+    conversation_id: str | None = None,
+    turn_id: str | None = None,
+) -> list[AgentPageMaterial]:
+    identity_service.get_project(user, project_id)
+    return workflow_controller.list_agent_page_materials(
+        project_id,
+        target=target,
+        conversation_id=conversation_id,
+        turn_id=turn_id,
+    )
+
+
+@app.get("/api/v1/projects/{project_id}/workflow/formal-evidence")
+def project_workflow_formal_evidence(
+    project_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> list[FormalEvidenceRecord]:
+    """Read deduplicated, source-verified formal evidence with provenance."""
+
+    identity_service.get_project(user, project_id)
+    return workflow_controller.list_formal_evidence(project_id)
+
+
+@app.post("/api/v1/projects/{project_id}/workflow/artifacts/{artifact_id}/decision")
+def project_workflow_artifact_decision(
+    project_id: str,
+    artifact_id: str,
+    request: AgentOutputDecisionRequest,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> dict[str, object]:
+    identity_service.get_project(user, project_id)
+    audited_request = request.model_copy(update={"decided_by": user.username})
+    result = workflow_controller.decide_agent_output(project_id, artifact_id, audited_request)
+    if result.get("formalization") == "formal_evidence":
+        for record in workflow_controller.list_formal_evidence(project_id):
+            if record.artifact_id != artifact_id:
+                continue
+            service.link_formal_evidence(
+                project_id=project_id,
+                evidence_id=record.evidence_id,
+                artifact_id=record.artifact_id,
+                plan_id=record.plan_id,
+                task_id=record.task_id,
+                conversation_id=record.conversation_id,
+                turn_id=record.turn_id,
+                promoted_by=record.promoted_by,
+                promoted_at=record.promoted_at.isoformat(),
+            )
+    return result
+
+
+def _candidate_manuscript_markdown(
+    *,
+    artifact_type: str,
+    body: dict[str, object],
+    plan: AgentExecutionPlan,
+) -> str:
+    sections = body.get("sections")
+    if isinstance(sections, dict):
+        rendered_sections = "\n\n".join(
+            f"## {str(name)}\n\n{str(text)}" for name, text in sections.items()
+        )
+    else:
+        rendered_sections = "```json\n" + json.dumps(
+            body, ensure_ascii=False, indent=2
+        ) + "\n```"
+    return (
+        f"# Agent 候选论文草稿\n\n"
+        f"> 状态：候选草稿，尚未成为正式论文或正式证据。\n\n"
+        f"- 本次研究问题：{plan.user_request}\n"
+        f"- Agent 计划：{plan.plan_id}\n"
+        f"- 对话轮次：{plan.turn_id or '未绑定'}\n"
+        f"- 产物类型：{artifact_type}\n\n"
+        f"{rendered_sections}\n"
+    )
+
+
+@app.post(
+    "/api/v1/projects/{project_id}/workflow/artifacts/{artifact_id}/apply-to-manuscript",
+    response_model=ProjectDocument,
+)
+def apply_agent_manuscript(
+    project_id: str,
+    artifact_id: str,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> ProjectDocument:
+    """Create an editable project manuscript from one writing-Agent candidate."""
+
+    identity_service.get_project(user, project_id)
+    source = workflow_controller.agent_artifact_source(project_id, artifact_id)
+    artifact = artifact_store.get(project_id, artifact_id)
+    content = artifact_content_store.get(project_id, artifact_id)
+    if source is None or artifact is None or content is None:
+        raise ContextInputError("agent_artifact_not_found", "Agent output artifact was not found")
+    plan, task = source
+    if task.agent_id != "paper_writing" or artifact.artifact_type not in {
+        "ManuscriptDraftZh",
+        "ManuscriptDraftEn",
+        "ManuscriptOutline",
+    }:
+        raise ContextInputError(
+            "artifact_is_not_manuscript_candidate",
+            "Only paper-writing manuscript candidates can be applied to the manuscript library",
+        )
+    workflow_controller.decide_agent_output(
+        project_id,
+        artifact_id,
+        AgentOutputDecisionRequest(
+            decision="apply",
+            decided_by=user.username,
+            target="paper_editor",
+            note="Applied as an editable project manuscript candidate.",
+        ),
+    )
+    return document_service.create(
+        project_id=project_id,
+        user=user,
+        request=DocumentCreateRequest(
+            title=f"候选论文草稿 - {plan.user_request[:60]}",
+            document_type="manuscript",
+            format="markdown",
+            content=_candidate_manuscript_markdown(
+                artifact_type=artifact.artifact_type,
+                body=dict(content.body),
+                plan=plan,
+            ),
+            change_note=f"来自 Agent 计划 {plan.plan_id} 的 {artifact.artifact_type} 候选产出",
+        ),
+    )
+
+
 @app.post("/api/v1/projects/{project_id}/workflow/next")
 def project_workflow_next(
     project_id: str,
     user: Annotated[UserProfile, Depends(current_user)],
 ) -> WorkflowRunResult:
     identity_service.get_project(user, project_id)
-    return workflow_controller.run_next(project_id)
+    raise HTTPException(
+        status_code=410,
+        detail="Fixed next-Agent scheduling is retired. Create and approve an Agent plan instead.",
+    )
 
 
 @app.post("/api/v1/projects/{project_id}/workflow/approve")
@@ -787,7 +1067,10 @@ def workflow_project(project_id: str) -> ControllerWorkflowState:
 
 @app.post("/api/v1/workflow/projects/{project_id}/next")
 def workflow_next(project_id: str) -> WorkflowRunResult:
-    return workflow_controller.run_next(project_id)
+    raise HTTPException(
+        status_code=410,
+        detail="Fixed next-Agent scheduling is retired. Create and approve an Agent plan instead.",
+    )
 
 
 @app.post("/api/v1/workflow/projects/{project_id}/approve")

@@ -24,6 +24,148 @@ export interface AgentCapability {
   read_only_global_state: boolean;
 }
 
+export type AgentPlanStatus =
+  | "PENDING_APPROVAL"
+  | "APPROVED"
+  | "RUNNING"
+  | "COMPLETED"
+  | "PARTIAL"
+  | "REJECTED"
+  | "BLOCKED"
+  | "WAITING_TASK_APPROVAL"
+  | "REWORK_REQUIRED";
+
+export type AgentExecutionMode = "automatic" | "stepwise";
+
+export type AgentTaskStatus =
+  | "PLANNED"
+  | "WAITING_DEPENDENCY"
+  | "SKIPPED"
+  | "RUNNING"
+  | "COMPLETED"
+  | "FAILED"
+  | "BLOCKED";
+
+export interface AgentTaskPlan {
+  task_id: string;
+  agent_id: string;
+  task_type: string;
+  reason: string;
+  input_refs: string[];
+  required_context: string[];
+  depends_on: string[];
+  expected_output_types: string[];
+  risk_level: string;
+  approval_required: boolean;
+  status: AgentTaskStatus;
+  blocked_reason: string | null;
+  agent_run_id: string | null;
+  output_refs: string[];
+  persisted_artifact_ids: string[];
+  evidence_refs: string[];
+  risk_flags: string[];
+  unresolved_questions: string[];
+  error: string | null;
+  review_note: string | null;
+}
+
+export interface AgentExecutionPlan {
+  plan_id: string;
+  project_id: string;
+  conversation_id: string | null;
+  turn_id: string | null;
+  user_request: string;
+  conversation_context: string[];
+  intent_summary: string;
+  status: AgentPlanStatus;
+  tasks: AgentTaskPlan[];
+  source_context_refs: string[];
+  risk_flags: string[];
+  unresolved_questions: string[];
+  planner_mode: string;
+  execution_mode: AgentExecutionMode;
+  pending_review_task_id: string | null;
+  rework_note: string | null;
+  approved_task_ids: string[];
+  approved_by: string | null;
+  approved_at: string | null;
+  executed_at: string | null;
+  created_at: string;
+}
+
+export interface AgentOutputSummary {
+  plan_id: string;
+  task_id: string;
+  project_id: string;
+  user_request: string | null;
+  conversation_id: string | null;
+  turn_id: string | null;
+  agent_id: string;
+  task_type: string;
+  status: AgentTaskStatus;
+  input_refs: string[];
+  depends_on: string[];
+  risk_level: string;
+  output_types: string[];
+  artifact_ids: string[];
+  artifact_refs: string[];
+  evidence_refs: string[];
+  output_previews: AgentOutputPreview[];
+  risk_flags: string[];
+  unresolved_questions: string[];
+  decision: string;
+  target_pages: string[];
+  error: string | null;
+  agent_run_id?: string | null;
+  agent_version?: string | null;
+  primary_artifact_id?: string | null;
+  researcher_answer?: string;
+  summary_mode?: "llm" | "deterministic" | string;
+}
+
+export interface AgentOutputPreview {
+  artifact_id: string;
+  artifact_type: string;
+  status: string;
+  content: Record<string, unknown>;
+  researcher_summary?: string;
+  review_points?: string[];
+  action_items?: string[];
+  summary_mode?: "llm" | "deterministic" | string;
+}
+
+export interface AgentPageMaterial {
+  material_id: string;
+  project_id: string;
+  plan_id: string;
+  task_id: string;
+  agent_id: string;
+  artifact_id: string;
+  artifact_type: string;
+  target: string;
+  conversation_id: string | null;
+  turn_id: string | null;
+  formalization: string;
+  applied_by: string;
+  applied_at: string;
+  content: Record<string, unknown>;
+}
+
+export interface FormalEvidenceRecord {
+  project_id: string;
+  evidence_id: string;
+  artifact_id: string;
+  plan_id: string;
+  task_id: string;
+  agent_id: string;
+  conversation_id: string | null;
+  turn_id: string | null;
+  promoted_by: string;
+  promoted_at: string;
+  evidence_ref: Record<string, unknown>;
+  provenance: Array<Record<string, unknown>>;
+}
+
 export interface ApprovalRequest {
   request_id: string;
   artifact_ref: string;
@@ -211,6 +353,47 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 function demoWorkflowFallback<T>(path: string, init?: RequestInit): T {
   if (path === "/workflow/runtime") return demoRuntime as T;
   if (path === "/workflow/agents") return demoAgents as T;
+  if (path.endsWith("/workflow/plans") && init?.method === "POST") {
+    demoAgentPlan = {
+      ...demoAgentPlan,
+      status: "PENDING_APPROVAL",
+      user_request: init?.body ? JSON.parse(String(init.body)).user_request ?? demoAgentPlan.user_request : demoAgentPlan.user_request,
+    };
+    return demoAgentPlan as T;
+  }
+  if (path.includes("/workflow/plans/") && path.endsWith("/approve") && init?.method === "POST") {
+    const body = init?.body ? JSON.parse(String(init.body)) as { decision?: string; selected_task_ids?: string[] } : {};
+    demoAgentPlan = {
+      ...demoAgentPlan,
+      status: body.decision === "approved" ? "APPROVED" : "REJECTED",
+      approved_task_ids: body.selected_task_ids ?? demoAgentPlan.tasks.map((task) => task.task_id),
+      tasks: demoAgentPlan.tasks.map((task) => ({
+        ...task,
+        status: body.decision === "approved" ? task.status : "SKIPPED",
+      })),
+    };
+    return demoAgentPlan as T;
+  }
+  if (path.includes("/workflow/plans/") && path.endsWith("/execute") && init?.method === "POST") {
+    demoAgentPlan = {
+      ...demoAgentPlan,
+      status: "COMPLETED",
+      executed_at: new Date().toISOString(),
+      tasks: demoAgentPlan.tasks.map((task) => ({
+        ...task,
+        status: "COMPLETED",
+        agent_run_id: `${task.agent_id}-demo-run`,
+        output_refs: task.expected_output_types.map((type) => `candidate://${task.agent_id}/${type}`),
+        persisted_artifact_ids: [`artifact-${task.agent_id}-demo`],
+      })),
+    };
+    return demoAgentPlan as T;
+  }
+  if (path.endsWith("/workflow/agent-outputs") || path.includes("/workflow/plans/") && path.endsWith("/outputs")) return demoAgentOutputs as T;
+  if (path.endsWith("/workflow/page-materials")) return [] as T;
+  if (path.includes("/workflow/artifacts/") && path.endsWith("/decision") && init?.method === "POST") {
+    return { ok: true, decision: "retain", formalization: "project_material" } as T;
+  }
   if (path.startsWith("/workflow/projects/") && path.endsWith("/data-pipeline/raw")) {
     demoPipelineState = {
       ...demoPipelineState,
@@ -335,6 +518,102 @@ let demoPipelineState: DataPipelineState = {
   blocked_target_ids: [],
 };
 
+let demoAgentPlan: AgentExecutionPlan = {
+  plan_id: "plan-demo-001",
+  project_id: "physics-ai-demo",
+  conversation_id: "conversation-demo",
+  turn_id: "turn-demo-017",
+  user_request: "根据当前证据设计一个师范生 Python 物理建模实验",
+  conversation_context: [],
+  intent_summary: "本轮将处理：文献证据、研究设计",
+  status: "PENDING_APPROVAL",
+  tasks: [
+    {
+      task_id: "task-evidence-demo",
+      agent_id: "evidence_review",
+      task_type: "synthesize_evidence",
+      reason: "检索、筛选和组织与当前问题相关的来源证据。",
+      input_refs: ["context://demo"],
+      required_context: ["context://demo"],
+      depends_on: [],
+      expected_output_types: ["PaperCardCollection", "EvidenceMatrixCandidate", "ResearchGapReport"],
+      risk_level: "HIGH",
+      approval_required: true,
+      status: "PLANNED",
+      blocked_reason: null,
+      agent_run_id: null,
+      output_refs: [],
+      persisted_artifact_ids: [],
+      evidence_refs: [],
+      risk_flags: ["FORMAL_EVIDENCE_REQUIRES_SOURCE_VERIFICATION"],
+      unresolved_questions: [],
+      error: null,
+      review_note: null,
+    },
+    {
+      task_id: "task-design-demo",
+      agent_id: "research_design",
+      task_type: "draft_study_protocol",
+      reason: "把研究目标转换为变量、测量方案和可审批研究设计。",
+      input_refs: ["context://demo"],
+      required_context: ["context://demo"],
+      depends_on: ["agent:evidence_review"],
+      expected_output_types: ["Estimand", "StudyProtocolCandidate", "MeasurementPlan"],
+      risk_level: "MEDIUM",
+      approval_required: true,
+      status: "WAITING_DEPENDENCY",
+      blocked_reason: null,
+      agent_run_id: null,
+      output_refs: [],
+      persisted_artifact_ids: [],
+      evidence_refs: [],
+      risk_flags: [],
+      unresolved_questions: [],
+      error: null,
+      review_note: null,
+    },
+  ],
+  source_context_refs: ["context://demo"],
+  risk_flags: ["FORMAL_EVIDENCE_REQUIRES_SOURCE_VERIFICATION"],
+  unresolved_questions: [],
+  planner_mode: "capability_rules",
+  execution_mode: "automatic",
+  pending_review_task_id: null,
+  rework_note: null,
+  approved_task_ids: [],
+  approved_by: null,
+  approved_at: null,
+  executed_at: null,
+  created_at: new Date().toISOString(),
+};
+
+const demoAgentOutputs: AgentOutputSummary[] = [
+  {
+    plan_id: "plan-demo-001",
+    task_id: "task-evidence-demo",
+    project_id: "physics-ai-demo",
+    user_request: "根据当前证据设计一个师范生 Python 物理建模实验",
+    conversation_id: "conversation-demo",
+    turn_id: "turn-demo-017",
+    agent_id: "evidence_review",
+    task_type: "synthesize_evidence",
+    status: "COMPLETED",
+    input_refs: ["conversation-turn://conversation-demo/turn-demo-017"],
+    depends_on: [],
+    risk_level: "HIGH",
+    output_types: ["PaperCardCollection", "EvidenceMatrixCandidate"],
+    artifact_ids: ["artifact-evidence_review-demo"],
+    artifact_refs: ["candidate://evidence_review/PaperCardCollection"],
+    evidence_refs: ["evd_demo_001"],
+    output_previews: [],
+    risk_flags: ["FORMAL_EVIDENCE_REQUIRES_SOURCE_VERIFICATION"],
+    unresolved_questions: [],
+    decision: "candidate",
+    target_pages: ["knowledge_evidence", "evidence_gate"],
+    error: null,
+  },
+];
+
 export const workflowApi = {
   getRuntime() {
     return request<RuntimeStatus>("/workflow/runtime");
@@ -361,15 +640,6 @@ export const workflowApi = {
       body: JSON.stringify({ decision, decided_by: decidedBy }),
     });
   },
-  runNext(projectId: string) {
-    return request<WorkflowRun>(`/projects/${encodeURIComponent(projectId)}/workflow/next`, { method: "POST" });
-  },
-  runPublicNext(projectId: string) {
-    return request<WorkflowRun>(
-      `/workflow/projects/${encodeURIComponent(projectId)}/next`,
-      { method: "POST" },
-    );
-  },
   uploadControllerRawCsv(projectId: string, file: File) {
     const body = new FormData();
     body.append("file", file);
@@ -389,6 +659,126 @@ export const workflowApi = {
   },
   listAgents() {
     return request<AgentCapability[]>("/workflow/agents");
+  },
+  createAgentPlan(input: {
+    project_id: string;
+    user_request: string;
+    conversation_id?: string;
+    turn_id?: string;
+    context_refs?: string[];
+    conversation_context?: string[];
+  }) {
+    return request<AgentExecutionPlan>(
+      `/projects/${encodeURIComponent(input.project_id)}/workflow/plans`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+  },
+  listAgentPlans(projectId: string) {
+    return request<AgentExecutionPlan[]>(
+      `/projects/${encodeURIComponent(projectId)}/workflow/plans`,
+    );
+  },
+  approveAgentPlan(
+    projectId: string,
+    planId: string,
+    decision: "approved" | "rejected",
+    decidedBy: string,
+    selectedTaskIds?: string[],
+    executionMode: AgentExecutionMode = "automatic",
+  ) {
+    return request<AgentExecutionPlan>(
+      `/projects/${encodeURIComponent(projectId)}/workflow/plans/${encodeURIComponent(planId)}/approve`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          decision,
+          decided_by: decidedBy,
+          selected_task_ids: selectedTaskIds,
+          execution_mode: executionMode,
+        }),
+      },
+    );
+  },
+  executeAgentPlan(projectId: string, planId: string) {
+    return request<AgentExecutionPlan>(
+      `/projects/${encodeURIComponent(projectId)}/workflow/plans/${encodeURIComponent(planId)}/execute`,
+      { method: "POST" },
+    );
+  },
+  continueAgentPlan(
+    projectId: string,
+    planId: string,
+    decision: "approved" | "rework",
+    decidedBy: string,
+    note?: string,
+  ) {
+    return request<AgentExecutionPlan>(
+      `/projects/${encodeURIComponent(projectId)}/workflow/plans/${encodeURIComponent(planId)}/continue`,
+      {
+        method: "POST",
+        body: JSON.stringify({ decision, decided_by: decidedBy, note }),
+      },
+    );
+  },
+  listAgentOutputs(
+    projectId: string,
+    filters: { planId?: string; conversationId?: string; turnId?: string } = {},
+  ) {
+    const query = new URLSearchParams();
+    if (filters.planId) query.set("plan_id", filters.planId);
+    if (filters.conversationId) query.set("conversation_id", filters.conversationId);
+    if (filters.turnId) query.set("turn_id", filters.turnId);
+    const suffix = query.size ? `?${query.toString()}` : "";
+    return request<AgentOutputSummary[]>(
+      `/projects/${encodeURIComponent(projectId)}/workflow/agent-outputs${suffix}`,
+    );
+  },
+  listPlanOutputs(projectId: string, planId: string) {
+    return request<AgentOutputSummary[]>(
+      `/projects/${encodeURIComponent(projectId)}/workflow/plans/${encodeURIComponent(planId)}/outputs`,
+    );
+  },
+  listAgentPageMaterials(
+    projectId: string,
+    filters: { target?: string; conversationId?: string; turnId?: string } = {},
+  ) {
+    const query = new URLSearchParams();
+    if (filters.target) query.set("target", filters.target);
+    if (filters.conversationId) query.set("conversation_id", filters.conversationId);
+    if (filters.turnId) query.set("turn_id", filters.turnId);
+    const suffix = query.size ? `?${query.toString()}` : "";
+    return request<AgentPageMaterial[]>(
+      `/projects/${encodeURIComponent(projectId)}/workflow/page-materials${suffix}`,
+    );
+  },
+  listFormalEvidence(projectId: string) {
+    return request<FormalEvidenceRecord[]>(
+      `/projects/${encodeURIComponent(projectId)}/workflow/formal-evidence`,
+    );
+  },
+  decideAgentOutput(
+    projectId: string,
+    artifactId: string,
+    decision: "retain" | "reject" | "apply" | "promote",
+    decidedBy: string,
+    target?: string,
+  ) {
+    return request<Record<string, unknown>>(
+      `/projects/${encodeURIComponent(projectId)}/workflow/artifacts/${encodeURIComponent(artifactId)}/decision`,
+      {
+        method: "POST",
+        body: JSON.stringify({ decision, decided_by: decidedBy, target }),
+      },
+    );
+  },
+  applyAgentManuscript(projectId: string, artifactId: string) {
+    return request<{ document_id: string }>(
+      `/projects/${encodeURIComponent(projectId)}/workflow/artifacts/${encodeURIComponent(artifactId)}/apply-to-manuscript`,
+      { method: "POST" },
+    );
   },
   listExecutions(projectId: string) {
     return request<Array<Record<string, unknown>>>(`/workflow/projects/${encodeURIComponent(projectId)}/executions`);

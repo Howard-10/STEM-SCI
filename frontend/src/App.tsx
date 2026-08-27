@@ -13,6 +13,11 @@ import {
 import { qaApi, type QAAnswerResponse, type QAContextMode } from "./api/qa";
 import {
   workflowApi,
+  type AgentExecutionPlan,
+  type AgentExecutionMode,
+  type AgentPageMaterial,
+  type AgentOutputSummary,
+  type FormalEvidenceRecord,
   type WorkflowState,
   type ControllerWorkflowState,
   type DataPipelineState,
@@ -24,6 +29,7 @@ import { demoBundle, demoQAResponse, demoRuntime } from "./demo/data";
 import { demoDocumentContents, demoDocumentsByProject, demoProjects } from "./demo/projectHub";
 
 type WorkspaceView = "knowledge" | "codex" | "analysis" | "audit";
+type ContextTab = "workspace" | "evidence" | "agent-work" | "agent-plan" | "agent-outputs";
 export type WorkspaceTab = "home" | "workspace" | "editor" | "agent" | "audit";
 
 type ChatMessage = {
@@ -58,10 +64,37 @@ const demoProjectId = import.meta.env.VITE_PROJECT_ID && import.meta.env.VITE_PR
   : "physics-ai-demo";
 const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
 
-const starterPrompts = [
-  "帮我梳理这个研究方向的核心文献与研究空白",
-  "根据当前证据设计一个师范生 Python 物理建模实验",
-  "检查我的研究问题、变量和数据分析方案是否一致",
+const starterAgentFeatures = [
+  {
+    agent: "导师规划",
+    description: "界定研究问题与范围",
+    prompt: "请由导师规划 Agent 帮我界定当前研究问题、研究范围和可行性。",
+  },
+  {
+    agent: "证据审查",
+    description: "筛选、核验文献证据",
+    prompt: "请由证据审查 Agent 检索并整理当前研究问题相关的文献证据和研究空白。",
+  },
+  {
+    agent: "研究设计",
+    description: "设计测量与研究方案",
+    prompt: "请由研究设计 Agent 设计前测、后测和迁移任务，并明确变量与测量指标。",
+  },
+  {
+    agent: "数据分析",
+    description: "制定分析计划与代码规格",
+    prompt: "请由数据分析 Agent 检查数据需求，并制定数据审查、统计分析和代码规格。",
+  },
+  {
+    agent: "论文写作",
+    description: "整理论文结构与草稿",
+    prompt: "请由论文写作 Agent 根据已保留的研究材料生成论文结构和中文草稿。",
+  },
+  {
+    agent: "独立审查",
+    description: "检查证据、方法与风险",
+    prompt: "请由独立审查 Agent 检查证据引用、研究设计、分析逻辑和可复现性风险。",
+  },
 ];
 
 const agentRows = [
@@ -118,6 +151,55 @@ const completedAgentsByStage: Record<string, string[]> = {
   RELEASED: ["mentor_planning", "evidence_review", "research_design", "data_analysis", "paper_writing", "independent_review"],
 };
 
+const agentDisplayNames: Record<string, string> = {
+  mentor_planning: "导师规划",
+  evidence_review: "证据审查",
+  research_design: "研究设计",
+  data_analysis: "数据分析",
+  paper_writing: "论文写作",
+  independent_review: "独立审查",
+};
+
+const agentTaskStatusLabels: Record<string, string> = {
+  PLANNED: "待执行",
+  WAITING_DEPENDENCY: "等待依赖",
+  SKIPPED: "已跳过",
+  RUNNING: "执行中",
+  COMPLETED: "已完成",
+  FAILED: "失败",
+  BLOCKED: "已阻断",
+};
+
+const agentPlanStatusLabels: Record<string, string> = {
+  PENDING_APPROVAL: "等待批准",
+  APPROVED: "已批准，等待执行",
+  RUNNING: "执行中",
+  COMPLETED: "已完成",
+  PARTIAL: "部分完成",
+  REJECTED: "已拒绝",
+  BLOCKED: "已阻断",
+  WAITING_TASK_APPROVAL: "等待逐项确认",
+  REWORK_REQUIRED: "等待返工",
+};
+
+const agentOutputDecisionLabels: Record<string, string> = {
+  candidate: "候选",
+  retained: "已保留",
+  applied: "已应用",
+  promoted: "已提升",
+  review_required: "待核验",
+  reject: "已拒绝",
+};
+
+const agentTargetPages: Record<string, string[]> = {
+  mentor_planning: ["research_questions", "workspace"],
+  evidence_review: ["knowledge_evidence", "evidence_gate"],
+  research_design: ["research_design", "data_collection"],
+  data_analysis: ["data_analysis", "codex"],
+  paper_writing: ["paper_editor"],
+  independent_review: ["audit_validation"],
+};
+
 function isFormalCitation(citation: SelectedCitation) {
   return (
     citation.verification_status === "source_verified"
@@ -152,6 +234,39 @@ function agentStatus(snapshot: ControllerWorkflowState | null, agentId: string):
     return "已完成";
   }
   return "待启动";
+}
+
+function outputSummariesFromPlan(plan: AgentExecutionPlan): AgentOutputSummary[] {
+  return plan.tasks
+    .filter((task) => task.status !== "PLANNED" && task.status !== "WAITING_DEPENDENCY" && task.status !== "SKIPPED")
+    .filter((task) => task.persisted_artifact_ids.length > 0 || task.error || task.status === "BLOCKED")
+    .map((task) => ({
+      plan_id: plan.plan_id,
+      task_id: task.task_id,
+      project_id: plan.project_id,
+      user_request: plan.user_request,
+      conversation_id: plan.conversation_id,
+      turn_id: plan.turn_id,
+      agent_id: task.agent_id,
+      task_type: task.task_type,
+      status: task.status,
+      input_refs: task.input_refs,
+      depends_on: task.depends_on,
+      risk_level: task.risk_level,
+      output_types: task.output_refs.map((ref) => ref.split("/").at(-1) ?? ref),
+      artifact_ids: task.persisted_artifact_ids,
+      artifact_refs: task.output_refs,
+      evidence_refs: task.evidence_refs,
+      output_previews: [],
+      risk_flags: task.risk_flags,
+      unresolved_questions: task.unresolved_questions,
+      decision: "candidate",
+      target_pages: agentTargetPages[task.agent_id] ?? ["workspace"],
+      error: task.error,
+      primary_artifact_id: null,
+      researcher_answer: "",
+      summary_mode: "deterministic",
+    }));
 }
 
 const capabilityCards = [
@@ -195,6 +310,7 @@ export function App() {
   const [projectsReady, setProjectsReady] = useState(!readStoredAuth()?.access_token);
   const [projectId, setProjectId] = useState(demoProjects[0]?.project_id ?? demoProjectId);
   const [view, setView] = useState<WorkspaceView>("knowledge");
+  const [contextTab, setContextTab] = useState<ContextTab>("evidence");
   const [mode, setMode] = useState<QAContextMode>("discovery");
   const [question, setQuestion] = useState("");
   const [conversationId, setConversationId] = useState<string>();
@@ -242,6 +358,7 @@ export function App() {
   const [documentEditError, setDocumentEditError] = useState("");
   const [selectedCitation, setSelectedCitation] = useState<SelectedCitation | null>(null);
   const [selectedTurnId, setSelectedTurnId] = useState<string | null>(null);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
   const [rightPaneVisible, setRightPaneVisible] = useState(true);
   const [paneWidths, setPaneWidths] = useState<PaneWidths>({ sidebar: 246, output: 374 });
   const [draggingPane, setDraggingPane] = useState<"sidebar" | "output" | null>(null);
@@ -252,6 +369,27 @@ export function App() {
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [evidenceError, setEvidenceError] = useState("");
   const [corpusSummary, setCorpusSummary] = useState<SharedCorpusSummary | null>(null);
+  const [agentPlan, setAgentPlan] = useState<AgentExecutionPlan | null>(null);
+  const [agentPlans, setAgentPlans] = useState<AgentExecutionPlan[]>([]);
+  const [agentOutputs, setAgentOutputs] = useState<AgentOutputSummary[]>([]);
+  const [pageMaterials, setPageMaterials] = useState<AgentPageMaterial[]>([]);
+  const [formalEvidence, setFormalEvidence] = useState<FormalEvidenceRecord[]>([]);
+  const [agentPlanDraft, setAgentPlanDraft] = useState("");
+  const [selectedAgentTaskIds, setSelectedAgentTaskIds] = useState<string[]>([]);
+  const [agentPlanBusy, setAgentPlanBusy] = useState(false);
+  const [agentPlanError, setAgentPlanError] = useState("");
+  const [agentOutputDecisions, setAgentOutputDecisions] = useState<Record<string, string>>({});
+  const [agentOutputTargets, setAgentOutputTargets] = useState<Record<string, string>>({});
+  const [agentPlanPanelOpen, setAgentPlanPanelOpen] = useState(true);
+  const [agentOutputBoxOpen, setAgentOutputBoxOpen] = useState(true);
+  const [agentOutputScope, setAgentOutputScope] = useState<"turn" | "question" | "project">("turn");
+  const [agentExecutionMode, setAgentExecutionMode] = useState<AgentExecutionMode>("automatic");
+
+  useEffect(() => {
+    if (contextTab === "agent-plan" || contextTab === "agent-outputs") {
+      setContextTab("agent-work");
+    }
+  }, [contextTab]);
 
   const activeProject = useMemo(
     () => projects.find((project) => project.project_id === projectId) ?? projects[0] ?? null,
@@ -395,6 +533,43 @@ export function App() {
   }, [projectId]);
 
   useEffect(() => {
+    let mounted = true;
+    if (!auth?.access_token || !projectId || !projectsReady) {
+      setAgentOutputs([]);
+      setPageMaterials([]);
+      setFormalEvidence([]);
+      setAgentPlans([]);
+      setAgentPlan(null);
+      return () => {
+        mounted = false;
+      };
+    }
+    void Promise.allSettled([
+      workflowApi.listAgentOutputs(projectId),
+      workflowApi.listAgentPageMaterials(projectId),
+      workflowApi.listAgentPlans(projectId),
+      workflowApi.listFormalEvidence(projectId),
+    ]).then(([outputResult, materialResult, planResult, formalEvidenceResult]) => {
+      if (!mounted) return;
+      const plans = planResult.status === "fulfilled" ? planResult.value : [];
+      const fallbackOutputs = plans.flatMap(outputSummariesFromPlan);
+      const outputs = outputResult.status === "fulfilled" && outputResult.value.length
+        ? outputResult.value
+        : fallbackOutputs;
+      const materials = materialResult.status === "fulfilled" ? materialResult.value : [];
+      const formal = formalEvidenceResult.status === "fulfilled" ? formalEvidenceResult.value : [];
+      setAgentOutputs(outputs);
+      setPageMaterials(materials);
+      setFormalEvidence(formal);
+      setAgentPlans(plans);
+      setAgentPlan((current) => current?.project_id === projectId ? current : plans[0] ?? null);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [auth?.access_token, projectId, projectsReady]);
+
+  useEffect(() => {
     if (!draggingPane) return;
     const onPointerMove = (event: PointerEvent) => {
       if (draggingPane === "sidebar") {
@@ -514,49 +689,6 @@ export function App() {
     }
   };
 
-  const startWorkflow = async () => {
-    if (!activeProject || workflowBusy) return;
-    setWorkflowBusy(true);
-    setWorkflowError("");
-    try {
-      const result = await workflowApi.startProject({
-        project_id: projectId,
-        research_intent: activeProject.research_direction || activeProject.title,
-      });
-      setWorkflow(result.workflow_state);
-    } catch (error) {
-      setWorkflowError(error instanceof Error ? error.message : "研究流程启动失败");
-    } finally {
-      setWorkflowBusy(false);
-    }
-  };
-
-  const runNextWorkflowStage = async () => {
-    setWorkflowBusy(true);
-    setWorkflowError("");
-    try {
-      const result = await workflowApi.runNext(projectId);
-      setWorkflow(result.workflow_state);
-    } catch (error) {
-      setWorkflowError(error instanceof Error ? error.message : "无法调度下一阶段");
-    } finally {
-      setWorkflowBusy(false);
-    }
-  };
-
-  const decideWorkflow = async (decision: "approved" | "rejected") => {
-    setWorkflowBusy(true);
-    setWorkflowError("");
-    try {
-      await workflowApi.approve(projectId, decision, auth?.user.username ?? "researcher");
-      await refreshWorkflow();
-    } catch (error) {
-      setWorkflowError(error instanceof Error ? error.message : "流程审批失败");
-    } finally {
-      setWorkflowBusy(false);
-    }
-  };
-
   const uploadRawCsv = async (file: File) => {
     setWorkflowBusy(true);
     setWorkflowError("");
@@ -587,6 +719,564 @@ export function App() {
       setWorkflowBusy(false);
     }
   };
+
+  const openAgentPlanner = (draft?: string) => {
+    setRightPaneVisible(true);
+    setContextTab("agent-work");
+    setAgentPlanPanelOpen(true);
+    setAgentPlanError("");
+    if (!agentPlan && agentPlans[0]) {
+      setAgentPlan(agentPlans[0]);
+      setSelectedAgentTaskIds(agentPlans[0].approved_task_ids);
+    }
+    setAgentPlanDraft(
+      draft?.trim()
+      ||
+      question.trim()
+      || activeResponse?.question
+      || "请根据当前研究问题判断需要调用哪些 Agent。",
+    );
+  };
+
+  const createAgentPlan = async () => {
+    const request = agentPlanDraft.trim();
+    if (!request || !projectId || agentPlanBusy) return;
+    if (!auth?.access_token && !demoMode) {
+      setAgentPlanError("请先登录后再调用 Agent");
+      return;
+    }
+    setAgentPlanBusy(true);
+    setAgentPlanError("");
+    try {
+      const next = await workflowApi.createAgentPlan({
+        project_id: projectId,
+        user_request: request,
+        conversation_id: conversationId,
+        turn_id: activeResponse?.turn_id ?? selectedTurnId ?? undefined,
+        context_refs: activeResponse?.context_bundle_ref ? [activeResponse.context_bundle_ref] : [],
+        conversation_context: messages
+          .filter((message) => message.id !== "welcome")
+          .slice(-5)
+          .map((message) => `${message.role === "user" ? "研究者" : "助手"}：${message.content}`),
+      });
+      setAgentPlan(next);
+      setAgentPlans((current) => [next, ...current.filter((item) => item.plan_id !== next.plan_id)]);
+      setSelectedAgentTaskIds(
+        next.tasks
+          .filter((task) => task.blocked_reason === null && task.status !== "SKIPPED")
+          .map((task) => task.task_id),
+      );
+      setAgentOutputs([]);
+      setAgentExecutionMode("automatic");
+    } catch (error) {
+      setAgentPlanError(error instanceof Error ? error.message : "Agent 计划生成失败");
+    } finally {
+      setAgentPlanBusy(false);
+    }
+  };
+
+  const toggleAgentTask = (taskId: string) => {
+    setSelectedAgentTaskIds((current) => current.includes(taskId)
+      ? current.filter((item) => item !== taskId)
+      : [...current, taskId]);
+  };
+
+  const approveAndExecuteAgentPlan = async () => {
+    if (!agentPlan || agentPlan.status !== "PENDING_APPROVAL" || agentPlanBusy) return;
+    setAgentPlanBusy(true);
+    setAgentPlanError("");
+    try {
+      const decidedBy = auth?.user.username ?? "researcher";
+      const approved = await workflowApi.approveAgentPlan(
+        projectId,
+        agentPlan.plan_id,
+        "approved",
+        decidedBy,
+        selectedAgentTaskIds,
+        agentExecutionMode,
+      );
+      setAgentPlan(approved);
+      setAgentPlans((current) => current.map((item) => item.plan_id === approved.plan_id ? approved : item));
+      const executed = await workflowApi.executeAgentPlan(projectId, approved.plan_id);
+      setAgentPlan(executed);
+      setAgentPlans((current) => current.map((item) => item.plan_id === executed.plan_id ? executed : item));
+      const fallbackOutputs = outputSummariesFromPlan(executed);
+      setAgentOutputs(fallbackOutputs);
+      setAgentOutputScope("question");
+      try {
+        const outputs = await workflowApi.listPlanOutputs(projectId, executed.plan_id);
+        if (outputs.length) setAgentOutputs(outputs);
+      } catch {
+        setAgentPlanError("计划已经执行；产出预览暂时无法读取，请在任务状态中查看已生成的候选产物。");
+      }
+      setContextTab("agent-work");
+    } catch (error) {
+      setAgentPlanError(error instanceof Error ? error.message : "Agent 执行失败");
+    } finally {
+      setAgentPlanBusy(false);
+    }
+  };
+
+  const continueStepwiseAgentPlan = async (decision: "approved" | "rework") => {
+    if (!agentPlan || agentPlan.status !== "WAITING_TASK_APPROVAL" || agentPlanBusy) return;
+    const task = agentPlan.tasks.find((item) => item.task_id === agentPlan.pending_review_task_id);
+    const note = decision === "rework"
+      ? window.prompt("说明需要修改的地方。系统会带着本轮上下文回到对话中。")?.trim()
+      : undefined;
+    if (decision === "rework" && note === undefined) return;
+    setAgentPlanBusy(true);
+    setAgentPlanError("");
+    try {
+      const updated = await workflowApi.continueAgentPlan(
+        projectId,
+        agentPlan.plan_id,
+        decision,
+        auth?.user.username ?? "researcher",
+        note || undefined,
+      );
+      setAgentPlan(updated);
+      setAgentPlans((current) => current.map((item) => item.plan_id === updated.plan_id ? updated : item));
+      const outputs = await workflowApi.listPlanOutputs(projectId, updated.plan_id);
+      setAgentOutputs(outputs);
+      if (decision === "rework") {
+        const agentName = task ? (agentDisplayNames[task.agent_id] ?? task.agent_id) : "当前 Agent";
+        const outputRefs = task?.persisted_artifact_ids.join("、") || "当前候选产出";
+        setQuestion(`请根据本轮研究需求修改 ${agentName} 的候选方案。\n原需求：${agentPlan.user_request}\n待修改产出：${outputRefs}\n修改意见：${note || "请重新审查并调整。"}`);
+        setAgentPlanDraft(`基于以下研究需求与修改意见，重新生成 Agent 计划：\n${agentPlan.user_request}\n\n当前步骤：${agentName}\n修改意见：${note || "请重新审查并调整。"}`);
+      }
+    } catch (error) {
+      setAgentPlanError(error instanceof Error ? error.message : "Agent 步骤确认失败");
+    } finally {
+      setAgentPlanBusy(false);
+    }
+  };
+
+  const rejectAgentPlan = async () => {
+    if (!agentPlan || agentPlan.status !== "PENDING_APPROVAL" || agentPlanBusy) return;
+    setAgentPlanBusy(true);
+    setAgentPlanError("");
+    try {
+      const rejected = await workflowApi.approveAgentPlan(
+        projectId,
+        agentPlan.plan_id,
+        "rejected",
+        auth?.user.username ?? "researcher",
+      );
+      setAgentPlan(rejected);
+      setAgentPlans((current) => current.map((item) => item.plan_id === rejected.plan_id ? rejected : item));
+    } catch (error) {
+      setAgentPlanError(error instanceof Error ? error.message : "Agent 计划未能拒绝");
+    } finally {
+      setAgentPlanBusy(false);
+    }
+  };
+
+  const decideAgentOutput = async (
+    output: AgentOutputSummary,
+    decision: "retain" | "reject" | "apply" | "promote",
+  ) => {
+    if (!output.artifact_ids.length || agentPlanBusy) return;
+    const promotableTypes = new Set([
+      "PaperCardCollection",
+      "EvidenceMatrixCandidate",
+      "BoundedEvidenceSynthesis",
+    ]);
+    const artifactIds = decision === "promote"
+      ? output.output_previews
+        .filter((preview) => promotableTypes.has(preview.artifact_type))
+        .map((preview) => preview.artifact_id)
+      : decision === "apply"
+        ? (() => {
+          const primary = primaryPreviewForAgent(output);
+          return primary ? [primary.artifact_id] : output.artifact_ids.slice(0, 1);
+        })()
+      : output.artifact_ids;
+    if (!artifactIds.length) {
+      setAgentPlanError("当前产出不包含可正式化的来源绑定证据，请先生成并核验论文卡或证据矩阵。");
+      return;
+    }
+    setAgentPlanBusy(true);
+    setAgentPlanError("");
+    try {
+      let promotionBlockedReason = "";
+      for (const artifactId of artifactIds) {
+        const result = await workflowApi.decideAgentOutput(
+          projectId,
+          artifactId,
+          decision,
+          auth?.user.username ?? "researcher",
+          agentOutputTargets[output.task_id] ?? output.target_pages[0],
+        );
+        if (decision === "promote" && result.formalization === "candidate_evidence_only") {
+          const risks = Array.isArray(result.risk_flags)
+            ? result.risk_flags.filter((item): item is string => typeof item === "string")
+            : [];
+          promotionBlockedReason = risks[0] ?? "FORMAL_EVIDENCE_REQUIRES_SOURCE_VERIFICATION";
+        }
+      }
+      setAgentOutputDecisions((current) => ({ ...current, [output.task_id]: decision }));
+      const [outputs, materials, formal] = await Promise.all([
+        workflowApi.listAgentOutputs(projectId),
+        workflowApi.listAgentPageMaterials(projectId),
+        workflowApi.listFormalEvidence(projectId),
+      ]);
+      setAgentOutputs(outputs);
+      setPageMaterials(materials);
+      setFormalEvidence(formal);
+      if (promotionBlockedReason) {
+        setAgentPlanError(`提升被拦截：${promotionBlockedReason}。请先上传来源、完成定位并核验证据。`);
+      } else if (decision === "promote") {
+        setAgentPlanError("已提升为正式证据，并已按证据标识写入正式证据库。");
+      }
+      if (decision === "apply") {
+        setRightPaneVisible(true);
+        const targetView = agentOutputTargetView(output);
+        setView(targetView);
+        setContextTab(targetView === "knowledge" ? "evidence" : "workspace");
+      }
+    } catch (error) {
+      setAgentPlanError(error instanceof Error ? error.message : "Agent 产出处理失败");
+    } finally {
+      setAgentPlanBusy(false);
+    }
+  };
+
+  const applyManuscriptCandidate = async (output: AgentOutputSummary) => {
+    if (agentPlanBusy) return;
+    const manuscriptPreview = output.output_previews.find(
+      (preview) => preview.artifact_type === "ManuscriptDraftZh",
+    ) ?? output.output_previews.find(
+      (preview) => preview.artifact_type === "ManuscriptOutline",
+    );
+    if (!manuscriptPreview) {
+      setAgentPlanError("本轮论文写作尚未生成可送入论文草稿的候选内容。");
+      return;
+    }
+    setAgentPlanBusy(true);
+    setAgentPlanError("");
+    try {
+      await workflowApi.applyAgentManuscript(projectId, manuscriptPreview.artifact_id);
+      if (auth?.access_token) {
+        setDocuments(await authApi.listDocuments(auth.access_token, projectId));
+      }
+      setAgentOutputDecisions((current) => ({ ...current, [output.task_id]: "applied" }));
+      setView("knowledge");
+      setContextTab("evidence");
+      setRightPaneVisible(true);
+    } catch (error) {
+      setAgentPlanError(error instanceof Error ? error.message : "论文草稿写入失败");
+    } finally {
+      setAgentPlanBusy(false);
+    }
+  };
+
+  const agentOutputTargetView = (output: AgentOutputSummary): WorkspaceView => {
+    if (output.agent_id === "evidence_review" || output.target_pages.some((page) => page.includes("evidence"))) {
+      return "knowledge";
+    }
+    if (output.agent_id === "data_analysis" || output.target_pages.some((page) => page.includes("analysis") || page.includes("codex"))) {
+      return "analysis";
+    }
+    if (output.agent_id === "independent_review" || output.target_pages.some((page) => page.includes("audit") || page.includes("validation"))) {
+      return "audit";
+    }
+    return "codex";
+  };
+
+  const targetPageLabels: Record<string, string> = {
+    workspace: "工作区",
+    research_questions: "研究问题",
+    knowledge_evidence: "知识库证据",
+    evidence_gate: "Evidence Gate",
+    research_design: "研究设计",
+    data_collection: "数据采集",
+    data_analysis: "数据分析",
+    codex: "Codex",
+    paper_editor: "论文草稿",
+    audit_validation: "Agent 工作 / 审查",
+  };
+
+  const targetPageLabel = (target: string) => targetPageLabels[target] ?? target;
+
+  const outputDecision = (output: AgentOutputSummary) => (
+    agentOutputDecisions[output.task_id] ?? output.decision
+  );
+
+  const activeTurnOutputs = agentOutputs.filter((output) => (
+    (!conversationId || output.conversation_id === conversationId)
+    && (!activeResponse?.turn_id || output.turn_id === activeResponse.turn_id)
+  ));
+
+  const selectedQuestionOutputs = agentPlan
+    ? agentOutputs.filter((output) => output.plan_id === agentPlan.plan_id)
+    : [];
+
+  const visibleAgentOutputs = agentOutputScope === "project"
+    ? agentOutputs
+    : agentOutputScope === "question"
+      ? selectedQuestionOutputs
+      : activeTurnOutputs;
+
+  const evidenceGateOutputs = (agentPlan
+    ? agentOutputs.filter((output) => output.plan_id === agentPlan.plan_id)
+    : activeTurnOutputs
+  ).filter((output) => output.agent_id === "evidence_review");
+
+  const pageMaterialsFor = (targets: string[]) => pageMaterials.filter((material) => (
+    targets.includes(material.target)
+    // Professional pages follow the selected Agent question. This prevents
+    // an applied result from an earlier round appearing beside the current one.
+    && (!agentPlan || material.plan_id === agentPlan.plan_id)
+  ));
+
+  const selectAgentQuestion = (plan: AgentExecutionPlan) => {
+    setAgentPlan(plan);
+    setSelectedAgentTaskIds(
+      plan.approved_task_ids.length
+        ? plan.approved_task_ids
+        : plan.tasks
+          .filter((task) => task.blocked_reason === null && task.status !== "SKIPPED")
+          .map((task) => task.task_id),
+    );
+    setAgentOutputScope("question");
+  };
+
+  const previewValueText = (value: unknown): string => {
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (Array.isArray(value)) {
+      return value.slice(0, 3).map(previewValueText).join("；") + (value.length > 3 ? "……" : "");
+    }
+    if (value && typeof value === "object") {
+      return Object.entries(value as Record<string, unknown>)
+        .slice(0, 3)
+        .map(([key, item]) => `${key}：${previewValueText(item)}`)
+        .join("；");
+    }
+    return "暂无内容";
+  };
+
+  const primaryPreviewForAgent = (output: AgentOutputSummary) => {
+    if (output.primary_artifact_id) {
+      const persisted = output.output_previews.find(
+        (preview) => preview.artifact_id === output.primary_artifact_id,
+      );
+      if (persisted) return persisted;
+    }
+    const preferredTypes: Record<string, string[]> = {
+      mentor_planning: ["ResearchQuestionTree", "FeasibilityReport"],
+      evidence_review: ["EvidenceMatrixCandidate", "BoundedEvidenceSynthesis", "PaperCardCollection"],
+      research_design: ["StudyProtocolCandidate", "MeasurementPlan"],
+      data_analysis: ["DataProcessingPlanCandidate", "ExecutableAnalysisPlanCandidate"],
+      paper_writing: ["ManuscriptDraftZh", "ManuscriptOutline"],
+      independent_review: ["ReviewReport", "ReproducibilityReviewReport"],
+    };
+    const preferred = preferredTypes[output.agent_id] ?? [];
+    return preferred
+      .map((artifactType) => output.output_previews.find((preview) => preview.artifact_type === artifactType))
+      .find((preview): preview is AgentOutputSummary["output_previews"][number] => Boolean(preview))
+      ?? output.output_previews[0];
+  };
+
+  const outputPreviewText = (output: AgentOutputSummary) => {
+    const preview = primaryPreviewForAgent(output);
+    if (!preview) return output.output_types.join("、") || "候选输出引用已记录";
+    const body = preview.content;
+    const candidates = [
+      body.title,
+      body.research_question,
+      body.primary_question,
+      body.design_question,
+      body.primary_outcome,
+      body.sufficiency_judgement,
+      body.corpus_coverage,
+      body.summary,
+      body.overall_recommendation,
+      body.output_boundary,
+      body.recommendation,
+      body.status,
+      Array.isArray(body.recommendations) ? body.recommendations[0] : null,
+      Array.isArray(body.unresolved_questions) ? body.unresolved_questions[0] : null,
+    ].filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    return candidates[0] ?? preview.artifact_type;
+  };
+
+  const riskFlagText = (flag: string) => ({
+    FORMAL_EVIDENCE_REQUIRES_SOURCE_VERIFICATION: "正式证据仍需完成来源核验和定位。",
+    MANUSCRIPT_OUTPUT_REMAINS_CANDIDATE: "论文输出仍是候选草稿，需人工审查后使用。",
+    PLANNER_MODEL_FALLBACK: "本次计划使用受控规则生成，未使用模型规划。",
+    OUTPUT_CAPABILITY_NOT_GRANTED: "本轮仅生成计划指定的候选材料。",
+  }[flag] ?? flag);
+
+  const canPromoteEvidence = (output: AgentOutputSummary) => {
+    const promotable = new Set([
+      "PaperCardCollection",
+      "EvidenceMatrixCandidate",
+      "BoundedEvidenceSynthesis",
+    ]);
+    return output.agent_id === "evidence_review" && (
+      output.output_types.some((type) => promotable.has(type))
+      || output.output_previews.some((preview) => promotable.has(preview.artifact_type))
+    );
+  };
+
+  const renderAgentOutputCard = (output: AgentOutputSummary, compact = false) => {
+    const decision = outputDecision(output);
+    const primaryPreview = primaryPreviewForAgent(output);
+    const visibleRiskFlags = output.risk_flags.filter((flag) => flag !== "OUTPUT_CAPABILITY_NOT_GRANTED");
+    return (
+      <article className={compact ? "agent-output-card agent-output-card-compact" : "agent-output-card"} key={output.task_id}>
+        <div className="agent-output-card-topline">
+          <strong>{agentDisplayNames[output.agent_id] ?? output.agent_id}</strong>
+          <span className="status-badge status-muted">{agentOutputDecisionLabels[decision] ?? decision}</span>
+        </div>
+        <small>
+          已生成 {output.output_previews.length || output.output_types.length} 项候选材料 · 可接入：
+          {output.target_pages.map(targetPageLabel).join("、") || "项目产出箱"}
+        </small>
+        {output.agent_run_id && <small className="agent-execution-record">已执行 · {output.agent_version || output.agent_run_id}</small>}
+        {primaryPreview && (
+          <div className="agent-output-readable-preview">
+            <strong>直接回答{output.summary_mode === "llm" ? " · 模型整理" : " · 规则整理"}</strong>
+            <p>{output.researcher_answer || primaryPreview.researcher_summary || outputPreviewText(output)}</p>
+            {!compact && primaryPreview.review_points?.length ? (
+              <div className="agent-output-brief-list">
+                <span>建议审查</span>
+                <ul>{primaryPreview.review_points.map((point) => <li key={point}>{point}</li>)}</ul>
+              </div>
+            ) : null}
+            {!compact && primaryPreview.action_items?.length ? (
+              <div className="agent-output-brief-list">
+                <span>下一步</span>
+                <ul>{primaryPreview.action_items.map((item) => <li key={item}>{item}</li>)}</ul>
+              </div>
+            ) : null}
+          </div>
+        )}
+        {!compact && (
+          <dl className="agent-output-metadata">
+            <div><dt>输入</dt><dd>{output.input_refs.join("、") || "当前对话上下文"}</dd></div>
+            <div><dt>依赖</dt><dd>{output.depends_on.map((item) => item.replace("agent:", "")).join("、") || "无"}</dd></div>
+            <div><dt>风险</dt><dd>{output.risk_level}</dd></div>
+          </dl>
+        )}
+        {visibleRiskFlags.map((flag) => <span className="agent-output-risk" key={flag}>{riskFlagText(flag)}</span>)}
+        {!compact && output.output_previews.length > 0 && (
+          <details className="agent-output-preview">
+            <summary>查看结构化产物（{output.output_previews.length} 项）</summary>
+            {output.output_previews.map((preview) => (
+              <details className="agent-output-raw-record" key={preview.artifact_id}>
+                <summary>{preview.artifact_type} · {preview.status}</summary>
+                <pre>{JSON.stringify(preview.content, null, 2)}</pre>
+              </details>
+            ))}
+          </details>
+        )}
+        {!compact && output.target_pages.length > 0 && (
+          <label className="agent-output-target">
+            <span>应用位置</span>
+            <select
+              value={agentOutputTargets[output.task_id] ?? output.target_pages[0]}
+              onChange={(event) => setAgentOutputTargets((current) => ({
+                ...current,
+                [output.task_id]: event.target.value,
+              }))}
+            >
+              {output.target_pages.map((target) => <option key={target} value={target}>{targetPageLabel(target)}</option>)}
+            </select>
+          </label>
+        )}
+        <div className="agent-output-actions">
+          <button type="button" disabled={agentPlanBusy || !output.artifact_ids.length} onClick={() => void decideAgentOutput(output, "retain")}>保留</button>
+          {output.agent_id === "paper_writing" ? (
+            <button type="button" disabled={agentPlanBusy || !output.artifact_ids.length} onClick={() => void applyManuscriptCandidate(output)}>送入论文草稿</button>
+          ) : (
+            <button type="button" disabled={agentPlanBusy || !output.artifact_ids.length} onClick={() => void decideAgentOutput(output, "apply")}>应用主产物</button>
+          )}
+          {output.agent_id === "evidence_review" && (
+            <>
+            <button type="button" disabled={agentPlanBusy || !output.artifact_ids.length} onClick={() => {
+              setView("audit");
+              setContextTab("workspace");
+              setRightPaneVisible(true);
+            }}>查看证据审核</button>
+            <button type="button" disabled={agentPlanBusy} onClick={() => {
+              setView("knowledge");
+              setContextTab("evidence");
+              setRightPaneVisible(true);
+            }}>打开知识库核验</button>
+            </>
+          )}
+          {canPromoteEvidence(output) && (
+            <button type="button" disabled={agentPlanBusy || !output.artifact_ids.length} onClick={() => void decideAgentOutput(output, "promote")}>申请正式证据</button>
+          )}
+          <button type="button" disabled={agentPlanBusy || !output.artifact_ids.length} onClick={() => void decideAgentOutput(output, "reject")}>拒绝</button>
+        </div>
+      </article>
+    );
+  };
+
+  const renderPageMaterials = (title: string, targets: string[]) => {
+    const materials = pageMaterialsFor(targets);
+    return (
+      <section className="output-section applied-material-section">
+        <div className="output-section-heading">
+          <div><h3>{title}</h3><p className="section-subtitle">仅显示研究者已应用或已提升的项目材料。</p></div>
+          <span>{materials.length} 项</span>
+        </div>
+        {materials.length ? (
+          <div className="applied-material-list">
+            {materials.map((material) => (
+              <article className="applied-material-card" key={material.material_id}>
+                <div><strong>{agentDisplayNames[material.agent_id] ?? material.agent_id}</strong><span className={material.formalization === "formal_evidence" ? "verified-tag" : "review-tag"}>{material.formalization === "formal_evidence" ? "正式证据" : "已应用"}</span></div>
+                <small>{material.artifact_type} · {material.turn_id ? `轮次 ${material.turn_id}` : "项目材料"}</small>
+                <p>
+                  {typeof material.content.researcher_summary === "object" && material.content.researcher_summary !== null && typeof (material.content.researcher_summary as Record<string, unknown>).summary === "string"
+                    ? String((material.content.researcher_summary as Record<string, unknown>).summary)
+                    : typeof material.content.researcher_summary === "string"
+                      ? material.content.researcher_summary
+                    : typeof material.content.title === "string"
+                      ? material.content.title
+                      : Object.keys(material.content).slice(0, 4).join("、") || "候选内容已写入项目材料"}
+                </p>
+              </article>
+            ))}
+          </div>
+        ) : <div className="empty-output"><span className="empty-symbol">□</span><p>在产出箱选择“应用到页面”后，候选材料会出现在这里。</p></div>}
+      </section>
+    );
+  };
+
+  const renderFormalEvidence = () => (
+    <section className="output-section formal-evidence-section">
+      <div className="output-section-heading">
+        <div>
+          <h3>正式证据库</h3>
+          <p className="section-subtitle">按稳定证据标识去重汇总；每条保留来自哪个问题和 Agent 产出的来源链。</p>
+        </div>
+        <span>{formalEvidence.length} 条</span>
+      </div>
+      {formalEvidence.length ? (
+        <div className="formal-evidence-list">
+          {formalEvidence.map((record) => {
+            const ref = record.evidence_ref;
+            const location = ref.location && typeof ref.location === "object"
+              ? ref.location as Record<string, unknown>
+              : null;
+            const excerpt = typeof ref.excerpt === "string" ? ref.excerpt : "已核验证据片段";
+            return (
+              <article className="formal-evidence-card" key={record.evidence_id}>
+                <div><strong>{record.evidence_id}</strong><span className="verified-tag">正式证据</span></div>
+                <p>{excerpt}</p>
+                <small>Chunk {String(ref.chunk_id ?? "-")} · 字符 {String(location?.char_start ?? "-")}-{String(location?.char_end ?? "-")}</small>
+                <small>首次关联问题：{record.provenance[0]?.turn_id ? `轮次 ${String(record.provenance[0].turn_id)}` : "未绑定轮次"} · 已在 {record.provenance.length} 次 Agent 产出中使用</small>
+              </article>
+            );
+          })}
+        </div>
+      ) : <div className="empty-output"><span className="empty-symbol">◇</span><p>已核验的证据类产物提升成功后，会在这里按证据标识汇总。</p></div>}
+    </section>
+  );
 
   const submitQuestion = async (value = question) => {
     const trimmed = value.trim();
@@ -796,18 +1486,11 @@ export function App() {
     }
   };
 
-  const runAnalysisAgent = async () => {
-    if (!projectId) return;
-    setAnalysisBusy(true);
+  const openDataAnalysisAgentPlan = () => {
     setAnalysisError("");
-    try {
-      await workflowApi.runPublicNext(projectId);
-      await refreshAnalysisState();
-    } catch (error) {
-      setAnalysisError(error instanceof Error ? error.message : "数据分析 Agent 暂时无法启动");
-    } finally {
-      setAnalysisBusy(false);
-    }
+    openAgentPlanner(
+      "请根据当前已批准的研究方案，判断是否需要调用数据分析 Agent，并生成数据审查、处理计划、分析规格和代码草案的任务计划。",
+    );
   };
 
   const createDraft = async () => {
@@ -1036,20 +1719,32 @@ export function App() {
   };
 
   const workspaceStyle = {
-    gridTemplateColumns: rightPaneVisible
-      ? `${paneWidths.sidebar}px 8px minmax(420px, 1fr) 8px ${paneWidths.output}px`
-      : `${paneWidths.sidebar}px 8px minmax(0, 1fr)`,
+    gridTemplateColumns: [
+      sidebarVisible ? `${paneWidths.sidebar}px 8px` : "0px 0px",
+      rightPaneVisible
+        ? "minmax(420px, 1fr) 8px"
+        : "minmax(0, 1fr)",
+      rightPaneVisible ? `${paneWidths.output}px` : "",
+    ].filter(Boolean).join(" "),
   };
 
   return (
     <div className={`research-app ${rightPaneVisible ? "" : "research-app-two-pane"}`} style={workspaceStyle}>
-      <aside className="research-sidebar">
+      <aside className={`research-sidebar ${sidebarVisible ? "" : "research-sidebar-hidden"}`}>
         <div className="research-brand">
           <div className="research-logo">S</div>
           <div>
             <strong>STEM-SCI</strong>
             <span>科研智能工作台</span>
           </div>
+          <button
+            className="header-icon-button workspace-collapse-button"
+            type="button"
+            title="隐藏工作区"
+            onClick={() => setSidebarVisible(false)}
+          >
+            ←
+          </button>
         </div>
 
         <button className="new-conversation" type="button" onClick={resetConversation}>
@@ -1063,21 +1758,21 @@ export function App() {
             <span className="ui-icon">⌕</span>
             研究助手
           </button>
-          <button className={view === "knowledge" ? "sidebar-link sidebar-link-active" : "sidebar-link"} type="button" onClick={() => setView("knowledge")}>
+          <button className={view === "knowledge" ? "sidebar-link sidebar-link-active" : "sidebar-link"} type="button" onClick={() => { setView("knowledge"); setContextTab("evidence"); }}>
             <span className="ui-icon">▱</span>
             知识库
           </button>
-          <button className={view === "codex" ? "sidebar-link sidebar-link-active" : "sidebar-link"} type="button" onClick={() => setView("codex")}>
+          <button className={view === "codex" ? "sidebar-link sidebar-link-active" : "sidebar-link"} type="button" onClick={() => { setView("codex"); setContextTab("workspace"); }}>
             <span className="ui-icon">⌘</span>
             Codex
           </button>
-          <button className={view === "analysis" ? "sidebar-link sidebar-link-active" : "sidebar-link"} type="button" onClick={() => setView("analysis")}>
+          <button className={view === "analysis" ? "sidebar-link sidebar-link-active" : "sidebar-link"} type="button" onClick={() => { setView("analysis"); setContextTab("workspace"); }}>
             <span className="ui-icon">◫</span>
             数据分析
           </button>
-          <button className={view === "audit" ? "sidebar-link sidebar-link-active" : "sidebar-link"} type="button" onClick={() => setView("audit")}>
-            <span className="ui-icon">✓</span>
-            数据审查
+          <button className={view === "audit" ? "sidebar-link sidebar-link-active" : "sidebar-link"} type="button" onClick={() => { setView("audit"); setContextTab("agent-work"); setRightPaneVisible(true); }}>
+            <span className="ui-icon">✦</span>
+            Agent 工作
           </button>
         </div>
 
@@ -1152,6 +1847,16 @@ export function App() {
         </div>
       </aside>
       <div className="pane-resizer pane-resizer-sidebar" role="separator" aria-label="调整左侧栏宽度" onPointerDown={() => setDraggingPane("sidebar")} />
+      {!sidebarVisible && (
+        <button
+          className="restore-sidebar-button"
+          type="button"
+          title="显示工作区"
+          onClick={() => setSidebarVisible(true)}
+        >
+          → <span>显示工作区</span>
+        </button>
+      )}
 
       <main className="chat-pane">
         <header className="chat-header">
@@ -1245,8 +1950,16 @@ export function App() {
 
         <section className="composer-area">
           <div className="starter-row">
-            {starterPrompts.map((prompt) => (
-              <button className="starter-prompt" key={prompt} type="button" onClick={() => void submitQuestion(prompt)}>{prompt}</button>
+            {starterAgentFeatures.map((feature) => (
+              <button
+                className="starter-prompt starter-agent-prompt"
+                key={feature.agent}
+                type="button"
+                title={`体验${feature.agent} Agent：${feature.description}`}
+                onClick={() => openAgentPlanner(feature.prompt)}
+              >
+                <strong>{feature.agent}</strong><span>{feature.description}</span>
+              </button>
             ))}
           </div>
           <div className="composer-box">
@@ -1315,6 +2028,14 @@ export function App() {
                 >
                   ◈ <span>{mode === "formal" ? "正式" : "探索"}</span>
                 </button>
+                <button
+                  className="composer-tool composer-agent-tool"
+                  type="button"
+                  title="根据当前研究需求生成 Agent 调用计划"
+                  onClick={() => openAgentPlanner()}
+                >
+                  ✦ <span>调用 Agent</span>
+                </button>
               </div>
               <button className="send-button" type="button" disabled={busy || !question.trim()} onClick={() => void submitQuestion()} title="发送消息">↑</button>
             </div>
@@ -1328,12 +2049,243 @@ export function App() {
         <div className="output-header">
           <div>
             <span className="chat-kicker">研究上下文</span>
-            <h2>{view === "knowledge" ? "知识库" : view === "codex" ? "Codex 工作区" : view === "analysis" ? "数据分析" : "数据审查"}</h2>
+            <h2>{contextTab === "agent-work" ? "Agent 工作" : contextTab === "agent-plan" ? "Agent 计划" : contextTab === "agent-outputs" ? "Agent 产出箱" : contextTab === "evidence" ? "知识库证据" : view === "codex" ? "Codex" : "数据分析"}</h2>
           </div>
           <button className="header-icon-button" type="button" title="隐藏右侧面板，进入双栏模式" onClick={() => setRightPaneVisible(false)}>→</button>
         </div>
+        {contextTab === "agent-work" && (
+          <div className="output-content">
+            <section className="output-section agent-workbench">
+              <div className="output-section-heading">
+                <div>
+                  <span className="chat-kicker">WORK TASKS</span>
+                  <h3>Agent 工作台</h3>
+                  <p className="section-subtitle">先生成计划，批准后执行；所有输出先进入产出箱。</p>
+                </div>
+              </div>
+              {agentPlan?.user_request && (
+                <div className="agent-current-question">
+                  <span>本轮研究问题</span>
+                  <p>{agentPlan.user_request}</p>
+                </div>
+              )}
+              <label className="agent-plan-input">
+                <span>研究需求</span>
+                <textarea rows={4} value={agentPlanDraft} onChange={(event) => setAgentPlanDraft(event.target.value)} placeholder="描述本轮需要完成的研究任务..." />
+              </label>
+              <button className="primary-inline-button full-width" type="button" disabled={agentPlanBusy || !agentPlanDraft.trim()} onClick={() => void createAgentPlan()}>
+                {agentPlanBusy ? "处理中..." : "生成 Agent 计划"}
+              </button>
+              {agentPlans.length > 0 && (
+                <div className="agent-question-history" aria-label="Agent 使用问题记录">
+                  <span>Agent 使用记录</span>
+                  {agentPlans.slice(0, 8).map((plan) => (
+                    <button
+                      key={plan.plan_id}
+                      className={agentPlan?.plan_id === plan.plan_id ? "selected" : ""}
+                      type="button"
+                      onClick={() => selectAgentQuestion(plan)}
+                    >
+                      <strong>{plan.user_request}</strong>
+                      <small>{plan.tasks.filter((task) => task.status === "COMPLETED").length}/{plan.tasks.length} 已完成 · {agentPlanStatusLabels[plan.status] ?? plan.status}</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {agentPlan && (
+                <>
+                  <div className="agent-work-plan-head">
+                    <div><strong>{agentPlan.user_request}</strong><small>{agentPlan.intent_summary} · {agentPlan.planner_mode === "llm" ? "模型规划" : "受控规则规划"} · {agentPlanStatusLabels[agentPlan.status] ?? agentPlan.status}</small></div>
+                    <span>{agentPlan.tasks.filter((task) => task.status === "COMPLETED").length}/{agentPlan.tasks.length} 完成</span>
+                  </div>
+                  <div className="agent-progress-track" aria-label="Agent 计划进度">
+                    <i style={{ width: `${agentPlan.tasks.length ? Math.round(agentPlan.tasks.filter((task) => task.status === "COMPLETED").length / agentPlan.tasks.length * 100) : 0}%` }} />
+                  </div>
+                  <div className="agent-work-task-list">
+                    {agentPlan.tasks.map((task) => {
+                      const selected = selectedAgentTaskIds.includes(task.task_id);
+                      const disabled = task.blocked_reason !== null || task.status === "SKIPPED";
+                      return (
+                        <label className={`agent-work-task ${disabled ? "agent-plan-task-disabled" : ""}`} key={task.task_id}>
+                          <input type="checkbox" checked={selected} disabled={disabled || agentPlan.status !== "PENDING_APPROVAL"} onChange={() => toggleAgentTask(task.task_id)} />
+                          <span><strong>{agentDisplayNames[task.agent_id] ?? task.agent_id}</strong><small>{task.reason}</small>{task.persisted_artifact_ids.length > 0 && <small>已生成 {task.persisted_artifact_ids.length} 项候选产出</small>}{task.review_note && <small>审核意见：{task.review_note}</small>}{task.error && <em>{task.error}</em>}{task.blocked_reason && <em>{task.blocked_reason}</em>}</span>
+                          <b className={`agent-task-status agent-task-status-${task.status.toLowerCase()}`}>{agentTaskStatusLabels[task.status] ?? task.status}</b>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {agentPlan.status === "PENDING_APPROVAL" ? (
+                    <>
+                      <div className="agent-execution-mode" role="group" aria-label="Agent 执行方式">
+                        <button className={agentExecutionMode === "automatic" ? "selected" : ""} type="button" onClick={() => setAgentExecutionMode("automatic")}>全自动</button>
+                        <button className={agentExecutionMode === "stepwise" ? "selected" : ""} type="button" onClick={() => setAgentExecutionMode("stepwise")}>逐步人工</button>
+                        <small>{agentExecutionMode === "automatic" ? "按任务依赖自动执行，完成后统一审查。" : "每个 Agent 产出后暂停，确认后才继续下一步。"}</small>
+                      </div>
+                      <div className="agent-plan-actions">
+                        <button className="secondary-inline-button" type="button" disabled={agentPlanBusy} onClick={() => void rejectAgentPlan()}>拒绝计划</button>
+                        <button className="primary-inline-button" type="button" disabled={agentPlanBusy || selectedAgentTaskIds.length === 0} onClick={() => void approveAndExecuteAgentPlan()}>{agentPlanBusy ? "执行中..." : agentExecutionMode === "automatic" ? "批准并全自动执行" : "批准并执行第一项"}</button>
+                      </div>
+                    </>
+                  ) : agentPlan.status === "WAITING_TASK_APPROVAL" ? (
+                    <div className="agent-step-review">
+                      <p>当前候选产出等待人工确认。确认后才会执行下一项 Agent。</p>
+                      <div className="agent-plan-actions">
+                        <button className="secondary-inline-button" type="button" disabled={agentPlanBusy} onClick={() => void continueStepwiseAgentPlan("rework")}>退回到对话修改</button>
+                        <button className="primary-inline-button" type="button" disabled={agentPlanBusy} onClick={() => void continueStepwiseAgentPlan("approved")}>{agentPlanBusy ? "处理中..." : "确认并继续"}</button>
+                      </div>
+                    </div>
+                  ) : agentPlan.status === "REWORK_REQUIRED" ? (
+                    <div className="agent-step-review agent-step-rework">
+                      <p>{agentPlan.rework_note || "当前步骤已退回。请在对话框补充修改要求，再生成新的 Agent 计划。"}</p>
+                      <button className="secondary-inline-button" type="button" onClick={() => document.querySelector<HTMLTextAreaElement>(".composer-box textarea")?.focus()}>继续在对话中修改</button>
+                    </div>
+                  ) : null}
+                  {agentPlan.risk_flags.map((flag) => <p className="workflow-control-error" key={flag}>{riskFlagText(flag)}</p>)}
+                </>
+              )}
+              {agentPlanError && <p className="workflow-control-error" role="alert">{agentPlanError}</p>}
+            </section>
+            <section className="output-section agent-workbench-output">
+              <div className="output-section-heading">
+                <div><h3>Agent 产出</h3><p className="section-subtitle">候选输出需要人工保留或应用；证据通过核验后才可提升为正式证据。</p></div>
+                <button className="plain-action" type="button" onClick={() => setAgentOutputBoxOpen((open) => !open)}>{agentOutputBoxOpen ? "收起产出" : "展开产出"}</button>
+              </div>
+              <div className="agent-output-scope" role="tablist" aria-label="Agent 产出范围">
+                <button className={agentOutputScope === "turn" ? "selected" : ""} type="button" onClick={() => setAgentOutputScope("turn")}>当前对话轮次 {activeTurnOutputs.length}</button>
+                <button className={agentOutputScope === "question" ? "selected" : ""} type="button" disabled={!agentPlan} onClick={() => setAgentOutputScope("question")}>所选问题 {selectedQuestionOutputs.length}</button>
+                <button className={agentOutputScope === "project" ? "selected" : ""} type="button" onClick={() => setAgentOutputScope("project")}>项目全部 {agentOutputs.length}</button>
+              </div>
+              {visibleAgentOutputs.length ? (
+                <div className="agent-output-list">{visibleAgentOutputs.map((output) => renderAgentOutputCard(output, !agentOutputBoxOpen))}</div>
+              ) : <div className="empty-output"><span className="empty-symbol">✦</span><p>选择一条 Agent 使用问题，或执行批准的计划后在这里审查产出。</p></div>}
+            </section>
+            {renderPageMaterials("审查结论与修改请求", ["audit_validation"])}
+            {agentOutputs.some((output) => output.agent_id === "evidence_review") && (
+              <section className="output-section evidence-gate-link-section">
+                <div className="output-section-heading">
+                  <div>
+                    <h3>证据核验与正式化</h3>
+                    <p className="section-subtitle">证据 Agent 的结果先在这里审核；完成来源核验后，才能申请进入正式证据库。</p>
+                  </div>
+                  <span>{formalEvidence.length} 条正式证据</span>
+                </div>
+                <div className="workflow-control-actions">
+                  <button className="secondary-inline-button" type="button" onClick={() => {
+                    setView("audit");
+                    setContextTab("workspace");
+                    setRightPaneVisible(true);
+                  }}>打开 Evidence Gate</button>
+                  <button className="secondary-inline-button" type="button" onClick={() => {
+                    setView("knowledge");
+                    setContextTab("evidence");
+                    setRightPaneVisible(true);
+                  }}>查看正式证据库</button>
+                </div>
+              </section>
+            )}
+            {formalEvidence.length > 0 && renderFormalEvidence()}
+          </div>
+        )}
 
-        {view === "knowledge" && (
+        {contextTab === "agent-plan" && (
+          <div className="output-content">
+            <section className="output-section agent-plan-section">
+              <div className="output-section-heading">
+                <div>
+                  <h3>本轮调用计划</h3>
+                  <p className="section-subtitle">模型只提出必要任务；勾选并批准前不会调用任何 Agent。</p>
+                </div>
+                <button className="plain-action" type="button" onClick={() => setAgentPlanPanelOpen((open) => !open)}>
+                  {agentPlanPanelOpen ? "收起" : "展开"} · {agentPlan?.status ?? "未生成"}
+                </button>
+              </div>
+              {agentPlanPanelOpen && (
+                <>
+                  <label className="agent-plan-input">
+                    <span>研究需求</span>
+                    <textarea rows={4} value={agentPlanDraft} onChange={(event) => setAgentPlanDraft(event.target.value)} placeholder="描述本轮希望完成的研究任务..." />
+                  </label>
+                  <button className="primary-inline-button full-width" type="button" disabled={agentPlanBusy || !agentPlanDraft.trim()} onClick={() => void createAgentPlan()}>
+                    {agentPlanBusy ? "处理中..." : "生成调用计划"}
+                  </button>
+                  {agentPlans.length > 1 && (
+                    <div className="agent-plan-history">
+                      <span>历史计划</span>
+                      {agentPlans.slice(0, 4).map((plan) => (
+                        <button key={plan.plan_id} className={agentPlan?.plan_id === plan.plan_id ? "selected" : ""} type="button" onClick={() => {
+                          setAgentPlan(plan);
+                          setSelectedAgentTaskIds(plan.approved_task_ids.length ? plan.approved_task_ids : plan.tasks.filter((task) => task.blocked_reason === null && task.status !== "SKIPPED").map((task) => task.task_id));
+                        }}>{plan.intent_summary}</button>
+                      ))}
+                    </div>
+                  )}
+                  {agentPlan && (
+                    <div className="agent-plan-card">
+                      <div className="agent-plan-summary">
+                        <strong>{agentPlan.intent_summary}</strong>
+                        <small>{agentPlan.planner_mode === "llm" ? "模型规划" : "受控规则规划"} · {agentPlan.tasks.length} 个任务</small>
+                      </div>
+                      {agentPlan.status === "PENDING_APPROVAL" && (
+                        <div className="agent-selection-actions">
+                          <button type="button" onClick={() => setSelectedAgentTaskIds(agentPlan.tasks.filter((task) => task.blocked_reason === null && task.status !== "SKIPPED").map((task) => task.task_id))}>全选可执行项</button>
+                          <button type="button" onClick={() => setSelectedAgentTaskIds([])}>清空选择</button>
+                        </div>
+                      )}
+                      <div className="agent-plan-task-list">
+                        {agentPlan.tasks.map((task) => {
+                          const selected = selectedAgentTaskIds.includes(task.task_id);
+                          const disabled = task.blocked_reason !== null || task.status === "SKIPPED";
+                          return (
+                            <label className={`agent-plan-task ${disabled ? "agent-plan-task-disabled" : ""}`} key={task.task_id}>
+                              <input type="checkbox" checked={selected} disabled={disabled || agentPlan.status !== "PENDING_APPROVAL"} onChange={() => toggleAgentTask(task.task_id)} />
+                              <span className="agent-plan-task-copy">
+                                <strong>{agentDisplayNames[task.agent_id] ?? task.agent_id}</strong>
+                                <small>{task.reason}</small>
+                                <span>输入：{task.input_refs.join("、") || "当前对话"}</span>
+                                <span>输出：{task.expected_output_types.slice(0, 3).join("、")}</span>
+                        <span>风险：{task.risk_level} · 依赖：{task.depends_on.map((item) => item.replace("agent:", "")).join("、") || "无"}</span>
+                                {task.blocked_reason && <span className="workflow-control-error">{task.blocked_reason}</span>}
+                              </span>
+                              <span className={`agent-task-status agent-task-status-${task.status.toLowerCase()}`}>{task.status}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      {agentPlan.status === "PENDING_APPROVAL" ? (
+                        <div className="agent-plan-actions">
+                          <button className="secondary-inline-button" type="button" disabled={agentPlanBusy} onClick={() => void rejectAgentPlan()}>拒绝本次计划</button>
+                          <button className="primary-inline-button" type="button" disabled={agentPlanBusy || selectedAgentTaskIds.length === 0} onClick={() => void approveAndExecuteAgentPlan()}>{agentPlanBusy ? "执行中..." : "批准选中项并执行"}</button>
+                        </div>
+                      ) : <div className="agent-plan-status-note"><span>计划状态</span><strong>{agentPlanStatusLabels[agentPlan.status] ?? agentPlan.status}</strong></div>}
+                      {agentPlan.risk_flags.map((flag) => <p className="workflow-control-error" key={flag}>{riskFlagText(flag)}</p>)}
+                    </div>
+                  )}
+                  {agentPlanError && <p className="workflow-control-error" role="alert">{agentPlanError}</p>}
+                </>
+              )}
+            </section>
+          </div>
+        )}
+
+        {contextTab === "agent-outputs" && (
+          <div className="output-content">
+            <section className="output-section agent-output-section">
+              <div className="output-section-heading">
+                <div><h3>Agent 产出箱</h3><p className="section-subtitle">候选材料不会自动进入正式证据或专业页面。</p></div>
+                <button className="plain-action" type="button" onClick={() => setAgentOutputBoxOpen((open) => !open)}>{agentOutputBoxOpen ? "收起" : "展开"}</button>
+              </div>
+              <div className="agent-output-scope" role="tablist" aria-label="产出范围">
+                <button className={agentOutputScope === "turn" ? "selected" : ""} type="button" onClick={() => setAgentOutputScope("turn")}>当前轮次 {activeTurnOutputs.length}</button>
+                <button className={agentOutputScope === "project" ? "selected" : ""} type="button" onClick={() => setAgentOutputScope("project")}>项目全部 {agentOutputs.length}</button>
+              </div>
+              {agentOutputBoxOpen && (agentOutputScope === "turn" ? activeTurnOutputs : agentOutputs).length ? (
+                <div className="agent-output-list">{(agentOutputScope === "turn" ? activeTurnOutputs : agentOutputs).map((output) => renderAgentOutputCard(output))}</div>
+              ) : agentOutputBoxOpen ? <div className="empty-output"><span className="empty-symbol">✦</span><p>批准计划并执行后，当前轮次的 Agent 输出会出现在这里。</p></div> : null}
+            </section>
+          </div>
+        )}
+
+        {view === "knowledge" && contextTab === "evidence" && (
           <div className="output-content">
             <section className="output-section">
               <div className="output-section-heading">
@@ -1446,6 +2398,8 @@ export function App() {
                 ))}
               </div>
             </section>
+            {renderFormalEvidence()}
+            {renderPageMaterials("候选证据与证据矩阵", ["knowledge_evidence", "evidence_gate"])}
             <section className="output-section compact-section">
               <div className="output-section-heading">
                 <h3>知识库状态</h3>
@@ -1465,23 +2419,21 @@ export function App() {
           </div>
         )}
 
-        {view === "codex" && (
+        {view === "codex" && contextTab === "workspace" && (
           <div className="output-content">
             <section className="codex-hero">
               <span className="codex-symbol">⌘</span>
-              <h3>面向研究的代码工作区</h3>
-              <p>在当前项目中编写、解释和审查 Python 分析代码。代码执行仍然需要经过数据审查和人工确认。</p>
+              <h3>Agent 协作工作区</h3>
+              <p>先根据当前研究需求生成调用计划，获得许可后再执行 Agent。输出会保留在项目产出箱中。</p>
               <button
                 className="primary-inline-button"
                 type="button"
-                onClick={() => {
-                  setView("analysis");
-                  setQuestion("请根据当前研究问题和已审批的分析计划生成 Python 分析代码草案，并说明每一步的统计目的。");
-                }}
+                onClick={() => openAgentPlanner()}
               >
-                转到数据分析 <span>→</span>
+                使用当前问题规划 <span>→</span>
               </button>
             </section>
+            {renderPageMaterials("研究方案、写作与代码候选", ["workspace", "research_questions", "research_design", "data_collection", "codex", "paper_editor"])}
             <section className="output-section">
               <div className="output-section-heading"><h3>运行环境</h3><span className="review-tag">开发模式</span></div>
               <div className="runtime-list">
@@ -1497,7 +2449,7 @@ export function App() {
           </div>
         )}
 
-        {view === "analysis" && (
+        {view === "analysis" && contextTab === "workspace" && (
           <div className="output-content">
             <section className="analysis-summary">
               <div className="analysis-summary-icon">◫</div>
@@ -1535,8 +2487,8 @@ export function App() {
                   <strong>还没有 Controller 数据管道</strong>
                   <span>请先在研究流程中完成研究方案审批，再由数据分析 Agent 生成分析规格。当前页面不会绕过这一步直接执行代码。</span>
                   {analysisStage === "STUDY_PROTOCOL_APPROVED" && (
-                    <button className="secondary-inline-button" type="button" disabled={analysisBusy} onClick={() => void runAnalysisAgent()}>
-                      {analysisBusy ? "正在启动…" : "运行数据分析 Agent"}
+                    <button className="secondary-inline-button" type="button" disabled={analysisBusy} onClick={openDataAnalysisAgentPlan}>
+                      用计划调用数据分析 Agent
                       <span>→</span>
                     </button>
                   )}
@@ -1644,11 +2596,12 @@ export function App() {
                 </section>
               </>
             )}
+            {renderPageMaterials("数据处理与分析计划", ["data_analysis", "codex"])}
             {analysisError && <p className="upload-error" role="alert">{analysisError}</p>}
           </div>
         )}
 
-        {view === "audit" && (
+        {view === "audit" && contextTab === "workspace" && (
           <div className="output-content">
             <section className="output-section evidence-control-section">
               <div className="output-section-heading">
@@ -1696,31 +2649,47 @@ export function App() {
               )}
               {evidenceError && <p className="workflow-control-error" role="alert">{evidenceError}</p>}
             </section>
+            {evidenceGateOutputs.length > 0 && (
+              <section className="output-section evidence-control-section">
+                <div className="output-section-heading">
+                  <div>
+                    <h3>本轮 Agent 证据候选</h3>
+                    <p className="section-subtitle">这里显示本轮证据 Agent 的实际产出；核验通过后可申请写入正式证据库。</p>
+                  </div>
+                  <span>{evidenceGateOutputs.length} 个 Agent 结果</span>
+                </div>
+                <div className="agent-output-list">
+                  {evidenceGateOutputs.map((output) => renderAgentOutputCard(output))}
+                </div>
+              </section>
+            )}
             <section className="output-section workflow-control-section">
               <div className="output-section-heading">
                 <h3>科研工作流</h3>
                 <span className="workflow-stage-code">{workflow?.current_stage ?? "未启动"}</span>
               </div>
               {!auth?.access_token ? (
-                <p className="workflow-control-note">登录后可启动六 Agent 工作流并完成数据审批。</p>
-              ) : !workflow ? (
-                <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void startWorkflow()}>
-                  {workflowBusy ? "启动中..." : "启动工作流"}
-                </button>
+                <p className="workflow-control-note">登录后可生成 Agent 调用计划，并在批准后完成数据审批。</p>
               ) : (
                 <div className="workflow-control-body">
                   <div className="workflow-state-row">
                     <span>当前阶段</span>
-                    <strong>{workflow.current_stage}</strong>
+                    <strong>{workflow?.current_stage ?? "等待生成 Agent 计划"}</strong>
                   </div>
-                  {workflow.data_pipeline && (
+                  <div className="workflow-control-note workflow-control-agent-note">
+                    固定顺序调度已停用。请先在当前对话生成 Agent 计划，勾选需要的任务后再批准执行。
+                    <button className="secondary-inline-button" type="button" onClick={() => openAgentPlanner()}>
+                      打开 Agent 计划
+                    </button>
+                  </div>
+                  {workflow?.data_pipeline && (
                     <div className="workflow-state-row">
                       <span>数据管线</span>
                       <strong>{dataPipelineLabels[workflow.data_pipeline.stage] ?? workflow.data_pipeline.stage}</strong>
                     </div>
                   )}
 
-                  {workflow.data_pipeline?.stage === "WAITING_RAW_DATA" ? (
+                  {workflow?.data_pipeline?.stage === "WAITING_RAW_DATA" ? (
                     <div className="workflow-control-actions">
                       <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => rawCsvInputRef.current?.click()}>
                         {workflowBusy ? "审查中..." : "上传原始 CSV"}
@@ -1736,22 +2705,15 @@ export function App() {
                         }}
                       />
                     </div>
-                  ) : workflow.data_pipeline?.pending_approval ? (
+                  ) : workflow?.data_pipeline?.pending_approval ? (
                     <div className="workflow-control-actions">
                       <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideDataPipeline("approved")}>通过数据 Gate</button>
                       <button className="secondary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideDataPipeline("rejected")}>退回</button>
                     </div>
-                  ) : workflow.pending_approval_ref ? (
-                    <div className="workflow-control-actions">
-                      <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("approved")}>通过候选方案</button>
-                      <button className="secondary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("rejected")}>退回</button>
-                    </div>
-                  ) : workflow.current_stage !== "VERIFIED" && workflow.current_stage !== "BLOCKED" && workflow.current_stage !== "REWORK" ? (
-                    <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void runNextWorkflowStage()}>
-                      {workflowBusy ? "调度中..." : "调度下一 Agent"}
-                    </button>
+                  ) : workflow?.pending_approval_ref ? (
+                    <p className="workflow-control-note">这是历史固定流程遗留的审批记录；新的研究任务请使用 Agent 计划执行。</p>
                   ) : null}
-                  {workflow.data_pipeline?.rework_reason && <p className="workflow-control-error">{workflow.data_pipeline.rework_reason}</p>}
+                  {workflow?.data_pipeline?.rework_reason && <p className="workflow-control-error">{workflow.data_pipeline.rework_reason}</p>}
                 </div>
               )}
               {workflowError && <p className="workflow-control-error" role="alert">{workflowError}</p>}
@@ -1760,6 +2722,7 @@ export function App() {
               <div className="audit-summary-icon">✓</div>
               <div><strong>研究链路正在审查</strong><p>当前回答已关联证据，正式发布前仍需检查数据和引用。</p></div>
             </section>
+            {renderPageMaterials("审查结论与修改请求", ["audit_validation"])}
             <section className="output-section">
               <div className="output-section-heading">
                 <h3>六个 Agent</h3>
@@ -1793,7 +2756,7 @@ export function App() {
                   <strong>当前存在 Human Gate</strong>
                   <p>
                     {workflowSnapshot.last_route_decision?.selected_route ?? "当前 Agent"} 已生成候选结果，
-                    需要研究者在研究流程中确认后才能进入下一阶段。
+                    需要研究者在研究流程中确认后才能继续。
                   </p>
                 </div>
               )}
@@ -1966,7 +2929,7 @@ export function App() {
         </div>
       )}
 
-      {!auth && (
+      {!auth && !demoMode && (
         <div className="login-overlay">
           <div className="login-card">
             <div className="research-logo large">S</div>

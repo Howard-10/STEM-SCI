@@ -91,24 +91,15 @@ export function AgentCodexPage({ projectId, onNavigate }: AgentCodexPageProps) {
   const approvedCount = agents.filter((agent) => !agent.forbidden_actions.includes("approve")).length;
   const canRunCodex = Boolean(runtime?.codex_available);
 
-  const runWorkflow = async (action: "start" | "next") => {
+  const refreshWorkflow = async () => {
     setBusy(true);
     setError("");
     try {
-      if (action === "start") {
-        const result = await workflowApi.startProject({
-          project_id: projectId,
-          research_intent: "生成式 AI 分层支架与师范生 Python 物理建模能力",
-        });
-        setWorkflow(result.workflow_state);
-        setApproval(result.approval_request);
-      } else {
-        const result = await workflowApi.runNext(projectId);
-        setWorkflow(result.workflow_state);
-        setApproval(result.approval_request);
-      }
+      const nextWorkflow = await workflowApi.getProject(projectId);
+      setWorkflow(nextWorkflow);
+      setApproval(nextWorkflow.pending_approval_ref ? demoApproval : null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "流程操作失败");
+      setError(caught instanceof Error ? caught.message : "流程状态刷新失败");
     } finally {
       setBusy(false);
     }
@@ -146,8 +137,8 @@ export function AgentCodexPage({ projectId, onNavigate }: AgentCodexPageProps) {
         </div>
         <div className="hero-actions">
           <button className="secondary-action" onClick={() => onNavigate("editor")} type="button">回到论文编辑</button>
-          <button className="primary-action" disabled={busy} onClick={() => void runWorkflow(workflow ? "next" : "start")} type="button">
-            {busy ? "处理中..." : workflow ? "推进下一阶段" : "启动研究流程"}
+          <button className="primary-action" onClick={() => onNavigate("workspace")} type="button">
+            到对话中调用 Agent
           </button>
         </div>
       </header>
@@ -213,8 +204,8 @@ export function AgentCodexPage({ projectId, onNavigate }: AgentCodexPageProps) {
               <div><span>04</span><strong>Human Gate</strong><small>{approval ? "等待研究者确认" : "当前没有待审批请求"}</small></div>
             </div>
             <div className="button-row">
-              <button className="secondary-action" disabled={busy} onClick={() => void runWorkflow(workflow ? "next" : "start")} type="button">
-                {workflow ? "调度下一 Agent" : "运行 Mentor Planning"}
+              <button className="secondary-action" onClick={() => onNavigate("workspace")} type="button">
+                打开 Agent 计划入口
               </button>
               <button className="text-action" onClick={() => onNavigate("audit")} type="button">查看审计验证</button>
             </div>
@@ -251,7 +242,9 @@ export function AgentCodexPage({ projectId, onNavigate }: AgentCodexPageProps) {
               <span className="eyebrow">HUMAN GATE</span>
               <h3>当前没有待审批请求</h3>
               <p>Agent 输出始终先停在候选状态，只有研究者确认后才能推进。</p>
-              <button className="secondary-action full-width" onClick={() => void runWorkflow("next")} type="button">刷新工作流状态</button>
+              <button className="secondary-action full-width" disabled={busy} onClick={() => void refreshWorkflow()} type="button">
+                {busy ? "刷新中..." : "刷新工作流状态"}
+              </button>
             </section>
           )}
 

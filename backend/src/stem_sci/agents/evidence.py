@@ -153,6 +153,22 @@ class EvidenceReviewAgent(BaseAgent):
         artifacts = self._candidate_artifacts(agent_input, package, allowed)
         fallback_payloads: list[tuple[str, dict[str, object]]] = [
             (
+                "EvidenceSufficiencyReport",
+                package.sufficiency.model_dump(mode="json"),
+            ),
+            (
+                "CorpusCoverageReport",
+                package.coverage_report.model_dump(mode="json")
+                if package.coverage_report is not None
+                else {
+                    "project_id": context.project_id,
+                    "source_count": 0,
+                    "evidence_count": 0,
+                    "covered_topics": [],
+                    "missing_topics": [context.query],
+                },
+            ),
+            (
                 "SearchProtocolCandidate",
                 {
                     "project_id": context.project_id,
@@ -179,6 +195,78 @@ class EvidenceReviewAgent(BaseAgent):
         for artifact_type, body in fallback_payloads:
             if artifact_type in allowed:
                 artifacts.append(self._artifact(agent_input.task_ref, artifact_type, body))
+        # Even without an LLM, a real evidence run must produce source-bound
+        # review material. These candidates are deliberately bounded to the
+        # retrieved excerpts; they are what lets the researcher verify and,
+        # when eligible, promote an item through the formal-evidence gate.
+        if context.evidence_refs:
+            evidence_snapshot = [
+                item.model_dump(mode="json") for item in context.evidence_refs
+            ]
+            if "PaperCardCollection" in allowed:
+                artifacts.append(
+                    self._artifact(
+                        agent_input.task_ref,
+                        "PaperCardCollection",
+                        {
+                            "cards": [
+                                {
+                                    "paper_card_id": f"paper-card:{item.source_id}",
+                                    "project_id": context.project_id,
+                                    "source_ref": item.source_id,
+                                    "title": item.source_id,
+                                    "main_findings": [item.excerpt],
+                                    "evidence_refs": [item.evidence_id],
+                                }
+                                for item in context.evidence_refs
+                            ],
+                            "evidence_refs": [item.evidence_id for item in context.evidence_refs],
+                            "evidence_snapshot": evidence_snapshot,
+                            "status": "CANDIDATE",
+                        },
+                    )
+                )
+            if "EvidenceMatrixCandidate" in allowed:
+                artifacts.append(
+                    self._artifact(
+                        agent_input.task_ref,
+                        "EvidenceMatrixCandidate",
+                        {
+                            "rows": [
+                                {
+                                    "row_id": f"evidence-row:{item.evidence_id}",
+                                    "project_id": context.project_id,
+                                    "research_question": context.query,
+                                    "source_ref": item.source_id,
+                                    "relation": "MENTIONING",
+                                    "finding": item.excerpt,
+                                    "applicability_boundary": "仅代表该原文片段，尚未形成跨来源结论。",
+                                    "evidence_refs": [item.evidence_id],
+                                }
+                                for item in context.evidence_refs
+                            ],
+                            "evidence_refs": [item.evidence_id for item in context.evidence_refs],
+                            "evidence_snapshot": evidence_snapshot,
+                            "status": "CANDIDATE",
+                        },
+                    )
+                )
+            if "BoundedEvidenceSynthesis" in allowed:
+                artifacts.append(
+                    self._artifact(
+                        agent_input.task_ref,
+                        "BoundedEvidenceSynthesis",
+                        {
+                            "synthesis_id": f"bounded-synthesis:{agent_input.agent_run_id}",
+                            "project_id": context.project_id,
+                            "summary": "本轮仅整理检索到的原文片段，不外推跨来源结论。",
+                            "evidence_refs": [item.evidence_id for item in context.evidence_refs],
+                            "evidence_snapshot": evidence_snapshot,
+                            "corpus_limit": "仅限当前检索上下文和可定位原文片段。",
+                            "status": "CANDIDATE",
+                        },
+                    )
+                )
         return AgentResult(
             agent_run_id=agent_input.agent_run_id,
             agent_id=self.agent_id,
@@ -290,6 +378,17 @@ class EvidenceReviewAgent(BaseAgent):
             payloads.append(
                 ("BoundedEvidenceSynthesis", package.synthesis.model_dump(mode="json"))
             )
+        # Keep the evidence review and promotion controls available even when
+        # the corpus is empty. Empty candidate containers are intentionally not
+        # promotable, but they make the missing-source gate inspectable.
+        if "PaperCardCollection" in allowed and not any(
+            artifact_type == "PaperCardCollection" for artifact_type, _ in payloads
+        ):
+            payloads.append(("PaperCardCollection", {"cards": []}))
+        if "EvidenceMatrixCandidate" in allowed and not any(
+            artifact_type == "EvidenceMatrixCandidate" for artifact_type, _ in payloads
+        ):
+            payloads.append(("EvidenceMatrixCandidate", {"rows": []}))
         return [
             CandidateArtifact(
                 candidate_ref=(

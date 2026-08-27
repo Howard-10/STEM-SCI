@@ -98,6 +98,18 @@ class ContextService:
                 id text primary key, project_id text not null, task_ref text not null,
                 body text not null, created_at text not null
             );
+            create table if not exists formal_evidence_links (
+                project_id text not null,
+                evidence_id text not null,
+                artifact_id text not null,
+                plan_id text not null,
+                task_id text not null,
+                conversation_id text,
+                turn_id text,
+                promoted_by text not null,
+                promoted_at text not null,
+                primary key (project_id, evidence_id)
+            );
             """
         )
         self._migrate_legacy_project_scope()
@@ -107,6 +119,7 @@ class ContextService:
             create index if not exists idx_chunks_project_source on chunks(project_id, source_id, idx);
             create index if not exists idx_evidence_project on evidence(project_id, source_id, chunk_id);
             create index if not exists idx_bundles_project on bundles(project_id, created_at);
+            create index if not exists idx_formal_evidence_links_project on formal_evidence_links(project_id, promoted_at);
             """
         )
         self.db.execute(
@@ -423,6 +436,54 @@ class ContextService:
             verified_by=row["verified_by"],
             verified_at=row["verified_at"],
         )
+
+    def link_formal_evidence(
+        self,
+        *,
+        project_id: str,
+        evidence_id: str,
+        artifact_id: str,
+        plan_id: str,
+        task_id: str,
+        conversation_id: str | None,
+        turn_id: str | None,
+        promoted_by: str,
+        promoted_at: str,
+    ) -> None:
+        """Persist promotion provenance beside the canonical evidence record.
+
+        ``evidence`` remains the single source of truth for source location and
+        verification. This table only records that a verified item was admitted
+        to the project's formal evidence set, keyed by stable evidence ID.
+        """
+        self.db.execute(
+            """
+            insert into formal_evidence_links(
+                project_id, evidence_id, artifact_id, plan_id, task_id,
+                conversation_id, turn_id, promoted_by, promoted_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            on conflict(project_id, evidence_id) do update set
+                artifact_id=excluded.artifact_id,
+                plan_id=excluded.plan_id,
+                task_id=excluded.task_id,
+                conversation_id=excluded.conversation_id,
+                turn_id=excluded.turn_id,
+                promoted_by=excluded.promoted_by,
+                promoted_at=excluded.promoted_at
+            """,
+            (
+                project_id,
+                evidence_id,
+                artifact_id,
+                plan_id,
+                task_id,
+                conversation_id,
+                turn_id,
+                promoted_by,
+                promoted_at,
+            ),
+        )
+        self.db.commit()
 
     def build(self, request: ContextBuildRequest) -> ContextBundle:
         results = self.search(
