@@ -621,6 +621,20 @@ export function App() {
         }]);
         return;
       }
+      if (auth?.access_token && !workflow) {
+        const planning = await workflowApi.startProject({
+          project_id: targetProjectId,
+          research_intent: trimmed,
+        });
+        setWorkflow(planning.workflow_state);
+        setWorkflowTimeline(await workflowApi.getTimeline(targetProjectId));
+        setMessages((current) => [...current, {
+          id: `assistant-workflow-${Date.now()}`,
+          role: "assistant",
+          content: "已根据你的研究思路启动项目工作流。请先审核导师规划的研究边界、问题树与可行性方案。",
+        }]);
+        return;
+      }
       const response = auth?.access_token
         ? await authApi.projectChatAnswer(auth.access_token, {
           project_id: targetProjectId,
