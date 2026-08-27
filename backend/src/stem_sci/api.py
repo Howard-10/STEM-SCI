@@ -8,6 +8,7 @@ import os
 import zipfile
 from pathlib import Path
 from typing import Annotated
+from uuid import uuid4
 from xml.etree import ElementTree
 
 from dotenv import load_dotenv
@@ -62,9 +63,16 @@ from .controller import (
     ReproducibilityReviewRequest,
     ReproducibilityReviewRunResult,
     ResearchController,
+    WorkflowFeedbackResult,
     SQLiteDecisionStore,
     SQLiteWorkflowStore,
     WorkflowRunResult,
+    WorkflowTimeline,
+)
+from .controller.workflow_timeline import (
+    SQLiteWorkflowFeedbackStore,
+    WorkflowFeedback,
+    WorkflowFeedbackAction,
 )
 from .controller.policy.route_decision import RouteDecision
 from .controller.policy.route_store import SQLiteRouteDecisionStore
@@ -234,6 +242,7 @@ workflow_controller = ResearchController(
     artifact_content_store=artifact_content_store,
     agent_run_store=agent_run_store,
     route_store=route_store,
+    feedback_store=SQLiteWorkflowFeedbackStore(workflow_database),
     data_pipeline_root=storage_root,
 )
 qa_service = _configured_qa_service()
@@ -261,6 +270,15 @@ class WorkflowApprovalInput(BaseModel):
 
     decision: str = Field(min_length=1)
     decided_by: str = Field(min_length=1)
+
+
+class ProjectWorkflowFeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    agent_id: str = Field(min_length=1, max_length=64)
+    stage: str = Field(min_length=1, max_length=64)
+    action: WorkflowFeedbackAction
+    feedback: str = Field(min_length=1, max_length=10_000)
 
 
 def _access_token(authorization: Annotated[str | None, Header()] = None) -> str:
@@ -708,6 +726,26 @@ def project_workflow(
 ) -> ControllerWorkflowState:
     identity_service.get_project(user, project_id)
     return workflow_controller.get_state(project_id)
+
+
+@app.get("/api/v1/projects/{project_id}/workflow/timeline", response_model=WorkflowTimeline)
+def project_workflow_timeline(project_id: str, user: Annotated[UserProfile, Depends(current_user)]) -> WorkflowTimeline:
+    identity_service.get_project(user, project_id)
+    return workflow_controller.workflow_timeline(project_id)
+
+
+@app.post("/api/v1/projects/{project_id}/workflow/feedback", response_model=WorkflowFeedbackResult)
+def project_workflow_feedback(
+    project_id: str,
+    request: ProjectWorkflowFeedbackRequest,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> WorkflowFeedbackResult:
+    identity_service.get_project(user, project_id)
+    return workflow_controller.apply_workflow_feedback(WorkflowFeedback(
+        feedback_id=f"feedback-{uuid4().hex}", project_id=project_id,
+        agent_id=request.agent_id, stage=request.stage, action=request.action,
+        feedback=request.feedback, created_by=user.username,
+    ))
 
 
 @app.post("/api/v1/projects/{project_id}/workflow/next")
