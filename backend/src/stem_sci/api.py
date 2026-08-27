@@ -109,7 +109,10 @@ from .provenance.agent_run_store import SQLiteAgentRunStore
 from .provenance.models import AgentRunRecord
 from .settings import ConfigurationReport, validate_environment
 
-DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
+DEFAULT_CORS_ORIGINS = (
+    "http://localhost:5173,http://127.0.0.1:5173,"
+    "http://localhost:5174,http://127.0.0.1:5174"
+)
 DEFAULT_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 logger = logging.getLogger("stem_sci.api")
 configuration_report: ConfigurationReport
