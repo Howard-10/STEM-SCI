@@ -213,7 +213,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
     });
   } catch (error) {
-    if (!demoMode) throw error;
+    // Never substitute demo workflow state for an authenticated project. Doing
+    // so makes a missing/unknown project look active and routes chat incorrectly.
+    const hasAuth = Boolean(localStorage.getItem("stem_sci_auth_state"));
+    const isProjectWorkflowRequest = path.includes("/projects/") && path.includes("/workflow");
+    if (!demoMode || hasAuth || isProjectWorkflowRequest) throw error;
     return demoWorkflowFallback<T>(path, init);
   }
 }
