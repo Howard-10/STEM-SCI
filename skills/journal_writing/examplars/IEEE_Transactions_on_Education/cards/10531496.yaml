@@ -1,0 +1,74 @@
+paper:
+  title: Engineering Identity and Smartness Identity as They Relate to Women’s Participation in Engineering
+  journal: IEEE_Transactions_on_Education
+  year: 2024
+  doi: 10.1109/TE.2024.3359534
+  article_type: null
+  methodology: qualitative
+structure:
+  section_order: &id001
+  - abstract
+  - literature_review
+  - introduction
+  - research_questions
+  - methods
+  - results
+  - discussion
+  - conclusion
+introduction:
+  opening_strategy: null
+  problem_context: null
+  literature_review_strategy: null
+  research_gap:
+    explicit: null
+    position: null
+    description: null
+  theoretical_framework:
+    present: null
+    position: null
+    separate_section: null
+  research_questions:
+    present: true
+    position: before_methods
+  contribution_statement:
+    present: true
+    position: structured_abstract
+methods:
+  research_design: qualitative
+  participants_or_data: human_participants
+  sampling: null
+  instruments:
+  - interview
+  - document_or_artifact
+  procedure: data_collection_procedure
+  validity_reliability_or_trustworthiness:
+  - validity
+  - trustworthiness
+  analysis_method: null
+  reproducibility_detail: partial
+results:
+  organization: null
+  organized_by_research_questions: true
+  evidence_types:
+  - participant_accounts
+  tables_usage: null
+  figures_usage: null
+  interpretation_level: null
+discussion:
+  opening_strategy: null
+  answers_research_questions: null
+  comparison_with_prior_research: null
+  theoretical_interpretation: null
+  practical_implications: null
+  educational_implications: null
+  limitations: null
+  future_work: null
+  conclusion_strategy: null
+writing_features:
+  theory_emphasis: null
+  evidence_emphasis: null
+  practical_implication_emphasis: null
+  educational_implication_emphasis: null
+  typical_argument_flow: *id001
+evidence:
+  source_type: published_article

@@ -1,0 +1,27 @@
+pattern_type: methodology_pattern
+methodology: qualitative
+methods:
+  common_flow:
+  - research_design
+  - participants
+  - sampling
+  - data_collection
+  - coding
+  - qualitative_analysis
+  - trustworthiness
+results:
+  common_flow:
+  - theme
+  - supporting_evidence
+  - interpretation
+discussion:
+  common_flow:
+  - interpret_major_themes
+  - connect_with_prior_research
+  - theoretical_interpretation
+  - educational_implications
+  - limitations
+observed_sample:
+  matching_article_count: 6
+  total_card_count: 10
+  frequency: 0.6

@@ -1,0 +1,26 @@
+pattern_type: methodology_pattern
+methodology: mixed_methods
+methods:
+  common_flow:
+  - mixed_methods_design
+  - quantitative_strand
+  - qualitative_strand
+  - strand_sequence_or_priority
+  - integration_strategy
+  - validity_reliability_and_trustworthiness
+results:
+  common_flow:
+  - quantitative_findings
+  - qualitative_findings
+  - integrated_meta_inference
+discussion:
+  common_flow:
+  - interpret_convergent_or_divergent_findings
+  - explain_cross_strand_integration
+  - connect_with_prior_research
+  - educational_implications
+  - limitations
+observed_sample:
+  matching_article_count: 3
+  total_card_count: 10
+  frequency: 0.3

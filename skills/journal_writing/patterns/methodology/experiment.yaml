@@ -1,0 +1,27 @@
+pattern_type: methodology_pattern
+methodology: experiment
+methods:
+  common_flow:
+  - experimental_design
+  - participants_and_assignment
+  - intervention_and_comparator
+  - outcome_measures
+  - fidelity_and_controls
+  - statistical_analysis
+results:
+  common_flow:
+  - baseline_equivalence
+  - intervention_effect
+  - uncertainty_and_effect_size
+  - robustness_or_sensitivity_analysis
+discussion:
+  common_flow:
+  - interpret_intervention_effect
+  - discuss_causal_scope
+  - connect_with_prior_research
+  - educational_implications
+  - limitations
+observed_sample:
+  matching_article_count: 0
+  total_card_count: 10
+  frequency: 0.0
