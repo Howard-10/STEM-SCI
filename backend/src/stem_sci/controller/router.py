@@ -24,6 +24,7 @@ from stem_sci.agents import (
     PaperWritingAgent,
     ResearchDesignAgent,
 )
+from stem_sci.agents.planning_contracts import PlanningBrief
 from stem_sci.agents.analysis_contracts import (
     DataAnalysisPreAnalysisInput,
     DataAnalysisPreAnalysisOutcome,
@@ -773,7 +774,12 @@ class ResearchController:
             policy_version="controller-policy-v1",
             prompt_template_version="planner-scaffold-v1",
         )
-        result = self.dispatcher.dispatch("mentor_planning", agent_input)
+        if not isinstance(planner, MentorPlanningAgent):
+            raise ValueError("mentor_planning registry entry has an invalid implementation")
+        planning_brief = self._build_planning_brief(
+            request.project_id, agent_input, request.research_intent
+        )
+        result = planner.propose_for(agent_input, planning_brief).agent_result
         if not result.candidate_artifact_refs:
             raise ValueError("planning Agent produced no candidate artifacts")
         execution_refs, operator_output_refs, operator_risk_flags = self._execute_agent_tools(
@@ -838,6 +844,25 @@ class ResearchController:
             agent_result=result,
             approval_request=approval,
             route_decision=route,
+        )
+
+    @staticmethod
+    def _build_planning_brief(
+        project_id: str, agent_input: AgentInput, research_intent: str
+    ) -> PlanningBrief:
+        """Turn a short human idea into an explicit, reviewable planning brief."""
+        return PlanningBrief(
+            agent_run_id=agent_input.agent_run_id,
+            project_id=project_id,
+            task_ref=agent_input.task_ref,
+            topic=research_intent,
+            population="目标研究人群（待确认）",
+            context="教育或科研应用场景（待确认）",
+            intervention="研究意图中描述的干预、方法或技术",
+            comparator="常规方法或基线条件（待确认）",
+            candidate_outcomes=["主要研究目标指标（待确认）"],
+            constraints=["需要在正式研究前确认伦理、数据治理与样本可得性"],
+            exclusions=["超出当前研究意图且无法由本项目验证的结论"],
         )
 
     def approve_planning(
@@ -1039,6 +1064,15 @@ class ResearchController:
             package_ref = self._persist_pre_analysis_package(
                 project_id, outcome, model_specification
             )
+        elif agent_id == "mentor_planning":
+            if not isinstance(agent, MentorPlanningAgent):
+                raise ValueError("mentor_planning registry entry has an invalid implementation")
+            planning_brief = self._build_planning_brief(
+                project_id,
+                agent_input,
+                self._project_intents.get(project_id, ""),
+            )
+            result = agent.propose_for(agent_input, planning_brief).agent_result
         else:
             result = self.dispatcher.dispatch(agent_id, agent_input, context_bundle)
         if not result.candidate_artifact_refs:

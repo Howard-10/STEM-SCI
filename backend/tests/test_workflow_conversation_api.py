@@ -49,6 +49,22 @@ def test_project_timeline_returns_persisted_planning_run(client: TestClient) -> 
     assert response.json()["agent_runs"][0]["agent_id"] == "mentor_planning"
 
 
+def test_project_timeline_contains_structured_mentor_planning_outputs(client: TestClient) -> None:
+    token, project_id = _project(client)
+    started = client.post(
+        f"/api/v1/projects/{project_id}/workflow",
+        headers=_auth(token),
+        json={"research_intent": "研究 AI 辅助物理建模", "run_id": "structured-planning"},
+    )
+    assert started.status_code == 200, started.text
+
+    timeline = client.get(
+        f"/api/v1/projects/{project_id}/workflow/timeline", headers=_auth(token)
+    ).json()
+    artifact_types = {item["artifact_type"] for item in timeline["artifact_contents"]}
+    assert {"ResearchScopeCandidate", "ResearchQuestionTree", "FeasibilityReport", "ProjectRoadmap"} <= artifact_types
+
+
 def test_feedback_rerun_returns_new_current_agent_run(client: TestClient) -> None:
     token, project_id = _project(client)
     client.post(
