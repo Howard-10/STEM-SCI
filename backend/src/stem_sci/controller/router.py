@@ -136,6 +136,7 @@ class WorkflowTimeline(BaseModel):
     workflow_state: ControllerWorkflowState
     agent_runs: list[AgentRunRecord]
     artifact_contents: list[ArtifactContent]
+    artifacts: list[ArtifactRef] = Field(default_factory=list)
     routes: list[RouteDecision]
     feedback: list[WorkflowFeedback]
     pending_approval: ApprovalRequest | None = None
@@ -882,6 +883,10 @@ class ResearchController:
             ),
             artifact_contents=sorted(
                 self.artifact_content_store.list_project(project_id),
+                key=lambda item: (item.created_at, item.artifact_id, item.version),
+            ),
+            artifacts=sorted(
+                self.artifact_store.list_project(project_id),
                 key=lambda item: (item.created_at, item.artifact_id, item.version),
             ),
             routes=sorted(

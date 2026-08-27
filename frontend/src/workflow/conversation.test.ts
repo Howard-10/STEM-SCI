@@ -32,4 +32,14 @@ describe("buildWorkflowConversation", () => {
       artifact_contents: undefined as never,
     })).toHaveLength(1);
   });
+
+  it("resolves artifact contents referenced by content URI", () => {
+    const items = buildWorkflowConversation({
+      workflow_state: { pending_approval_ref: null },
+      pending_approval: null,
+      agent_runs: [{ agent_run_id: "planning-2", agent_id: "mentor_planning", started_at: "2026-08-27T00:00:00Z", output_artifact_refs: ["artifact-content://project-1/planning-2:artifact:0/1"] }],
+      artifact_contents: [{ artifact_id: "planning-2:artifact:0", artifact_type: "ResearchScopeCandidate", body: { research_boundary: "scope" } }],
+    });
+    expect(items[1]).toMatchObject({ kind: "workflow-report", artifacts: [{ artifactType: "ResearchScopeCandidate" }] });
+  });
 });

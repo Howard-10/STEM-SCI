@@ -355,6 +355,31 @@ export function App() {
     }
   };
 
+  const submitWorkflowFeedbackAndContinue = async (agentId: string) => {
+    if (!workflowTimeline || !workflowFeedback.trim()) return;
+    setWorkflowBusy(true);
+    setWorkflowError("");
+    try {
+      await workflowApi.submitFeedback(projectId, {
+        agent_id: agentId,
+        stage: workflowTimeline.workflow_state.current_stage,
+        action: "pause",
+        feedback: workflowFeedback.trim(),
+      });
+      if (workflowTimeline.workflow_state.pending_approval_ref) {
+        await workflowApi.approve(projectId, "approved", auth?.user.username ?? "researcher");
+      }
+      const next = await workflowApi.runNext(projectId);
+      setWorkflow(next.workflow_state);
+      setWorkflowFeedback("");
+      await reloadWorkflowTimeline();
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : "无法保存意见并继续流程");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
     setWorkflowError("");
@@ -563,6 +588,7 @@ export function App() {
     try {
       await workflowApi.uploadRawCsv(projectId, file);
       await refreshWorkflow();
+      await reloadWorkflowTimeline();
     } catch (error) {
       setWorkflowError(error instanceof Error ? error.message : "CSV 上传或审查失败");
     } finally {
@@ -581,6 +607,7 @@ export function App() {
         auth?.user.username ?? "researcher",
       );
       await refreshWorkflow();
+      await reloadWorkflowTimeline();
     } catch (error) {
       setWorkflowError(error instanceof Error ? error.message : "数据 Gate 审批失败");
     } finally {
@@ -1310,12 +1337,13 @@ export function App() {
                     <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("approved")}>通过候选方案</button>
                     <button className="secondary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("rejected")}>退回</button>
                   </div>}
-                  {item.isLatest && !item.pendingApproval && workflowState && !["VERIFIED", "RELEASED", "BLOCKED", "REWORK"].includes(workflowState.current_stage) && <div className="workflow-control-actions">
+                  {item.isLatest && !item.pendingApproval && (workflow ?? workflowTimeline?.workflow_state) && !["VERIFIED", "RELEASED", "BLOCKED", "REWORK"].includes((workflow ?? workflowTimeline?.workflow_state)?.current_stage ?? "") && <div className="workflow-control-actions">
                     <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void runNextWorkflowStage()}>{workflowBusy ? "调度中..." : "继续下一 Agent"}</button>
                   </div>}
                   {item.pendingApproval && <div className="workflow-feedback-actions">
                     <textarea value={workflowFeedback} onChange={(event) => setWorkflowFeedback(event.target.value)} placeholder="补充你的研究思路或修改意见..." rows={2} />
                     <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedback(item.agentId, "pause")}>保存意见并暂停</button>
+                    <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedbackAndContinue(item.agentId)}>保存意见并继续</button>
                     <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedback(item.agentId, "rerun")}>基于意见重新执行当前 Agent</button>
                   </div>}
                 </div>

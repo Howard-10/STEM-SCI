@@ -201,6 +201,7 @@ export interface WorkflowTimeline {
   workflow_state: ControllerWorkflowState;
   agent_runs: Array<{ agent_run_id: string; agent_id: string; started_at: string; output_artifact_refs: string[] }>;
   artifact_contents: Array<{ artifact_id: string; artifact_type: string; body: Record<string, unknown> }>;
+  artifacts?: Array<{ artifact_id: string; artifact_type: string; content_uri: string; version: number }>;
   routes: RouteDecision[];
   feedback: Array<{ feedback_id: string; agent_id: string; stage: string; action: "continue" | "rerun" | "pause"; feedback: string; created_by: string; created_at: string }>;
   pending_approval: { approval_type: string; reason: string; risk_summary: string } | null;
