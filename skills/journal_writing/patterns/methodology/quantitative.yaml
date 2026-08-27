@@ -1,0 +1,26 @@
+pattern_type: methodology_pattern
+methodology: quantitative
+methods:
+  common_flow:
+  - research_design
+  - participants
+  - instruments
+  - validity_reliability
+  - data_collection
+  - statistical_analysis
+results:
+  common_flow:
+  - descriptive_statistics
+  - inferential_statistics
+  - effect_or_relationship
+discussion:
+  common_flow:
+  - interpret_main_results
+  - connect_with_prior_research
+  - theoretical_interpretation
+  - educational_implications
+  - limitations
+observed_sample:
+  matching_article_count: 0
+  total_card_count: 10
+  frequency: 0.0

@@ -1,0 +1,28 @@
+pattern_type: methodology_pattern
+methodology: instrument_development
+methods:
+  common_flow:
+  - construct_definition
+  - item_generation
+  - expert_review_or_content_validity
+  - pilot_sample
+  - factor_or_item_analysis
+  - reliability_and_validity_evidence
+results:
+  common_flow:
+  - item_reduction
+  - dimensionality
+  - reliability_evidence
+  - validity_evidence
+  - final_instrument
+discussion:
+  common_flow:
+  - interpret_measurement_evidence
+  - compare_existing_instruments
+  - intended_uses
+  - limitations
+  - future_validation
+observed_sample:
+  matching_article_count: 0
+  total_card_count: 10
+  frequency: 0.0

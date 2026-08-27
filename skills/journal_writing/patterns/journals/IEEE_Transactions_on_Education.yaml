@@ -1,0 +1,55 @@
+pattern_type: observed_pattern
+journal:
+  id: IEEE_Transactions_on_Education
+sample:
+  article_count: 4
+introduction:
+  common_flow:
+  - research_questions
+  - contribution_statement
+  research_gap:
+    common: null
+    evidence_basis: semantic_analysis
+    typical_position: null
+    evidence_count: 0
+    analyzed_count: 0
+    sample_size: 4
+    frequency: null
+  theoretical_framework:
+    common: false
+    evidence_basis: explicit_separate_section
+    typical_position: null
+    evidence_count: 0
+    analyzed_count: 4
+    sample_size: 4
+    frequency: 0.0
+  research_questions:
+    common: true
+    evidence_basis: explicit_heading_or_question_list
+    typical_position: structured_abstract
+    evidence_count: 3
+    analyzed_count: 4
+    sample_size: 4
+    frequency: 0.75
+methods:
+  common_flow:
+  - research_design
+  - participants_or_data
+  - instruments
+  - validity_reliability_or_trustworthiness
+  - reproducibility_detail
+results:
+  common_flow:
+  - organization
+  - evidence_types
+  - interpretation_level
+discussion:
+  common_flow: []
+methodology_distribution:
+- methodology: qualitative
+  evidence_count: 3
+  sample_size: 4
+  frequency: 0.75
+journal_emphasis: []
+evidence:
+  source_type: exemplar_analysis

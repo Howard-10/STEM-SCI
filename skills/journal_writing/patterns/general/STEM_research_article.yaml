@@ -1,0 +1,51 @@
+pattern_type: general_pattern
+domain: STEM_education
+article_type: research_article
+
+introduction:
+  purpose: establish_problem_and_justify_research
+  common_flow:
+    - broad_STEM_context
+    - existing_research
+    - unresolved_problem
+    - research_gap
+    - research_questions
+    - study_contribution
+  avoid:
+    - simple_literature_listing
+    - unsupported_claims
+
+methods:
+  purpose: explain_how_evidence_is_generated
+  common_flow:
+    - research_design
+    - participants_or_data_source
+    - procedure
+    - measurement_tools
+    - analysis_method
+  avoid:
+    - missing_parameter_details
+    - unclear_analysis_process
+
+results:
+  purpose: answer_research_questions_with_evidence
+  common_flow:
+    - research_question
+    - result
+    - statistical_or_qualitative_evidence
+    - immediate_interpretation
+  avoid:
+    - unsupported_explanations
+
+discussion:
+  purpose: explain_meaning_and_contribution
+  common_flow:
+    - summarize_main_findings
+    - compare_previous_research
+    - explain_theoretical_contribution
+    - explain_practical_implications
+    - limitations
+    - future_work
+  avoid:
+    - claiming_causality_without_evidence
+    - overgeneralization

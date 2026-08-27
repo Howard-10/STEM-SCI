@@ -1,0 +1,189 @@
+journal:
+  id: IEEE_Transactions_on_Education
+  name: IEEE Transactions on Education
+  abbreviation: IEEE ToE
+  publisher: IEEE
+  society: IEEE Education Society
+
+source:
+  author_resources:
+    url: https://ieee-edusociety.org/publication/toe/toe-author-resources
+    publisher: IEEE Education Society
+    verified_date: 2026-08-26
+  structured_abstracts:
+    url: https://ieee-edusociety.org/publication/toe/toe-additional-resources
+    publisher: IEEE Education Society
+    verified_date: 2026-08-26
+  journal_page:
+    url: https://ieee-edusociety.org/publication/about-publications/toe
+    publisher: IEEE Education Society
+    verified_date: 2026-08-26
+
+scope:
+  fields:
+    - electrical_engineering_education
+    - electronics_engineering_education
+    - computer_engineering_education
+    - computer_science_education
+    - other_IEEE_related_education
+  requirements:
+    - significant_and_original_scholarly_contribution
+    - address_application_discovery_or_integration_of_knowledge
+    - support_claims_with_compelling_evidence
+    - explicitly_describe_evidence_collection_analysis_and_interpretation
+    - assessment_should_generally_go_beyond_student_self_report_and_attitudinal_data
+
+submission:
+  platform: IEEE_Author_Portal
+  originality_check_required: true
+
+  manuscript_format:
+    required_format: journal_format
+    accepted_file_types:
+      - Word
+      - PDF
+    style_manual: IEEE_Style_Manual
+    author_biographies: optional
+    template:
+      provider: IEEE_Template_Selector
+      latex_document_class: IEEEtran
+
+  scholarship_type:
+    required: true
+    options:
+      - Application
+      - Discovery
+      - Integration
+
+  manuscript_length:
+    Application:
+      recommended_max_pages: 8
+      mandatory_overlength_charge_after_pages: 10
+    Discovery:
+      recommended_max_pages: 8
+      mandatory_overlength_charge_after_pages: 10
+    Integration:
+      recommended_max_pages: 10
+      mandatory_overlength_charge_after_pages: 12
+    overlength_charge_usd_per_page: 200
+
+  abstract:
+    structured: true
+    max_words: 250
+    references_allowed: false
+    brief_component_length: 1_to_2_sentences
+    formatting:
+      entire_abstract_bold: true
+      section_labels_italic: true
+    content_requirements:
+      - focus_on_education_within_IEEE_scope
+      - emphasize_broad_relevance
+      - avoid_overfocus_on_specific_regions_institutions_or_programs
+
+  structured_abstract_sections:
+    Application:
+      - Contribution
+      - Background
+      - Intended_outcomes
+      - Application_design
+      - Findings
+    Discovery:
+      - Contribution
+      - Background
+      - Research_Questions
+      - Methodology
+      - Findings
+    Integration:
+      - Contribution
+      - Background
+      - Research_Questions
+      - Methodology
+      - Findings
+
+  authors:
+    orcid_required_for_all_authors: true
+
+  open_access:
+    model: hybrid
+    options:
+      - Traditional
+      - Open_Access
+    open_access_apc_usd: 2800
+    member_discounts:
+      IEEE_member_percent: 5
+      IEEE_Education_Society_member_percent: 20
+      combinable: false
+
+  prior_publication:
+    original_submission_expected: true
+    conference_reuse_policy:
+      allowed_only_under_IEEE_ToE_reuse_policy: true
+      related_prior_work_must_be_disclosed: true
+
+review_focus:
+  evidence:
+    emphasis: very_high
+    checks:
+      - claims_supported_by_compelling_evidence
+      - transparent_data_collection
+      - transparent_analysis
+      - transparent_interpretation
+  broader_relevance:
+    emphasis: high
+    checks:
+      - contribution_not_limited_to_single_local_context
+      - relevance_to_broader_engineering_or_computing_education
+
+writing_behavior:
+  claim_strength_preservation: |
+    CLAIM STRENGTH PRESERVATION
+
+    Academic polishing must preserve or weaken the strength of claims in the source manuscript. It must never strengthen an observational, tentative, correlational, or speculative statement into a causal or definitive statement.
+
+    Do not introduce stronger causal language unless the source manuscript already makes the same causal claim.
+
+    High-risk expressions that should NOT be newly introduced include:
+
+    - leads to
+    - results in
+    - causes
+    - produces
+    - determines
+    - demonstrates that
+    - proves that
+    - confirms that
+    - establishes that
+    - improves
+    - increases
+    - decreases
+    - enhances
+
+    when the source only supports a weaker relationship.
+
+    Prefer conservative academic wording such as:
+
+    - may support
+    - may contribute to
+    - may help
+    - suggests that
+    - indicates that
+    - was associated with
+    - was related to
+    - showed higher/lower
+    - appears to
+    - is consistent with
+
+    Examples:
+
+    Source: "Project-based learning may help students become more engaged."
+    Allowed: "The findings suggest that project-based learning may support student engagement."
+    Not allowed: "Project-based learning leads to greater student engagement."
+
+    Source: "Students in the project-based learning group reported higher engagement."
+    Allowed: "Students in the project-based learning group reported higher engagement."
+    Not allowed: "Project-based learning increased student engagement."
+
+    Source: "The findings suggest..."
+    Do not rewrite as: "The results demonstrate that..."
+
+    Before returning the revised manuscript, check the revision for newly introduced causal or stronger claim language. If the source uses tentative or associative language, preserve that level of certainty. In particular, scan for: "leads to", "results in", "causes", "demonstrates that", "proves that", "confirms that", "improves", "increases", "decreases", "enhances". If any of these expressions are stronger than the source manuscript, replace them with wording consistent with the original claim strength.

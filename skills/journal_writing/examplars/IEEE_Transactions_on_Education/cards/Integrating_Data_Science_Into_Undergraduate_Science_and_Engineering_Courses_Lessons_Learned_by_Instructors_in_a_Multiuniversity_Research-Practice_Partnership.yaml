@@ -1,0 +1,73 @@
+paper:
+  title: 'Integrating Data Science Into Undergraduate Science and Engineering Courses: Lessons Learned
+    by Instructors in a Multiuniversity Research-Practice Partnership'
+  journal: IEEE_Transactions_on_Education
+  year: 2025
+  doi: 10.1109/TE.2024.3436041
+  article_type: null
+  methodology: qualitative
+structure:
+  section_order: &id001
+  - abstract
+  - introduction
+  - literature_review
+  - methods
+  - results_discussion
+  - limitations
+  - conclusion
+introduction:
+  opening_strategy: null
+  problem_context: null
+  literature_review_strategy: null
+  research_gap:
+    explicit: null
+    position: null
+    description: null
+  theoretical_framework:
+    present: null
+    position: null
+    separate_section: null
+  research_questions:
+    present: true
+    position: structured_abstract
+  contribution_statement:
+    present: true
+    position: structured_abstract
+methods:
+  research_design: case_study
+  participants_or_data: human_participants
+  sampling: null
+  instruments:
+  - interview
+  procedure: null
+  validity_reliability_or_trustworthiness:
+  - validity
+  analysis_method: null
+  reproducibility_detail: partial
+results:
+  organization: integrated_findings_and_discussion
+  organized_by_research_questions: null
+  evidence_types:
+  - descriptive_statistics
+  - participant_accounts
+  tables_usage: null
+  figures_usage: null
+  interpretation_level: integrated_with_results
+discussion:
+  opening_strategy: null
+  answers_research_questions: null
+  comparison_with_prior_research: null
+  theoretical_interpretation: null
+  practical_implications: null
+  educational_implications: null
+  limitations: separate_section
+  future_work: null
+  conclusion_strategy: null
+writing_features:
+  theory_emphasis: null
+  evidence_emphasis: null
+  practical_implication_emphasis: null
+  educational_implication_emphasis: null
+  typical_argument_flow: *id001
+evidence:
+  source_type: published_article
