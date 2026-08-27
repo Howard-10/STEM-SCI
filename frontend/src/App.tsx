@@ -19,7 +19,7 @@ import {
   type RuntimeStatus,
   type WorkflowTimeline,
 } from "./api/workflow";
-import { answerWorkflowQuestion, artifactLabels, buildWorkflowConversation, formatWorkflowArtifact } from "./workflow/conversation";
+import { answerWorkflowQuestion, artifactLabels, buildWorkflowConversation, formatMentorPlanningReport, formatWorkflowArtifact, isPlanningClarification } from "./workflow/conversation";
 import { api } from "./api/client";
 import type { SearchResult, SharedCorpusSummary } from "./types/context";
 import { demoBundle, demoQAResponse, demoRuntime } from "./demo/data";
@@ -705,6 +705,24 @@ export function App() {
         }]);
         return;
       }
+      const pendingMentor = workflowTimeline?.workflow_state.pending_approval_ref
+        && workflowTimeline.agent_runs.some((run) => run.agent_id === "mentor_planning");
+      if (pendingMentor && isPlanningClarification(trimmed)) {
+        const feedbackResult = await workflowApi.submitFeedback(projectId, {
+          agent_id: "mentor_planning",
+          stage: workflowTimeline.workflow_state.current_stage,
+          action: "rerun",
+          feedback: trimmed,
+        });
+        if (feedbackResult.workflow_state) setWorkflow(feedbackResult.workflow_state);
+        await reloadWorkflowTimeline();
+        setMessages((current) => [...current, {
+          id: `assistant-planning-rerun-${Date.now()}`,
+          role: "assistant",
+          content: "已收到你的补充信息，正在据此重新生成导师规划。新的研究边界、问题树和可行性方案生成后会再次请你审核。",
+        }]);
+        return;
+      }
       const workflowAnswer = workflowTimeline && answerWorkflowQuestion(trimmed, workflowTimeline);
       if (workflowAnswer) {
         setMessages((current) => [...current, {
@@ -1336,7 +1354,11 @@ export function App() {
                 <div className="message-body">
                   <div className="message-meta">STEM-SCI <span>·</span> {item.agentName} 阶段报告</div>
                   <p>{item.pendingApproval ? "本阶段已完成，等待你审核候选成果。" : "已保留本阶段运行记录。"}</p>
-                  {item.artifacts.length ? item.artifacts.map((artifact, artifactIndex) => (
+                  {item.agentId === "mentor_planning" && item.artifacts.length ? (
+                    <section className="workflow-artifact-text mentor-planning-summary">
+                      <p>{formatMentorPlanningReport(item.artifacts)}</p>
+                    </section>
+                  ) : item.artifacts.length ? item.artifacts.map((artifact, artifactIndex) => (
                     <section className="workflow-artifact-text" key={`${artifact.artifactType}-${artifactIndex}`}>
                       <h4>{artifactLabels[artifact.artifactType] ?? artifact.artifactType}</h4>
                       <p>{formatWorkflowArtifact(artifact.artifactType, artifact.body)}</p>

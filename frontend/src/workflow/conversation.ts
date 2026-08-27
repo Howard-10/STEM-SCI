@@ -55,6 +55,10 @@ export const artifactLabels: Record<string, string> = {
   EvidenceSet: "证据检索摘要",
 };
 
+export function isPlanningClarification(question: string): boolean {
+  return /(?:研究对象|研究人群|研究场景|应用场景|干预与对照|主要指标|结果指标)\s*[:：]/u.test(question);
+}
+
 export function formatWorkflowArtifact(artifactType: string, body: Record<string, unknown>): string {
   const lines: string[] = [];
   const add = (label: string, value: unknown) => {
@@ -87,6 +91,34 @@ export function formatWorkflowArtifact(artifactType: string, body: Record<string
   } else {
     Object.entries(body).forEach(([key, value]) => add(key, value));
   }
+  return lines.join("\n");
+}
+
+export function formatMentorPlanningReport(
+  artifacts: Array<{ artifactType: string; body: Record<string, unknown> }>,
+): string {
+  const get = (type: string) => artifacts.find((artifact) => artifact.artifactType === type)?.body ?? {};
+  const contract = get("ResearchContractCandidate");
+  const questions = get("ResearchQuestionTree");
+  const feasibility = get("FeasibilityReport");
+  const lines = ["已根据你的研究思路形成初步方案。"];
+  if (typeof contract.topic === "string") lines.push(`当前研究主题：${contract.topic}`);
+  if (typeof questions.primary_question === "string") lines.push(`核心问题：${questions.primary_question}`);
+  lines.push("\n为了继续研究设计，请补充或确认：");
+  const clarify = [
+    ["研究对象", contract.population, "具体面向哪类学生、教师或研究参与者？"],
+    ["研究场景", contract.context, "具体在哪个课程、实验或应用场景中开展？"],
+    ["干预与对照", contract.intervention, "准备比较什么方法与基线条件？"],
+    ["主要指标", contract.outcomes, "用什么可观测指标判断效果？"],
+  ] as const;
+  clarify.forEach(([label, current, question]) => {
+    const currentText = valueText(current);
+    const unresolved = !currentText || currentText.includes("待确认") || currentText.includes("研究意图中描述");
+    lines.push(`${label}：${unresolved ? question : currentText}`);
+  });
+  const confirmations = Array.isArray(feasibility.required_confirmations) ? feasibility.required_confirmations : [];
+  if (confirmations.length) lines.push(`\n另外请确认：${confirmations.map(valueText).join("；")}`);
+  lines.push("\n你可以直接按“研究对象/场景/干预与对照/主要指标”逐项回复，我会据此更新导师规划。");
   return lines.join("\n");
 }
 

@@ -12,6 +12,7 @@ from stem_sci.context.models import (
     VerificationStatus,
 )
 from stem_sci.controller import PlanningRequest, ResearchController
+from stem_sci.agents import AgentInput, MentorPlanningAgent
 from stem_sci.core.enums import ProjectStage, TaskStatus
 from stem_sci.core.models import ApprovalRecord
 from stem_sci.core.reducers import merge_references
@@ -109,6 +110,29 @@ def test_controller_routes_from_scope_to_evidence_and_pauses_again() -> None:
     assert next_run.route_decision.selected_route == "evidence_review"
     assert next_run.workflow_state.current_stage is ProjectStage.WAITING_HUMAN
     assert next_run.approval_request.approval_type == "evidence_protocol"
+
+
+def test_planning_brief_extracts_clarifications_from_human_feedback() -> None:
+    agent_input = AgentInput(
+        agent_run_id="planning-clarified",
+        task_ref="demo:planning",
+        context_bundle_ref="context://initial",
+        allowed_output_types=list(MentorPlanningAgent.allowed_output_types),
+        allowed_tool_capabilities=[],
+        policy_version="policy-v1",
+        prompt_template_version="planner-v1",
+    )
+    brief = ResearchController._build_planning_brief(
+        "demo",
+        agent_input,
+        "AI物理建模；研究对象：华东师范大学物理师范生；研究场景：大学物理实验课程；"
+        "干预与对照：分层AI支架 vs 常规提示；主要指标：建模迁移得分。",
+    )
+    assert brief.population == "华东师范大学物理师范生"
+    assert brief.context == "大学物理实验课程"
+    assert brief.intervention == "分层AI支架"
+    assert brief.comparator == "常规提示"
+    assert brief.candidate_outcomes == ["建模迁移得分"]
 
 
 def test_controller_approval_resume_is_idempotent() -> None:

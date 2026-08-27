@@ -410,11 +410,18 @@ async def _read_uploaded_research_document(
 
 @app.get("/api/v1/health")
 def health() -> dict[str, object]:
+    llm_enabled = bool(os.getenv("STEM_SCI_LLM_API_KEY", "").strip()) and bool(
+        os.getenv("STEM_SCI_LLM_BASE_URL", "").strip()
+        and os.getenv("STEM_SCI_LLM_MODEL", "").strip()
+    )
     return {
         "status": "ok",
         "service": "stem-sci-backend",
         "configuration_valid": configuration_report.valid,
         "warnings": list(configuration_report.warnings),
+        "llm_enabled": llm_enabled,
+        "llm_model": os.getenv("STEM_SCI_LLM_MODEL", "").strip() or None,
+        "qa_mode": "llm" if llm_enabled else "fallback",
     }
 
 

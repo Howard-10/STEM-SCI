@@ -779,7 +779,9 @@ class ResearchController:
         planning_brief = self._build_planning_brief(
             request.project_id, agent_input, request.research_intent
         )
-        result = planner.propose_for(agent_input, planning_brief).agent_result
+        result = planner.propose_for(
+            agent_input, planning_brief, model_assisted=planner.pipeline is not None
+        ).agent_result
         if not result.candidate_artifact_refs:
             raise ValueError("planning Agent produced no candidate artifacts")
         execution_refs, operator_output_refs, operator_risk_flags = self._execute_agent_tools(
@@ -851,16 +853,30 @@ class ResearchController:
         project_id: str, agent_input: AgentInput, research_intent: str
     ) -> PlanningBrief:
         """Turn a short human idea into an explicit, reviewable planning brief."""
+        import re
+
+        def field(*labels: str, fallback: str) -> str:
+            label_pattern = "|".join(re.escape(label) for label in labels)
+            match = re.search(rf"(?:{label_pattern})\s*[:：]\s*([^；;\n]+)", research_intent)
+            return match.group(1).strip().rstrip("。．.") if match else fallback
+
+        outcomes = field("主要指标", "结果指标", fallback="主要研究目标指标（待确认）")
+        intervention_and_comparator = field("干预与对照", fallback="")
+        intervention = "研究意图中描述的干预、方法或技术"
+        comparator = "常规方法或基线条件（待确认）"
+        if intervention_and_comparator and re.search(r"\s*(?:vs|VS|对照|比较)\s*", intervention_and_comparator):
+            parts = re.split(r"\s*(?:vs|VS|对照|比较)\s*", intervention_and_comparator, maxsplit=1)
+            intervention, comparator = [part.strip() for part in parts]
         return PlanningBrief(
             agent_run_id=agent_input.agent_run_id,
             project_id=project_id,
             task_ref=agent_input.task_ref,
             topic=research_intent,
-            population="目标研究人群（待确认）",
-            context="教育或科研应用场景（待确认）",
-            intervention="研究意图中描述的干预、方法或技术",
-            comparator="常规方法或基线条件（待确认）",
-            candidate_outcomes=["主要研究目标指标（待确认）"],
+            population=field("研究对象", "研究人群", fallback="目标研究人群（待确认）"),
+            context=field("研究场景", "应用场景", fallback="教育或科研应用场景（待确认）"),
+            intervention=intervention,
+            comparator=comparator,
+            candidate_outcomes=[outcomes],
             constraints=["需要在正式研究前确认伦理、数据治理与样本可得性"],
             exclusions=["超出当前研究意图且无法由本项目验证的结论"],
         )
@@ -1140,7 +1156,9 @@ class ResearchController:
                 agent_input,
                 self._project_intents.get(project_id, ""),
             )
-            result = agent.propose_for(agent_input, planning_brief).agent_result
+            result = agent.propose_for(
+                agent_input, planning_brief, model_assisted=agent.pipeline is not None
+            ).agent_result
         else:
             result = self.dispatcher.dispatch(agent_id, agent_input, context_bundle)
         if not result.candidate_artifact_refs:

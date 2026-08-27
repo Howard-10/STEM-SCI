@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { answerWorkflowQuestion, buildWorkflowConversation, formatWorkflowArtifact } from "./conversation";
+import { answerWorkflowQuestion, buildWorkflowConversation, formatMentorPlanningReport, formatWorkflowArtifact, isPlanningClarification } from "./conversation";
 
 describe("buildWorkflowConversation", () => {
   it("builds the six-agent route and mentor report from persisted records", () => {
@@ -68,5 +68,21 @@ describe("buildWorkflowConversation", () => {
     expect(text).toContain("次级问题：");
     expect(text).toContain("1. 是否改善迁移能力？");
     expect(text).not.toContain("primary_question");
+  });
+
+  it("turns planner placeholders into focused user questions", () => {
+    const text = formatMentorPlanningReport([
+      { artifactType: "ResearchContractCandidate", body: { topic: "AI 物理建模", population: "目标研究人群（待确认）", context: "教育或科研应用场景（待确认）", intervention: "研究意图中描述的干预、方法或技术", comparator: "常规方法或基线条件（待确认）", outcomes: ["主要研究目标指标（待确认）"] } },
+      { artifactType: "FeasibilityReport", body: { required_confirmations: ["Confirm ethics and data-governance requirements."] } },
+    ]);
+    expect(text).toContain("为了继续研究设计，请补充或确认");
+    expect(text).toContain("研究对象");
+    expect(text).not.toContain("目标研究人群（待确认）");
+    expect(text).not.toContain("ResearchContractCandidate");
+  });
+
+  it("recognizes a user field clarification as planner feedback", () => {
+    expect(isPlanningClarification("研究对象：华东师范大学物理师范生；研究场景：大学物理实验课程")).toBe(true);
+    expect(isPlanningClarification("请检索 AI 物理教育的论文")).toBe(false);
   });
 });
