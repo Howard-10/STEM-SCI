@@ -37,10 +37,19 @@ from .router import (
     ReproducibilityReviewRequest,
     ReproducibilityReviewRunResult,
     ResearchController,
+    WorkflowFeedbackResult,
     WorkflowRunResult,
+    WorkflowTimeline,
 )
 from .langgraph_workflow import LangGraphWorkflow, LangGraphWorkflowState
 from .store import SQLiteWorkflowStore, WorkflowSnapshot, WorkflowStore
+from .workflow_timeline import (
+    InMemoryWorkflowFeedbackStore,
+    SQLiteWorkflowFeedbackStore,
+    WorkflowFeedback,
+    WorkflowFeedbackAction,
+    WorkflowFeedbackStore,
+)
 
 __all__ = [
     "AgentDispatcher",
@@ -71,6 +80,13 @@ __all__ = [
     "SQLiteDecisionStore",
     "SQLiteWorkflowStore",
     "WorkflowRunResult",
+    "WorkflowFeedbackResult",
+    "WorkflowTimeline",
+    "WorkflowFeedback",
+    "WorkflowFeedbackAction",
+    "WorkflowFeedbackStore",
+    "InMemoryWorkflowFeedbackStore",
+    "SQLiteWorkflowFeedbackStore",
     "WorkflowSnapshot",
     "WorkflowStore",
     "V1AnalysisExecutionResult",

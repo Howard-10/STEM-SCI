@@ -76,6 +76,12 @@ from stem_sci.statistics.models import AnalysisModelSpecification
 from .merger import validate_agent_result
 from .policy.route_store import RouteDecisionStore
 from .store import WorkflowStore
+from .workflow_timeline import (
+    InMemoryWorkflowFeedbackStore,
+    WorkflowFeedback,
+    WorkflowFeedbackAction,
+    WorkflowFeedbackStore,
+)
 
 
 class ControllerWorkflowState(BaseModel):
@@ -122,6 +128,21 @@ class WorkflowRunResult(BaseModel):
     agent_result: AgentResult
     approval_request: ApprovalRequest
     route_decision: RouteDecision
+
+
+class WorkflowTimeline(BaseModel):
+    project_id: str
+    research_intent: str
+    workflow_state: ControllerWorkflowState
+    agent_runs: list[AgentRunRecord]
+    artifact_contents: list[ArtifactContent]
+    routes: list[RouteDecision]
+    feedback: list[WorkflowFeedback]
+
+
+class WorkflowFeedbackResult(BaseModel):
+    workflow_state: ControllerWorkflowState
+    workflow_run: WorkflowRunResult | None = None
 
 
 class ReproducibilityReviewRequest(BaseModel):
@@ -341,6 +362,7 @@ class ResearchController:
         artifact_content_store: ArtifactContentStore | None = None,
         agent_run_store: AgentRunStore | None = None,
         route_store: RouteDecisionStore | None = None,
+        feedback_store: WorkflowFeedbackStore | None = None,
         data_pipeline_root: Path | None = None,
     ) -> None:
         self.dispatcher = dispatcher or AgentDispatcher()
@@ -352,6 +374,7 @@ class ResearchController:
         self.artifact_content_store = artifact_content_store or InMemoryArtifactContentStore()
         self.agent_run_store = agent_run_store or InMemoryAgentRunStore()
         self.route_store = route_store
+        self.feedback_store = feedback_store or InMemoryWorkflowFeedbackStore()
         self._strict_data_pipeline = data_pipeline_root is not None
         self.data_pipeline = DataPipelineController(
             storage_root=data_pipeline_root or Path(".stem_sci"),
@@ -845,6 +868,67 @@ class ResearchController:
         if restored is not None:
             return restored
         raise ValueError(f"unknown project: {project_id}")
+
+    def workflow_timeline(self, project_id: str) -> WorkflowTimeline:
+        state = self.get_state(project_id)
+        return WorkflowTimeline(
+            project_id=project_id,
+            research_intent=self._project_intents[project_id],
+            workflow_state=state,
+            agent_runs=sorted(
+                self.agent_run_store.list_project(project_id),
+                key=lambda item: (item.started_at, item.agent_run_id),
+            ),
+            artifact_contents=sorted(
+                self.artifact_content_store.list_project(project_id),
+                key=lambda item: (item.created_at, item.artifact_id, item.version),
+            ),
+            routes=sorted(
+                self.route_store.list_project(project_id) if self.route_store else [],
+                key=lambda item: (item.created_at, item.decision_id),
+            ),
+            feedback=self.feedback_store.list_project(project_id),
+        )
+
+    def apply_workflow_feedback(self, feedback: WorkflowFeedback) -> WorkflowFeedbackResult:
+        state = self.get_state(feedback.project_id)
+        route = state.last_route_decision
+        if route is None or route.selected_route != feedback.agent_id:
+            raise ValueError("feedback agent does not match the current workflow agent")
+        if feedback.stage != state.current_stage.value:
+            raise ValueError("feedback stage does not match the current workflow stage")
+        if feedback.action is WorkflowFeedbackAction.CONTINUE and state.pending_approval_ref is not None:
+            raise ValueError("workflow has a pending approval; approve or reject it before continuing")
+        if feedback.action is WorkflowFeedbackAction.RERUN and state.pending_approval_ref is None:
+            raise ValueError("rerun requires a pending candidate approval")
+
+        self.feedback_store.put(feedback)
+        self._project_intents[feedback.project_id] = (
+            f"{self._project_intents[feedback.project_id]}\n\n"
+            f"[User feedback for {feedback.agent_id}]: {feedback.feedback}"
+        )
+        self._persist(feedback.project_id)
+
+        if feedback.action is WorkflowFeedbackAction.PAUSE:
+            return WorkflowFeedbackResult(workflow_state=state)
+        if feedback.action is WorkflowFeedbackAction.CONTINUE:
+            workflow_run = self.run_next(feedback.project_id)
+            return WorkflowFeedbackResult(
+                workflow_state=workflow_run.workflow_state,
+                workflow_run=workflow_run,
+            )
+
+        self.resume_approval(
+            feedback.project_id,
+            self.get_pending_approval(feedback.project_id),
+            decision="rejected",
+            decided_by=feedback.created_by,
+        )
+        workflow_run = self.run_next(feedback.project_id)
+        return WorkflowFeedbackResult(
+            workflow_state=workflow_run.workflow_state,
+            workflow_run=workflow_run,
+        )
 
     def run_next(self, project_id: str) -> WorkflowRunResult:
         """Route the next eligible Agent and pause for a Controller approval."""
