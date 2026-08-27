@@ -19,7 +19,7 @@ import {
   type RuntimeStatus,
   type WorkflowTimeline,
 } from "./api/workflow";
-import { answerWorkflowQuestion, buildWorkflowConversation } from "./workflow/conversation";
+import { answerWorkflowQuestion, artifactLabels, buildWorkflowConversation, formatWorkflowArtifact } from "./workflow/conversation";
 import { api } from "./api/client";
 import type { SearchResult, SharedCorpusSummary } from "./types/context";
 import { demoBundle, demoQAResponse, demoRuntime } from "./demo/data";
@@ -1337,20 +1337,10 @@ export function App() {
                   <div className="message-meta">STEM-SCI <span>·</span> {item.agentName} 阶段报告</div>
                   <p>{item.pendingApproval ? "本阶段已完成，等待你审核候选成果。" : "已保留本阶段运行记录。"}</p>
                   {item.artifacts.length ? item.artifacts.map((artifact, artifactIndex) => (
-                    <details key={`${artifact.artifactType}-${artifactIndex}`} open={item.agentId === "mentor_planning"}>
-                      <summary>{item.agentId === "mentor_planning" ? ({
-                        ResearchContractCandidate: "研究契约（候选）",
-                        ResearchScopeCandidate: "研究边界（候选）",
-                        ResearchQuestionTree: "研究问题树",
-                        FeasibilityReport: "可行性报告（候选）",
-                        ProjectRoadmap: "项目路线图",
-                        LiteratureRequirementList: "文献证据要求",
-                        InitialRiskProfile: "初始风险与缓解措施",
-                        UnresolvedQuestionList: "待确认事项",
-                        PlanningRationaleCandidate: "规划推理说明",
-                      } as Record<string, string>)[artifact.artifactType] ?? artifact.artifactType : artifact.artifactType}</summary>
-                      <pre>{JSON.stringify(artifact.body, null, 2)}</pre>
-                    </details>
+                    <section className="workflow-artifact-text" key={`${artifact.artifactType}-${artifactIndex}`}>
+                      <h4>{artifactLabels[artifact.artifactType] ?? artifact.artifactType}</h4>
+                      <p>{formatWorkflowArtifact(artifact.artifactType, artifact.body)}</p>
+                    </section>
                   )) : <p>输出内容不可用。</p>}
                   {item.pendingApproval && <div className="workflow-control-actions">
                     <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("approved")}>通过候选方案</button>

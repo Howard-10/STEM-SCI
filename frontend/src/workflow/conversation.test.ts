@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { answerWorkflowQuestion, buildWorkflowConversation } from "./conversation";
+import { answerWorkflowQuestion, buildWorkflowConversation, formatWorkflowArtifact } from "./conversation";
 
 describe("buildWorkflowConversation", () => {
   it("builds the six-agent route and mentor report from persisted records", () => {
@@ -56,5 +56,17 @@ describe("buildWorkflowConversation", () => {
     expect(answer).toContain("研究边界");
     expect(answer).toContain("AI物理教育");
     expect(answer).toContain("确认伦理要求");
+  });
+
+  it("formats mentor artifacts as readable report text instead of raw JSON", () => {
+    const text = formatWorkflowArtifact("ResearchQuestionTree", {
+      primary_question: "AI 支架如何影响物理建模？",
+      secondary_questions: ["是否改善迁移能力？", "哪些学生受益？"],
+      out_of_scope_questions: ["医学诊断"],
+    });
+    expect(text).toContain("核心研究问题：AI 支架如何影响物理建模？");
+    expect(text).toContain("次级问题：");
+    expect(text).toContain("1. 是否改善迁移能力？");
+    expect(text).not.toContain("primary_question");
   });
 });

@@ -36,6 +36,60 @@ function section(label: string, values: string[]): string {
   return values.length ? `\n${label}：\n${values.map((value) => `- ${value}`).join("\n")}` : "";
 }
 
+function valueText(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(valueText).filter(Boolean).join("、");
+  return "";
+}
+
+export const artifactLabels: Record<string, string> = {
+  ResearchContractCandidate: "研究契约（候选）",
+  ResearchScopeCandidate: "研究边界（候选）",
+  ResearchQuestionTree: "研究问题树",
+  FeasibilityReport: "可行性报告（候选）",
+  ProjectRoadmap: "项目路线图",
+  LiteratureRequirementList: "文献证据要求",
+  InitialRiskProfile: "初始风险与缓解措施",
+  UnresolvedQuestionList: "待确认事项",
+  PlanningRationaleCandidate: "规划推理说明",
+  EvidenceSet: "证据检索摘要",
+};
+
+export function formatWorkflowArtifact(artifactType: string, body: Record<string, unknown>): string {
+  const lines: string[] = [];
+  const add = (label: string, value: unknown) => {
+    if (Array.isArray(value)) {
+      const values = value.map(valueText).filter(Boolean);
+      if (values.length) lines.push(`${label}：\n${values.map((item, index) => `${index + 1}. ${item}`).join("\n")}`);
+      return;
+    }
+    const text = valueText(value);
+    if (text) lines.push(`${label}：${text}`);
+  };
+  if (artifactType === "ResearchScopeCandidate") {
+    add("纳入范围", body.in_scope); add("排除范围", body.out_of_scope);
+  } else if (artifactType === "ResearchQuestionTree") {
+    add("核心研究问题", body.primary_question); add("次级问题", body.secondary_questions); add("不纳入问题", body.out_of_scope_questions);
+  } else if (artifactType === "FeasibilityReport") {
+    add("可行性状态", body.status); add("可行性假设", body.assumptions); add("约束", body.constraints); add("风险", body.risks); add("待确认事项", body.required_confirmations);
+  } else if (artifactType === "ProjectRoadmap") {
+    add("后续里程碑", body.milestones); add("人工决策点", body.human_decision_points);
+  } else if (artifactType === "ResearchContractCandidate") {
+    add("研究主题", body.topic); add("研究人群", body.population); add("研究场景", body.context); add("干预或方法", body.intervention); add("对照条件", body.comparator); add("结果指标", body.outcomes);
+  } else if (artifactType === "LiteratureRequirementList") {
+    add("所需证据类别", body.required_evidence_categories); add("筛选问题", body.screening_questions);
+  } else if (artifactType === "InitialRiskProfile") {
+    add("主要风险", body.risks); add("缓解措施", body.mitigations);
+  } else if (artifactType === "UnresolvedQuestionList") {
+    add("待解决问题", body.items);
+  } else if (artifactType === "EvidenceSet") {
+    add("检索状态", body.retrieval_status); add("检索问题", body.query); add("风险提示", body.risk_flags);
+  } else {
+    Object.entries(body).forEach(([key, value]) => add(key, value));
+  }
+  return lines.join("\n");
+}
+
 /** Answer follow-up questions from persisted Agent outputs without triggering generic retrieval. */
 export function answerWorkflowQuestion(question: string, timeline: TimelineInput): string | null {
   const normalized = question.trim();
