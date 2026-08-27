@@ -603,8 +603,9 @@ export function App() {
     setBusy(true);
     try {
       const workflowCommand = /^(确定|确认|同意|开始|继续|通过|下一步|进入下一阶段|开始进行导师规划|确认规划|确认方案|通过候选方案|调度下一 ?Agent)[。！!。 ]*$/iu.test(trimmed);
+      const workflowState = workflow ?? workflowTimeline?.workflow_state;
       if (workflowCommand && auth?.access_token && activeProject) {
-        if (workflow?.pending_approval_ref) {
+        if (workflowState?.pending_approval_ref) {
           await workflowApi.approve(projectId, "approved", auth.user.username);
           await refreshWorkflow();
           await reloadWorkflowTimeline();
@@ -615,7 +616,7 @@ export function App() {
           }]);
           return;
         }
-        if (workflow) {
+        if (workflowState) {
           const next = await workflowApi.runNext(projectId);
           setWorkflow(next.workflow_state);
           await reloadWorkflowTimeline();
@@ -1305,6 +1306,13 @@ export function App() {
                       <pre>{JSON.stringify(artifact.body, null, 2)}</pre>
                     </details>
                   )) : <p>输出内容不可用。</p>}
+                  {item.pendingApproval && <div className="workflow-control-actions">
+                    <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("approved")}>通过候选方案</button>
+                    <button className="secondary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("rejected")}>退回</button>
+                  </div>}
+                  {item.isLatest && !item.pendingApproval && workflowState && !["VERIFIED", "RELEASED", "BLOCKED", "REWORK"].includes(workflowState.current_stage) && <div className="workflow-control-actions">
+                    <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void runNextWorkflowStage()}>{workflowBusy ? "调度中..." : "继续下一 Agent"}</button>
+                  </div>}
                   {item.pendingApproval && <div className="workflow-feedback-actions">
                     <textarea value={workflowFeedback} onChange={(event) => setWorkflowFeedback(event.target.value)} placeholder="补充你的研究思路或修改意见..." rows={2} />
                     <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedback(item.agentId, "pause")}>保存意见并暂停</button>

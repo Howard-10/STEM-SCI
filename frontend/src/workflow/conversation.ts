@@ -11,6 +11,8 @@ type WorkflowReportItem = {
   agentId: string;
   agentName: string;
   pendingApproval: boolean;
+  isLatest: boolean;
+  approvalReason: string | null;
   artifacts: Array<{ artifactType: string; body: Record<string, unknown> }>;
 };
 
@@ -18,6 +20,7 @@ type TimelineInput = {
   project_id?: string;
   research_intent?: string;
   workflow_state: { pending_approval_ref: string | null };
+  pending_approval?: { approval_type?: string; reason?: string } | null;
   agent_runs: Array<{ agent_run_id: string; agent_id: string; started_at: string; output_artifact_refs: string[] }>;
   artifact_contents: Array<{ artifact_id: string; artifact_type: string; body: Record<string, unknown> }>;
   routes?: unknown[];
@@ -44,6 +47,8 @@ export function buildWorkflowConversation(timeline: TimelineInput): WorkflowConv
       agentId: run.agent_id,
       agentName: steps.find((step) => step.agentId === run.agent_id)?.name ?? run.agent_id,
       pendingApproval: run.agent_run_id === latest && timeline.workflow_state.pending_approval_ref !== null,
+      isLatest: run.agent_run_id === latest,
+      approvalReason: run.agent_run_id === latest ? timeline.pending_approval?.reason ?? null : null,
       artifacts: (Array.isArray(timeline.artifact_contents) ? timeline.artifact_contents : [])
         .filter((artifact) => artifact.artifact_id.startsWith(`${run.agent_run_id}:`))
         .map((artifact) => ({ artifactType: artifact.artifact_type, body: artifact.body })),

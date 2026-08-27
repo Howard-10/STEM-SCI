@@ -203,6 +203,7 @@ export interface WorkflowTimeline {
   artifact_contents: Array<{ artifact_id: string; artifact_type: string; body: Record<string, unknown> }>;
   routes: RouteDecision[];
   feedback: Array<{ feedback_id: string; agent_id: string; stage: string; action: "continue" | "rerun" | "pause"; feedback: string; created_by: string; created_at: string }>;
+  pending_approval: { approval_type: string; reason: string; risk_summary: string } | null;
 }
 const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
 

@@ -138,6 +138,7 @@ class WorkflowTimeline(BaseModel):
     artifact_contents: list[ArtifactContent]
     routes: list[RouteDecision]
     feedback: list[WorkflowFeedback]
+    pending_approval: ApprovalRequest | None = None
 
 
 class WorkflowFeedbackResult(BaseModel):
@@ -888,6 +889,7 @@ class ResearchController:
                 key=lambda item: (item.created_at, item.decision_id),
             ),
             feedback=self.feedback_store.list_project(project_id),
+            pending_approval=self._approvals.get(project_id),
         )
 
     def apply_workflow_feedback(self, feedback: WorkflowFeedback) -> WorkflowFeedbackResult:
