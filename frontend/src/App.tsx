@@ -585,7 +585,7 @@ export function App() {
 
   const submitQuestion = async (value = question) => {
     const trimmed = value.trim();
-    if (!trimmed || busy || !activeProject) return;
+    if (!trimmed || busy) return;
     setMessages((current) => [...current, {
       id: `user-${Date.now()}`,
       role: "user",
@@ -597,9 +597,21 @@ export function App() {
     setAttachmentError("");
     setBusy(true);
     try {
+      let targetProjectId = projectId;
+      if (!activeProject) {
+        if (!auth?.access_token) throw new Error("请先登录并创建研究项目");
+        const created = await authApi.createProject(auth.access_token, {
+          title: "未命名研究项目",
+          research_direction: trimmed,
+          abstract: null,
+        });
+        targetProjectId = created.project_id;
+        setProjects((current) => [created, ...current.filter((item) => item.project_id !== created.project_id)]);
+        setProjectId(created.project_id);
+      }
       const response = auth?.access_token
         ? await authApi.projectChatAnswer(auth.access_token, {
-          project_id: projectId,
+          project_id: targetProjectId,
           question: trimmed,
           mode,
           conversation_id: conversationId,
@@ -608,7 +620,7 @@ export function App() {
           token_budget: 3000,
         })
         : await qaApi.answer({
-          project_id: projectId,
+          project_id: targetProjectId,
           question: trimmed,
           mode,
           conversation_id: conversationId,
