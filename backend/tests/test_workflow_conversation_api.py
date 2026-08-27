@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient
@@ -63,6 +64,25 @@ def test_project_timeline_contains_structured_mentor_planning_outputs(client: Te
     ).json()
     artifact_types = {item["artifact_type"] for item in timeline["artifact_contents"]}
     assert {"ResearchScopeCandidate", "ResearchQuestionTree", "FeasibilityReport", "ProjectRoadmap"} <= artifact_types
+
+
+def test_project_timeline_backfills_legacy_planner_run(client: TestClient) -> None:
+    token, project_id = _project(client)
+    started = client.post(
+        f"/api/v1/projects/{project_id}/workflow",
+        headers=_auth(token),
+        json={"research_intent": "研究 AI 辅助物理建模", "run_id": "legacy-planning"},
+    )
+    assert started.status_code == 200, started.text
+    from stem_sci import api
+    with sqlite3.connect(api.workflow_database) as connection:
+        connection.execute(
+            "delete from workflow_artifact_contents where project_id = ?", (project_id,)
+        )
+    timeline = client.get(
+        f"/api/v1/projects/{project_id}/workflow/timeline", headers=_auth(token)
+    ).json()
+    assert "ResearchQuestionTree" in {item["artifact_type"] for item in timeline["artifact_contents"]}
 
 
 def test_feedback_rerun_returns_new_current_agent_run(client: TestClient) -> None:

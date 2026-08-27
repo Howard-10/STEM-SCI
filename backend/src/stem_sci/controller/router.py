@@ -898,18 +898,23 @@ class ResearchController:
 
     def workflow_timeline(self, project_id: str) -> WorkflowTimeline:
         state = self.get_state(project_id)
+        agent_runs = sorted(
+            self.agent_run_store.list_project(project_id),
+            key=lambda item: (item.started_at, item.agent_run_id),
+        )
+        artifact_contents = sorted(
+            self.artifact_content_store.list_project(project_id),
+            key=lambda item: (item.created_at, item.artifact_id, item.version),
+        )
+        artifact_contents = self._restore_legacy_planning_contents(
+            project_id, agent_runs, artifact_contents
+        )
         return WorkflowTimeline(
             project_id=project_id,
             research_intent=self._project_intents[project_id],
             workflow_state=state,
-            agent_runs=sorted(
-                self.agent_run_store.list_project(project_id),
-                key=lambda item: (item.started_at, item.agent_run_id),
-            ),
-            artifact_contents=sorted(
-                self.artifact_content_store.list_project(project_id),
-                key=lambda item: (item.created_at, item.artifact_id, item.version),
-            ),
+            agent_runs=agent_runs,
+            artifact_contents=artifact_contents,
             artifacts=sorted(
                 self.artifact_store.list_project(project_id),
                 key=lambda item: (item.created_at, item.artifact_id, item.version),
@@ -921,6 +926,69 @@ class ResearchController:
             feedback=self.feedback_store.list_project(project_id),
             pending_approval=self._approvals.get(project_id),
         )
+
+    def _restore_legacy_planning_contents(
+        self,
+        project_id: str,
+        agent_runs: list[AgentRunRecord],
+        artifact_contents: list[ArtifactContent],
+    ) -> list[ArtifactContent]:
+        """Backfill readable planner bodies for runs created by the old scaffold."""
+        planner = self.dispatcher.registry.get("mentor_planning")
+        if not isinstance(planner, MentorPlanningAgent):
+            return artifact_contents
+        known_ids = {item.artifact_id for item in artifact_contents}
+        restored = list(artifact_contents)
+        for run in agent_runs:
+            if run.agent_id != "mentor_planning":
+                continue
+            expected_types = {
+                "ResearchContractCandidate",
+                "FeasibilityReport",
+                "ResearchQuestionTree",
+                "ResearchScopeCandidate",
+                "ProjectRoadmap",
+            }
+            if any(
+                f"{run.agent_run_id}:artifact:" in item.artifact_id
+                and item.artifact_type in expected_types
+                for item in artifact_contents
+            ):
+                continue
+            if not any(ref.rsplit("/", maxsplit=1)[-1] in expected_types for ref in run.output_artifact_refs):
+                continue
+            agent_input = AgentInput(
+                agent_run_id=run.agent_run_id,
+                task_ref=f"{project_id}:planning",
+                context_bundle_ref="context://initial",
+                allowed_tool_capabilities=list(planner.allowed_tool_capabilities),
+                allowed_output_types=list(planner.allowed_output_types),
+                policy_version="controller-policy-v1",
+                prompt_template_version="planner-scaffold-v1",
+            )
+            outcome = planner.propose_for(
+                agent_input,
+                self._build_planning_brief(
+                    project_id, agent_input, self._project_intents.get(project_id, "")
+                ),
+            )
+            for index, candidate in enumerate(outcome.agent_result.candidate_artifacts):
+                artifact_id = f"{run.agent_run_id}:artifact:{index}"
+                if artifact_id in known_ids:
+                    continue
+                restored.append(
+                    ArtifactContent(
+                        project_id=project_id,
+                        artifact_id=artifact_id,
+                        version=1,
+                        artifact_type=candidate.artifact_type,
+                        schema_version=candidate.schema_version,
+                        body=candidate.body,
+                        created_at=run.started_at,
+                    )
+                )
+                known_ids.add(artifact_id)
+        return sorted(restored, key=lambda item: (item.created_at, item.artifact_id, item.version))
 
     def apply_workflow_feedback(self, feedback: WorkflowFeedback) -> WorkflowFeedbackResult:
         state = self.get_state(feedback.project_id)
