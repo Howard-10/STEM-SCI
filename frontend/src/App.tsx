@@ -608,6 +608,18 @@ export function App() {
         targetProjectId = created.project_id;
         setProjects((current) => [created, ...current.filter((item) => item.project_id !== created.project_id)]);
         setProjectId(created.project_id);
+        const planning = await workflowApi.startProject({
+          project_id: created.project_id,
+          research_intent: trimmed,
+        });
+        setWorkflow(planning.workflow_state);
+        setWorkflowTimeline(await workflowApi.getTimeline(created.project_id));
+        setMessages((current) => [...current, {
+          id: `assistant-workflow-${Date.now()}`,
+          role: "assistant",
+          content: "已根据你的研究思路启动项目工作流。请先审核导师规划的研究边界、问题树与可行性方案。",
+        }]);
+        return;
       }
       const response = auth?.access_token
         ? await authApi.projectChatAnswer(auth.access_token, {

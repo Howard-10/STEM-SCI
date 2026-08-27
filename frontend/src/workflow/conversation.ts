@@ -34,7 +34,8 @@ const steps = [
 ];
 
 export function buildWorkflowConversation(timeline: TimelineInput): WorkflowConversationItem[] {
-  const runs = [...timeline.agent_runs].sort((left, right) => left.started_at.localeCompare(right.started_at));
+  const runs = [...(Array.isArray(timeline.agent_runs) ? timeline.agent_runs : [])]
+    .sort((left, right) => left.started_at.localeCompare(right.started_at));
   const latest = runs.at(-1)?.agent_run_id ?? null;
   return [
     { kind: "workflow-route", currentAgent: runs.at(-1)?.agent_id ?? null, steps },
@@ -43,7 +44,7 @@ export function buildWorkflowConversation(timeline: TimelineInput): WorkflowConv
       agentId: run.agent_id,
       agentName: steps.find((step) => step.agentId === run.agent_id)?.name ?? run.agent_id,
       pendingApproval: run.agent_run_id === latest && timeline.workflow_state.pending_approval_ref !== null,
-      artifacts: timeline.artifact_contents
+      artifacts: (Array.isArray(timeline.artifact_contents) ? timeline.artifact_contents : [])
         .filter((artifact) => artifact.artifact_id.startsWith(`${run.agent_run_id}:`))
         .map((artifact) => ({ artifactType: artifact.artifact_type, body: artifact.body })),
     })),
