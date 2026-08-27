@@ -28,6 +28,53 @@ type TimelineInput = {
   feedback?: unknown[];
 };
 
+function asList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function section(label: string, values: string[]): string {
+  return values.length ? `\n${label}：\n${values.map((value) => `- ${value}`).join("\n")}` : "";
+}
+
+/** Answer follow-up questions from persisted Agent outputs without triggering generic retrieval. */
+export function answerWorkflowQuestion(question: string, timeline: TimelineInput): string | null {
+  const normalized = question.trim();
+  if (!normalized || !/(导师规划|研究边界|问题树|可行性|路线图|规划方案|当前方案)/u.test(normalized)) return null;
+  const runs = Array.isArray(timeline.agent_runs) ? timeline.agent_runs : [];
+  const latestMentor = [...runs].reverse().find((run) => run.agent_id === "mentor_planning");
+  if (!latestMentor) return null;
+  const contents = (Array.isArray(timeline.artifact_contents) ? timeline.artifact_contents : []).filter((artifact) => {
+    if (artifact.artifact_id.startsWith(`${latestMentor.agent_run_id}:`)) return true;
+    const refs = Array.isArray(latestMentor.output_artifact_refs) ? latestMentor.output_artifact_refs : [];
+    return refs.some((ref) => ref.includes(`/${artifact.artifact_id}/`) || ref.endsWith(`/${artifact.artifact_id}`));
+  });
+  if (!contents.length) return "导师规划已运行，但当前时间线还没有挂载可读取的阶段产物。请刷新项目后重试，或退回当前 Agent 要求重新生成。";
+  const byType = (type: string) => contents.find((item) => item.artifact_type === type)?.body ?? {};
+  const scope = byType("ResearchScopeCandidate");
+  const questions = byType("ResearchQuestionTree");
+  const feasibility = byType("FeasibilityReport");
+  const roadmap = byType("ProjectRoadmap");
+  const lines = ["这是当前导师规划 Agent 生成的候选方案解读（仍需你审核，不代表已获得伦理或实证结论）。"];
+  if (/研究边界|规划方案|当前方案/u.test(normalized)) {
+    lines.push(section("研究边界（候选）", asList(scope.in_scope)));
+    lines.push(section("明确排除", asList(scope.out_of_scope)));
+  }
+  if (/问题树|研究问题|规划方案|当前方案/u.test(normalized)) {
+    if (typeof questions.primary_question === "string") lines.push(`\n核心研究问题：${questions.primary_question}`);
+    lines.push(section("次级问题", asList(questions.secondary_questions)));
+    lines.push(section("不纳入问题", asList(questions.out_of_scope_questions)));
+  }
+  if (/可行性|规划方案|当前方案/u.test(normalized)) {
+    if (typeof feasibility.status === "string") lines.push(`\n可行性状态：${feasibility.status}`);
+    lines.push(section("可行性假设", asList(feasibility.assumptions)));
+    lines.push(section("约束", asList(feasibility.constraints)));
+    lines.push(section("风险", asList(feasibility.risks)));
+    lines.push(section("待你确认", asList(feasibility.required_confirmations)));
+  }
+  if (/路线图|规划方案|当前方案/u.test(normalized)) lines.push(section("后续里程碑", asList(roadmap.milestones)));
+  return lines.join("").trim();
+}
+
 const steps = [
   { agentId: "mentor_planning", name: "导师规划", task: "研究边界、问题树与可行性方案" },
   { agentId: "evidence_review", name: "证据审查", task: "文献检索、核验与证据矩阵" },

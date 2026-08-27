@@ -19,7 +19,7 @@ import {
   type RuntimeStatus,
   type WorkflowTimeline,
 } from "./api/workflow";
-import { buildWorkflowConversation } from "./workflow/conversation";
+import { answerWorkflowQuestion, buildWorkflowConversation } from "./workflow/conversation";
 import { api } from "./api/client";
 import type { SearchResult, SharedCorpusSummary } from "./types/context";
 import { demoBundle, demoQAResponse, demoRuntime } from "./demo/data";
@@ -702,6 +702,15 @@ export function App() {
           id: `assistant-workflow-${Date.now()}`,
           role: "assistant",
           content: "已根据你的研究思路启动项目工作流。请先审核导师规划的研究边界、问题树与可行性方案。",
+        }]);
+        return;
+      }
+      const workflowAnswer = workflowTimeline && answerWorkflowQuestion(trimmed, workflowTimeline);
+      if (workflowAnswer) {
+        setMessages((current) => [...current, {
+          id: `assistant-workflow-answer-${Date.now()}`,
+          role: "assistant",
+          content: workflowAnswer,
         }]);
         return;
       }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildWorkflowConversation } from "./conversation";
+import { answerWorkflowQuestion, buildWorkflowConversation } from "./conversation";
 
 describe("buildWorkflowConversation", () => {
   it("builds the six-agent route and mentor report from persisted records", () => {
@@ -41,5 +41,20 @@ describe("buildWorkflowConversation", () => {
       artifact_contents: [{ artifact_id: "planning-2:artifact:0", artifact_type: "ResearchScopeCandidate", body: { research_boundary: "scope" } }],
     });
     expect(items[1]).toMatchObject({ kind: "workflow-report", artifacts: [{ artifactType: "ResearchScopeCandidate" }] });
+  });
+
+  it("answers mentor planning questions from the current workflow artifacts", () => {
+    const answer = answerWorkflowQuestion("导师规划的研究边界和可行性是什么？", {
+      workflow_state: { pending_approval_ref: "approval-1" },
+      pending_approval: { reason: "请审核" },
+      agent_runs: [{ agent_run_id: "planning-2", agent_id: "mentor_planning", started_at: "2026-08-27T00:00:00Z", output_artifact_refs: [] }],
+      artifact_contents: [
+        { artifact_id: "planning-2:artifact:0", artifact_type: "ResearchScopeCandidate", body: { in_scope: ["AI物理教育"], out_of_scope: ["医学"] } },
+        { artifact_id: "planning-2:artifact:1", artifact_type: "FeasibilityReport", body: { status: "CANDIDATE_FEASIBLE", required_confirmations: ["确认伦理要求"] } },
+      ],
+    });
+    expect(answer).toContain("研究边界");
+    expect(answer).toContain("AI物理教育");
+    expect(answer).toContain("确认伦理要求");
   });
 });
