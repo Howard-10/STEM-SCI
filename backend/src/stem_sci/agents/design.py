@@ -23,6 +23,7 @@ class ResearchDesignAgent(BaseAgent):
     supported_task_types = ("draft_study_protocol", "define_estimand", "draft_preregistration")
     allowed_tool_capabilities = ()
     allowed_output_types = (
+        "AgentReasoningCandidate",
         "ResearchQuestionCandidate",
         "HypothesisCandidate",
         "Estimand",
@@ -41,7 +42,8 @@ class ResearchDesignAgent(BaseAgent):
         "DesignRationaleCandidate",
     )
 
-    def __init__(self, pipeline: ResearchDesignPipeline | None = None) -> None:
+    def __init__(self, pipeline: ResearchDesignPipeline | None = None, *, reasoning_generator=None, reasoning_model: str | None = None) -> None:
+        super().__init__(reasoning_generator=reasoning_generator, reasoning_model=reasoning_model)
         self.pipeline = pipeline
 
     def propose(self, brief: ResearchDesignBrief) -> ResearchDesignOutcome:

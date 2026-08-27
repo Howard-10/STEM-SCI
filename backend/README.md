@@ -58,6 +58,8 @@ python -m pytest -q tests/test_langgraph_workflow.py
 
 Real GPT calls are opt-in for mentor planning, research design, evidence review, and paper writing. Configure `STEM_SCI_LLM_PROVIDER=gpt`, a GPT-compatible `STEM_SCI_LLM_BASE_URL`, `STEM_SCI_LLM_MODEL`, `STEM_SCI_LLM_TIMEOUT_SECONDS`, and the per-run `STEM_SCI_MAX_LLM_CALLS` budget. Keep `STEM_SCI_LLM_API_KEY` in the local environment only. Automated tests inject `FakeLLMProvider` and do not access the network.
 
+When configured, all six Agents use bounded structured LLM reasoning. Mentor planning first extracts missing fields from natural-language intent, evidence and writing use typed pipelines, and research design, data analysis, and independent review attach an `AgentReasoningCandidate`. These model outputs remain candidates: the Controller still owns persistence, tools, approvals, workflow state, and release. Without the key, every Agent has a deterministic fallback and the health endpoint reports `llm_enabled=false`.
+
 ## Conversational QA
 
 The user-facing QA chain is exposed separately from the six-agent workflow:

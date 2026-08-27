@@ -14,6 +14,7 @@ from .provider import (
     LLMTransportError,
 )
 from .structured_generator import StructuredGenerationError, StructuredGenerator
+from .reasoning import AgentReasoningCandidate, AgentReasoningPipeline
 
 __all__ = [
     "ChatCompletionResult",
@@ -30,4 +31,6 @@ __all__ = [
     "PromptTemplate",
     "StructuredGenerationError",
     "StructuredGenerator",
+    "AgentReasoningCandidate",
+    "AgentReasoningPipeline",
 ]

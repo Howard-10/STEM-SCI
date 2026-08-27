@@ -19,6 +19,7 @@ from stem_sci.core.reducers import merge_references
 from stem_sci.core.state import ResearchState
 from stem_sci.operators.models import OperatorSpec
 from stem_sci.operators.registry import OperatorRegistry
+from stem_sci.agents.runtime import FakeLLMProvider, StructuredGenerator
 
 
 def test_research_state_is_reference_only_and_project_scoped() -> None:
@@ -133,6 +134,65 @@ def test_planning_brief_extracts_clarifications_from_human_feedback() -> None:
     assert brief.intervention == "分层AI支架"
     assert brief.comparator == "常规提示"
     assert brief.candidate_outcomes == ["建模迁移得分"]
+
+
+def test_base_agent_attaches_llm_reasoning_candidate_when_configured() -> None:
+    from stem_sci.agents import ResearchDesignAgent
+
+    agent = ResearchDesignAgent(
+        reasoning_generator=StructuredGenerator(FakeLLMProvider([{
+            "summary": "根据已批准范围评估研究设计风险。",
+            "key_decisions": ["保留预注册边界"],
+            "open_questions": ["确认测量工具"],
+            "risk_flags": ["需要人工审批"],
+        }])),
+        reasoning_model="fake-model",
+    )
+    result = agent.run(AgentInput(
+        agent_run_id="design-llm",
+        task_ref="demo:design",
+        context_bundle_ref="context://demo",
+        allowed_tool_capabilities=[],
+        allowed_output_types=["AgentReasoningCandidate"],
+        policy_version="policy-v1",
+        prompt_template_version="design-v1",
+    ))
+    assert result.candidate_artifacts[0].artifact_type == "AgentReasoningCandidate"
+    assert result.llm_metadata_refs[0].startswith("llm-metadata://")
+
+
+def test_planner_pipeline_extracts_natural_language_brief() -> None:
+    from stem_sci.agents import MentorPlanningPipeline
+
+    pipeline = MentorPlanningPipeline(
+        generator=StructuredGenerator(FakeLLMProvider([{
+            "population": "物理师范生",
+            "context": "力学实验课",
+            "intervention": "分层 AI 支架",
+            "comparator": "常规提示",
+            "primary_outcome": "建模迁移得分",
+            "clarifying_questions": ["确认样本量"],
+        }])),
+        model="fake-model",
+    )
+    brief = ResearchController._build_planning_brief(
+        "demo",
+        AgentInput(
+            agent_run_id="planner-extract",
+            task_ref="demo:planning",
+            context_bundle_ref="context://demo",
+            allowed_output_types=[],
+            allowed_tool_capabilities=[],
+            policy_version="policy-v1",
+            prompt_template_version="planner-v1",
+        ),
+        "我想研究 AI 对物理建模的影响",
+    )
+    enriched = ResearchController._llm_enrich_planning_brief(
+        MentorPlanningAgent(pipeline=pipeline), brief, "我想研究 AI 对物理建模的影响"
+    )
+    assert enriched.population == "物理师范生"
+    assert enriched.candidate_outcomes == ["建模迁移得分"]
 
 
 def test_controller_approval_resume_is_idempotent() -> None:

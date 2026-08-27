@@ -35,6 +35,7 @@ from .planning_contracts import MentorPlanningOutcome, PlanningBrief
 from .reviewer import IndependentReviewAgent
 from .research_generation import (
     DesignRationaleCandidate,
+    PlanningBriefCandidate,
     MentorPlanningPipeline,
     PlanningRationaleCandidate,
     ResearchDesignPipeline,
@@ -55,9 +56,12 @@ from .reviewer_contracts import (
     ReviewCriterion,
 )
 from .writing import PaperWritingAgent
+from .runtime import AgentReasoningCandidate, AgentReasoningPipeline
 
 __all__ = [
     "AgentCapability",
+    "AgentReasoningCandidate",
+    "AgentReasoningPipeline",
     "AgentInput",
     "AgentResult",
     "ApprovalRequest",
@@ -99,6 +103,7 @@ __all__ = [
     "RevisionRequest",
     "ResultInterpretationBoundary",
     "PlanningBrief",
+    "PlanningBriefCandidate",
     "PlanningRationaleCandidate",
     "ResearchDesignPipeline",
     "StudyProtocolCandidate",

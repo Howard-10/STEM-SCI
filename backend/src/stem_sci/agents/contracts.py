@@ -32,6 +32,7 @@ class AgentInput(AgentContract):
     allowed_output_types: list[str] = Field(default_factory=list)
     policy_version: str = Field(min_length=1)
     prompt_template_version: str = Field(min_length=1)
+    conversation_context: list[str] = Field(default_factory=list)
 
 
 class ToolRequest(AgentContract):

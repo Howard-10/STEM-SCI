@@ -6,7 +6,7 @@ from typing import cast
 from pydantic import JsonValue
 
 from .base import BaseAgent
-from .contracts import AgentContract, AgentInput, AgentResult, CandidateArtifact
+from .contracts import AgentContract, AgentInput, AgentResult, CandidateArtifact, ToolRequest
 from .planning_contracts import (
     FeasibilityReport,
     InitialRiskProfile,
@@ -25,6 +25,7 @@ class MentorPlanningAgent(BaseAgent):
     supported_task_types = ("scope_research", "build_research_roadmap", "assess_feasibility")
     allowed_tool_capabilities = ("literature_search_request",)
     allowed_output_types = (
+        "AgentReasoningCandidate",
         "ResearchContractCandidate",
         "FeasibilityReport",
         "ResearchQuestionTree",
@@ -36,7 +37,8 @@ class MentorPlanningAgent(BaseAgent):
         "PlanningRationaleCandidate",
     )
 
-    def __init__(self, pipeline: MentorPlanningPipeline | None = None) -> None:
+    def __init__(self, pipeline: MentorPlanningPipeline | None = None, *, reasoning_generator=None, reasoning_model: str | None = None) -> None:
+        super().__init__(reasoning_generator=reasoning_generator, reasoning_model=reasoning_model)
         self.pipeline = pipeline
 
     def propose(self, brief: PlanningBrief) -> MentorPlanningOutcome:
@@ -151,6 +153,11 @@ class MentorPlanningAgent(BaseAgent):
             agent_version="phase1-structured-planning",
             candidate_artifact_refs=[item.candidate_ref for item in artifacts],
             candidate_artifacts=artifacts,
+            tool_requests=[ToolRequest(
+                request_id=f"{brief.agent_run_id}:tool:literature_search_request",
+                capability="literature_search_request",
+                reason="Collect literature candidates required to refine the planning brief.",
+            )],
             evidence_refs=brief.evidence_refs,
             risk_flags=["SCOPE_REQUIRES_CONTROLLER_GATE"],
             unresolved_questions=feasibility.required_confirmations,

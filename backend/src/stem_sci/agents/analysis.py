@@ -40,6 +40,7 @@ class DataAnalysisAgent(BaseAgent):
     # operators from approved specifications.
     allowed_tool_capabilities = ()
     allowed_output_types = (
+        "AgentReasoningCandidate",
         "DataAuditSpecification",
         "DataIssueReport",
         "AnalysisReadinessReport",
@@ -51,6 +52,9 @@ class DataAnalysisAgent(BaseAgent):
         "ResultInterpretationBoundary",
         "RiskFlags",
     )
+
+    def __init__(self, *, reasoning_generator=None, reasoning_model: str | None = None) -> None:
+        super().__init__(reasoning_generator=reasoning_generator, reasoning_model=reasoning_model)
 
     def run(self, agent_input: AgentInput) -> AgentResult:
         """Return specifications only; operators are requested by the Controller."""
@@ -191,6 +195,9 @@ class DataAnalysisAgent(BaseAgent):
         if request.agent_run_id != agent_input.agent_run_id or request.task_ref != agent_input.task_ref:
             raise ValueError("DataAnalysisPreAnalysisInput must match AgentInput run and task references")
         outcome = self.propose_pre_analysis(request)
+        outcome = outcome.model_copy(
+            update={"agent_result": self._attach_reasoning(agent_input, outcome.agent_result)}
+        )
         return outcome.model_copy(
             update={"agent_result": self.restrict_to_authorized_outputs(agent_input, outcome.agent_result)}
         )

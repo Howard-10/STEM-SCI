@@ -43,6 +43,7 @@ function valueText(value: unknown): string {
 }
 
 export const artifactLabels: Record<string, string> = {
+  AgentReasoningCandidate: "Agent 推理摘要",
   ResearchContractCandidate: "研究契约（候选）",
   ResearchScopeCandidate: "研究边界（候选）",
   ResearchQuestionTree: "研究问题树",
@@ -56,7 +57,11 @@ export const artifactLabels: Record<string, string> = {
 };
 
 export function isPlanningClarification(question: string): boolean {
-  return /(?:研究对象|研究人群|研究场景|应用场景|干预与对照|主要指标|结果指标)\s*[:：]/u.test(question);
+  const text = question.trim();
+  if (/(?:研究对象|研究人群|研究场景|应用场景|干预与对照|主要指标|结果指标)\s*[:：]/u.test(text)) return true;
+  return text.length >= 8
+    && !/[?？]$/u.test(text)
+    && /(?:我想|希望|面向|针对|采用|比较|关注|研究的是|课程|实验课|课堂场景)/u.test(text);
 }
 
 export function formatWorkflowArtifact(artifactType: string, body: Record<string, unknown>): string {
@@ -88,6 +93,8 @@ export function formatWorkflowArtifact(artifactType: string, body: Record<string
     add("待解决问题", body.items);
   } else if (artifactType === "EvidenceSet") {
     add("检索状态", body.retrieval_status); add("检索问题", body.query); add("风险提示", body.risk_flags);
+  } else if (artifactType === "AgentReasoningCandidate") {
+    add("推理摘要", body.summary); add("关键判断", body.key_decisions); add("待确认问题", body.open_questions); add("风险提示", body.risk_flags);
   } else {
     Object.entries(body).forEach(([key, value]) => add(key, value));
   }

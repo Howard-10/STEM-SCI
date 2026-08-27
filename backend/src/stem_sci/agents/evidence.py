@@ -39,6 +39,7 @@ class EvidenceReviewAgent(BaseAgent):
         "source_verification",
     )
     allowed_output_types = (
+        "AgentReasoningCandidate",
         "SearchProtocolCandidate",
         "InclusionExclusionCriteria",
         "PaperCardCollection",
@@ -52,7 +53,8 @@ class EvidenceReviewAgent(BaseAgent):
         "BoundedEvidenceSynthesis",
     )
 
-    def __init__(self, pipeline: EvidenceReviewPipeline | None = None) -> None:
+    def __init__(self, pipeline: EvidenceReviewPipeline | None = None, *, reasoning_generator=None, reasoning_model: str | None = None) -> None:
+        super().__init__(reasoning_generator=reasoning_generator, reasoning_model=reasoning_model)
         self.pipeline = pipeline
 
     def run_with_context(self, agent_input: AgentInput, context: ContextBundle) -> AgentResult:

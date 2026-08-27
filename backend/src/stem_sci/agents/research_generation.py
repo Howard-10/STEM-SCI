@@ -29,6 +29,15 @@ class PlanningRationaleCandidate(_GenerationModel):
     unresolved_questions: list[str] = Field(min_length=1)
 
 
+class PlanningBriefCandidate(_GenerationModel):
+    population: str = Field(min_length=1)
+    context: str = Field(min_length=1)
+    intervention: str = Field(min_length=1)
+    comparator: str = Field(min_length=1)
+    primary_outcome: str = Field(min_length=1)
+    clarifying_questions: list[str] = Field(default_factory=list)
+
+
 class DesignRationaleCandidate(_GenerationModel):
     estimand_rationale: str = Field(min_length=1)
     allocation_risk_notes: list[str] = Field(min_length=1)
@@ -69,6 +78,19 @@ class MentorPlanningPipeline:
             response_model=PlanningRationaleCandidate,
             model=self.model,
             prompt_version="mentor-planning-v1",
+        )
+
+    def extract_brief(self, research_intent: str, brief: PlanningBrief) -> GenerationResult:
+        return self.generator.generate(
+            system_prompt=(
+                "You are a research-intake assistant. Extract a concrete planning brief from "
+                "the user's natural-language research intent. Do not invent details; use explicit "
+                "待确认/To be confirmed values when absent and list them as clarifying_questions."
+            ),
+            user_prompt=json.dumps({"research_intent": research_intent, "defaults": brief.model_dump(mode="json")}, ensure_ascii=False),
+            response_model=PlanningBriefCandidate,
+            model=self.model,
+            prompt_version="mentor-planning-intake-v1",
         )
 
 

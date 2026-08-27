@@ -84,5 +84,6 @@ describe("buildWorkflowConversation", () => {
   it("recognizes a user field clarification as planner feedback", () => {
     expect(isPlanningClarification("研究对象：华东师范大学物理师范生；研究场景：大学物理实验课程")).toBe(true);
     expect(isPlanningClarification("请检索 AI 物理教育的论文")).toBe(false);
+    expect(isPlanningClarification("我希望面向大一物理师范生，在力学实验课比较分层 AI 支架与常规提示")).toBe(true);
   });
 });

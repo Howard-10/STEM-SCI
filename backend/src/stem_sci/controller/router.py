@@ -23,6 +23,8 @@ from stem_sci.agents import (
     MentorPlanningAgent,
     PaperWritingAgent,
     ResearchDesignAgent,
+    MentorPlanningPipeline,
+    ResearchDesignPipeline,
 )
 from stem_sci.agents.planning_contracts import PlanningBrief
 from stem_sci.agents.analysis_contracts import (
@@ -41,7 +43,7 @@ from stem_sci.agents.reviewer_contracts import (
     ReproducibilityReviewInput,
     ReproducibilityReviewOutcome,
 )
-from stem_sci.agents.runtime import StructuredGenerator
+from stem_sci.agents.runtime import StructuredGenerationError, StructuredGenerator
 from stem_sci.agents.writing_pipeline import (
     LanguageCode,
     PaperWritingPipeline,
@@ -191,21 +193,45 @@ class AgentRegistry:
             raise ValueError("generator and model must be configured together")
         if generator is not None and model is not None:
             evidence_agent = EvidenceReviewAgent(
-                pipeline=EvidenceReviewPipeline(generator=generator, model=model)
+                pipeline=EvidenceReviewPipeline(generator=generator, model=model),
+                reasoning_generator=generator,
+                reasoning_model=model,
             )
             writing_agent = PaperWritingAgent(
-                pipeline=PaperWritingPipeline(generator=generator, model=model)
+                pipeline=PaperWritingPipeline(generator=generator, model=model),
+                reasoning_generator=generator,
+                reasoning_model=model,
+            )
+            mentor_agent = MentorPlanningAgent(
+                pipeline=MentorPlanningPipeline(generator=generator, model=model),
+                reasoning_generator=generator,
+                reasoning_model=model,
+            )
+            design_agent = ResearchDesignAgent(
+                pipeline=ResearchDesignPipeline(generator=generator, model=model),
+                reasoning_generator=generator,
+                reasoning_model=model,
+            )
+            analysis_agent = DataAnalysisAgent(
+                reasoning_generator=generator, reasoning_model=model
+            )
+            reviewer_agent = IndependentReviewAgent(
+                reasoning_generator=generator, reasoning_model=model
             )
         else:
             evidence_agent = EvidenceReviewAgent()
             writing_agent = PaperWritingAgent()
+            mentor_agent = MentorPlanningAgent()
+            design_agent = ResearchDesignAgent()
+            analysis_agent = DataAnalysisAgent()
+            reviewer_agent = IndependentReviewAgent()
         instances: Iterable[BaseAgent] = (
-            MentorPlanningAgent(),
+            mentor_agent,
             evidence_agent,
-            ResearchDesignAgent(),
-            DataAnalysisAgent(),
+            design_agent,
+            analysis_agent,
             writing_agent,
-            IndependentReviewAgent(),
+            reviewer_agent,
         )
         return cls({agent.agent_id: agent for agent in instances})
 
@@ -773,11 +799,15 @@ class ResearchController:
             allowed_output_types=list(planner.allowed_output_types),
             policy_version="controller-policy-v1",
             prompt_template_version="planner-scaffold-v1",
+            conversation_context=[request.research_intent],
         )
         if not isinstance(planner, MentorPlanningAgent):
             raise ValueError("mentor_planning registry entry has an invalid implementation")
         planning_brief = self._build_planning_brief(
             request.project_id, agent_input, request.research_intent
+        )
+        planning_brief = self._llm_enrich_planning_brief(
+            planner, planning_brief, request.research_intent
         )
         result = planner.propose_for(
             agent_input, planning_brief, model_assisted=planner.pipeline is not None
@@ -879,6 +909,28 @@ class ResearchController:
             candidate_outcomes=[outcomes],
             constraints=["需要在正式研究前确认伦理、数据治理与样本可得性"],
             exclusions=["超出当前研究意图且无法由本项目验证的结论"],
+        )
+
+    @staticmethod
+    def _llm_enrich_planning_brief(
+        planner: MentorPlanningAgent, brief: PlanningBrief, research_intent: str
+    ) -> PlanningBrief:
+        pipeline = planner.pipeline
+        if pipeline is None:
+            return brief
+        try:
+            extracted = pipeline.extract_brief(research_intent, brief).parsed_output
+        except StructuredGenerationError:
+            return brief
+        return brief.model_copy(
+            update={
+                "population": extracted.population,
+                "context": extracted.context,
+                "intervention": extracted.intervention,
+                "comparator": extracted.comparator,
+                "candidate_outcomes": [extracted.primary_outcome],
+                "constraints": [*brief.constraints, *extracted.clarifying_questions],
+            }
         )
 
     def approve_planning(
@@ -1122,6 +1174,10 @@ class ResearchController:
             allowed_output_types=list(agent.allowed_output_types),
             policy_version=route.policy_version,
             prompt_template_version=f"{agent_id}-scaffold-v1",
+            conversation_context=[
+                self._project_intents.get(project_id, ""),
+                f"required_context: {required_context}",
+            ],
         )
         package_ref: str | None = None
         if (
@@ -1155,6 +1211,9 @@ class ResearchController:
                 project_id,
                 agent_input,
                 self._project_intents.get(project_id, ""),
+            )
+            planning_brief = self._llm_enrich_planning_brief(
+                agent, planning_brief, self._project_intents.get(project_id, "")
             )
             result = agent.propose_for(
                 agent_input, planning_brief, model_assisted=agent.pipeline is not None

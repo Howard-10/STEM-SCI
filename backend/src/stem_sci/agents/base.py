@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from typing import ClassVar
 
 from .contracts import AgentCapability, AgentInput, AgentResult, ToolRequest
+from .runtime.reasoning import AgentReasoningPipeline
+from .runtime.structured_generator import StructuredGenerationError
 
 FORBIDDEN_AGENT_ACTIONS: tuple[str, ...] = (
     "new_current_stage",
@@ -30,6 +32,18 @@ class BaseAgent(ABC):
     supported_task_types: ClassVar[tuple[str, ...]] = ()
     allowed_tool_capabilities: ClassVar[tuple[str, ...]] = ()
     allowed_output_types: ClassVar[tuple[str, ...]] = ()
+
+    def __init__(
+        self,
+        *,
+        reasoning_generator=None,
+        reasoning_model: str | None = None,
+    ) -> None:
+        self.reasoning_pipeline = (
+            AgentReasoningPipeline(reasoning_generator, reasoning_model)
+            if reasoning_generator is not None and reasoning_model
+            else None
+        )
 
     @classmethod
     def capability(cls) -> AgentCapability:
@@ -81,7 +95,7 @@ class BaseAgent(ABC):
         recommendations = [
             "Controller must validate candidate artifacts with the applicable Gate before progression."
         ]
-        return AgentResult(
+        result = AgentResult(
             agent_run_id=agent_input.agent_run_id,
             agent_id=self.agent_id,
             agent_version=self.agent_version,
@@ -101,6 +115,28 @@ class BaseAgent(ABC):
             confidence=0.5 if refs else 0.0,
             created_at=datetime.now(UTC),
         )
+        return self._attach_reasoning(agent_input, result)
+
+    def _attach_reasoning(self, agent_input: AgentInput, result: AgentResult) -> AgentResult:
+        pipeline = getattr(self, "reasoning_pipeline", None)
+        if pipeline is None or "AgentReasoningCandidate" not in agent_input.allowed_output_types:
+            return result
+        try:
+            reasoning, request_id = pipeline.run(self.agent_id, agent_input)
+        except StructuredGenerationError:
+            return result.model_copy(update={"risk_flags": [*result.risk_flags, "MODEL_GENERATION_FAILED"]})
+        from .contracts import CandidateArtifact
+        candidate = CandidateArtifact(
+            candidate_ref=f"candidate://{self.agent_id}/{agent_input.task_ref}/AgentReasoningCandidate",
+            artifact_type="AgentReasoningCandidate",
+            schema_version="v1",
+            body=reasoning.model_dump(mode="json"),
+        )
+        return result.model_copy(update={
+            "candidate_artifact_refs": [*result.candidate_artifact_refs, candidate.candidate_ref],
+            "candidate_artifacts": [*result.candidate_artifacts, candidate],
+            "llm_metadata_refs": [*result.llm_metadata_refs, f"llm-metadata://{request_id}"],
+        })
 
     def restrict_to_authorized_outputs(
         self, agent_input: AgentInput, result: AgentResult

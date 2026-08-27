@@ -32,6 +32,7 @@ class PaperWritingAgent(BaseAgent):
     supported_task_types = ("draft_manuscript", "map_claims_to_evidence", "draft_reproducibility_statement")
     allowed_tool_capabilities = ()
     allowed_output_types = (
+        "AgentReasoningCandidate",
         "AtomicClaimCandidate",
         "ClaimEvidenceMap",
         "ManuscriptOutline",
@@ -47,7 +48,8 @@ class PaperWritingAgent(BaseAgent):
         "WritingSufficiencyReport",
     )
 
-    def __init__(self, pipeline: PaperWritingPipeline | None = None) -> None:
+    def __init__(self, pipeline: PaperWritingPipeline | None = None, *, reasoning_generator=None, reasoning_model: str | None = None) -> None:
+        super().__init__(reasoning_generator=reasoning_generator, reasoning_model=reasoning_model)
         self.pipeline = pipeline
 
     def run_pipeline(

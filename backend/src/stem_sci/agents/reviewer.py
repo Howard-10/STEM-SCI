@@ -33,7 +33,10 @@ class IndependentReviewAgent(BaseAgent):
         "review_arbitration",
     )
     allowed_tool_capabilities = ()
-    allowed_output_types = ("ReviewFinding", "RevisionRequest", "ReviewReport")
+    allowed_output_types = ("ReviewFinding", "RevisionRequest", "ReviewReport", "AgentReasoningCandidate")
+
+    def __init__(self, *, reasoning_generator=None, reasoning_model: str | None = None) -> None:
+        super().__init__(reasoning_generator=reasoning_generator, reasoning_model=reasoning_model)
 
     def as_agent_result(
         self,
