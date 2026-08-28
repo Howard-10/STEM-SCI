@@ -19,7 +19,7 @@ import {
   type RuntimeStatus,
   type WorkflowTimeline,
 } from "./api/workflow";
-import { answerWorkflowQuestion, artifactLabels, buildWorkflowConversation, formatMentorPlanningReport, formatWorkflowArtifact, isPlanningClarification } from "./workflow/conversation";
+import { answerWorkflowQuestion, artifactLabels, buildWorkflowConversation, formatMentorPlanningReport, formatWorkflowArtifact, getPlanningClarificationStatus, isPlanningClarification } from "./workflow/conversation";
 import { api } from "./api/client";
 import type { SearchResult, SharedCorpusSummary } from "./types/context";
 import { demoBundle, demoQAResponse, demoRuntime } from "./demo/data";
@@ -569,6 +569,16 @@ export function App() {
   };
 
   const decideWorkflow = async (decision: "approved" | "rejected") => {
+    if (decision === "approved" && workflowTimeline?.workflow_state.last_route_decision?.selected_route === "mentor_planning") {
+      const mentorReport = buildWorkflowConversation(workflowTimeline).find((item) => item.kind === "workflow-report" && item.agentId === "mentor_planning");
+      if (mentorReport?.kind === "workflow-report") {
+        const status = getPlanningClarificationStatus(mentorReport.artifacts);
+        if (!status.complete) {
+          setWorkflowError(`请先补充：${status.missing.join("、")}，再通过候选方案。`);
+          return;
+        }
+      }
+    }
     setWorkflowBusy(true);
     setWorkflowError("");
     try {
@@ -633,6 +643,16 @@ export function App() {
       const workflowState = workflow ?? workflowTimeline?.workflow_state;
       if (workflowCommand && auth?.access_token && activeProject) {
         if (workflowState?.pending_approval_ref) {
+          if (workflowTimeline?.workflow_state.last_route_decision?.selected_route === "mentor_planning") {
+            const mentorReport = buildWorkflowConversation(workflowTimeline).find((item) => item.kind === "workflow-report" && item.agentId === "mentor_planning");
+            if (mentorReport?.kind === "workflow-report") {
+              const status = getPlanningClarificationStatus(mentorReport.artifacts);
+              if (!status.complete) {
+                setMessages((current) => [...current, { id: `assistant-planning-required-${Date.now()}`, role: "assistant", content: `请先补充导师规划信息：${status.missing.join("、")}。填写下方澄清卡并点击“提交并重新规划”，完成后才能通过候选方案。` }]);
+                return;
+              }
+            }
+          }
           await workflowApi.approve(projectId, "approved", auth.user.username);
           await refreshWorkflow();
           await reloadWorkflowTimeline();
@@ -1364,18 +1384,28 @@ export function App() {
                       <p>{formatWorkflowArtifact(artifact.artifactType, artifact.body)}</p>
                     </section>
                   )) : <p>输出内容不可用。</p>}
+                  {item.pendingApproval && item.agentId === "mentor_planning" && (() => {
+                    const status = getPlanningClarificationStatus(item.artifacts);
+                    return <section className="planning-clarification-card">
+                      <div className="planning-clarification-heading"><strong>导师规划确认</strong><span className={status.complete ? "clarification-complete" : "clarification-pending"}>{status.complete ? "信息已完整" : `${status.missing.length} 项待补充`}</span></div>
+                      <p>请补充关键研究条件。提交后系统会重新生成导师规划，再开放审批。</p>
+                      <div className="planning-clarification-grid">
+                        {["研究对象", "研究场景", "干预与对照", "主要指标"].map((label) => <span className={status.missing.includes(label) ? "clarification-item missing" : "clarification-item"} key={label}><i />{label}<small>{status.missing.includes(label) ? "待补充" : "已识别"}</small></span>)}
+                      </div>
+                    </section>;
+                  })()}
                   {item.pendingApproval && <div className="workflow-control-actions">
-                    <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("approved")}>通过候选方案</button>
+                    <button className="primary-inline-button" disabled={workflowBusy || (item.agentId === "mentor_planning" && !getPlanningClarificationStatus(item.artifacts).complete)} type="button" onClick={() => void decideWorkflow("approved")}>通过候选方案</button>
                     <button className="secondary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("rejected")}>退回</button>
                   </div>}
                   {item.isLatest && !item.pendingApproval && (workflow ?? workflowTimeline?.workflow_state) && !["VERIFIED", "RELEASED", "BLOCKED", "REWORK"].includes((workflow ?? workflowTimeline?.workflow_state)?.current_stage ?? "") && <div className="workflow-control-actions">
                     <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void runNextWorkflowStage()}>{workflowBusy ? "调度中..." : "继续下一 Agent"}</button>
                   </div>}
                   {item.pendingApproval && <div className="workflow-feedback-actions">
-                    <textarea value={workflowFeedback} onChange={(event) => setWorkflowFeedback(event.target.value)} placeholder="补充你的研究思路或修改意见..." rows={2} />
+                    <textarea value={workflowFeedback} onChange={(event) => setWorkflowFeedback(event.target.value)} placeholder={item.agentId === "mentor_planning" ? "请填写：研究对象、研究场景、干预与对照、主要指标..." : "补充你的研究思路或修改意见..."} rows={3} />
                     <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedback(item.agentId, "pause")}>保存意见并暂停</button>
                     <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedbackAndContinue(item.agentId)}>保存意见并继续</button>
-                    <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedback(item.agentId, "rerun")}>基于意见重新执行当前 Agent</button>
+                    <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedback(item.agentId, "rerun")}>{item.agentId === "mentor_planning" ? "提交并重新规划" : "基于意见重新执行当前 Agent"}</button>
                   </div>}
                 </div>
               </article>

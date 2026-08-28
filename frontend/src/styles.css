@@ -222,6 +222,19 @@ h3 { font-size: 15px; }
 .workflow-artifact-text { margin: 14px 0; padding: 12px 14px; border-left: 3px solid #c8d0d8; background: #f8fafb; }
 .workflow-artifact-text h4 { margin: 0 0 8px; font-size: 15px; color: #26313b; }
 .workflow-artifact-text p { margin: 0; white-space: pre-line; line-height: 1.75; color: #394550; }
+.planning-clarification-card { margin: 16px 0; padding: 16px 18px; border: 1px solid #d8e0e7; border-radius: 8px; background: linear-gradient(135deg, #fbfcfd, #f2f6f8); box-shadow: 0 4px 14px rgba(30, 45, 60, .06); }
+.planning-clarification-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #26313b; font-size: 15px; }
+.planning-clarification-heading span { padding: 4px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.clarification-pending { color: #8a5b12; background: #fff3d6; }
+.clarification-complete { color: #22643d; background: #e4f4ea; }
+.planning-clarification-card > p { margin: 8px 0 12px; color: #56636f; font-size: 13px; line-height: 1.6; }
+.planning-clarification-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.clarification-item { display: flex; align-items: center; gap: 7px; padding: 9px 10px; border: 1px solid #dce5eb; border-radius: 6px; background: #fff; color: #53616c; font-size: 13px; }
+.clarification-item i { width: 7px; height: 7px; border-radius: 50%; background: #4b9b70; }
+.clarification-item small { margin-left: auto; color: #4b9b70; font-size: 11px; }
+.clarification-item.missing { border-color: #e6c889; color: #6d531e; background: #fffaf0; }
+.clarification-item.missing i { background: #d2942b; }
+.clarification-item.missing small { color: #a66d18; }
 
 /* The cockpit is a conversation surface first. Supporting research controls stay visible,
    but the answer and its evidence remain together in the main reading flow. */

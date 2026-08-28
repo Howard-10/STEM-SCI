@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { answerWorkflowQuestion, buildWorkflowConversation, formatMentorPlanningReport, formatWorkflowArtifact, isPlanningClarification } from "./conversation";
+import { answerWorkflowQuestion, buildWorkflowConversation, formatMentorPlanningReport, formatWorkflowArtifact, getPlanningClarificationStatus, isPlanningClarification } from "./conversation";
 
 describe("buildWorkflowConversation", () => {
   it("builds the six-agent route and mentor report from persisted records", () => {
@@ -85,5 +85,13 @@ describe("buildWorkflowConversation", () => {
     expect(isPlanningClarification("研究对象：华东师范大学物理师范生；研究场景：大学物理实验课程")).toBe(true);
     expect(isPlanningClarification("请检索 AI 物理教育的论文")).toBe(false);
     expect(isPlanningClarification("我希望面向大一物理师范生，在力学实验课比较分层 AI 支架与常规提示")).toBe(true);
+  });
+
+  it("keeps candidate approval blocked while planning fields are unresolved", () => {
+    const status = getPlanningClarificationStatus([
+      { artifactType: "ResearchContractCandidate", body: { population: "目标研究人群（待确认）", context: "大学物理课", intervention: "分层 AI 支架", comparator: "常规提示", outcomes: ["建模迁移得分"] } },
+    ]);
+    expect(status.complete).toBe(false);
+    expect(status.missing).toEqual(["研究对象"]);
   });
 });

@@ -56,6 +56,25 @@ export const artifactLabels: Record<string, string> = {
   EvidenceSet: "证据检索摘要",
 };
 
+export function getPlanningClarificationStatus(
+  artifacts: Array<{ artifactType: string; body: Record<string, unknown> }>,
+): { complete: boolean; missing: string[] } {
+  const contract = artifacts.find((artifact) => artifact.artifactType === "ResearchContractCandidate")?.body ?? {};
+  const fields: Array<[string, unknown]> = [
+    ["研究对象", contract.population],
+    ["研究场景", contract.context],
+    ["干预与对照", `${valueText(contract.intervention)} ${valueText(contract.comparator)}`],
+    ["主要指标", contract.outcomes],
+  ];
+  const missing = fields
+    .filter(([, value]) => {
+      const text = valueText(value);
+      return !text || text.includes("待确认") || text.includes("研究意图中描述");
+    })
+    .map(([label]) => label);
+  return { complete: missing.length === 0, missing };
+}
+
 export function isPlanningClarification(question: string): boolean {
   const text = question.trim();
   if (/(?:研究对象|研究人群|研究场景|应用场景|干预与对照|主要指标|结果指标)\s*[:：]/u.test(text)) return true;
