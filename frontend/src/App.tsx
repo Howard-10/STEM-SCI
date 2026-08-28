@@ -19,7 +19,7 @@ import {
   type RuntimeStatus,
   type WorkflowTimeline,
 } from "./api/workflow";
-import { answerWorkflowQuestion, artifactLabels, buildWorkflowConversation, formatMentorPlanningReport, formatWorkflowArtifact, getPlanningClarificationStatus, isPlanningClarification, planningClarificationsComplete, type PlanningClarificationAnswers } from "./workflow/conversation";
+import { answerWorkflowQuestion, artifactLabels, buildWorkflowConversation, findLatestWorkflowReport, formatMentorPlanningReport, formatWorkflowArtifact, getPlanningClarificationStatus, isPlanningClarification, planningClarificationsComplete, type PlanningClarificationAnswers } from "./workflow/conversation";
 import { api } from "./api/client";
 import type { SearchResult, SharedCorpusSummary } from "./types/context";
 import { demoBundle, demoQAResponse, demoRuntime } from "./demo/data";
@@ -250,6 +250,8 @@ export function App() {
   const draftDocuments = activeDocuments.filter((document) => document.document_type === "manuscript");
   const projectPapers = activeDocuments.filter((document) => document.document_type !== "manuscript");
   const citations = lastResponse?.citations ?? demoQAResponse.citations;
+  const mentorApprovalBlocked = workflowTimeline?.workflow_state.last_route_decision?.selected_route === "mentor_planning"
+    && !getPlanningClarificationStatus(findLatestWorkflowReport(workflowTimeline, "mentor_planning")?.artifacts ?? []).complete;
 
   useEffect(() => {
     if (!auth?.access_token) {
@@ -604,8 +606,8 @@ export function App() {
 
   const decideWorkflow = async (decision: "approved" | "rejected") => {
     if (decision === "approved" && workflowTimeline?.workflow_state.last_route_decision?.selected_route === "mentor_planning") {
-      const mentorReport = buildWorkflowConversation(workflowTimeline).find((item) => item.kind === "workflow-report" && item.agentId === "mentor_planning");
-      if (mentorReport?.kind === "workflow-report") {
+      const mentorReport = findLatestWorkflowReport(workflowTimeline, "mentor_planning");
+      if (mentorReport) {
         const status = getPlanningClarificationStatus(mentorReport.artifacts);
         if (!status.complete) {
           setWorkflowError(`请先补充：${status.missing.join("、")}，再通过候选方案。`);
@@ -678,8 +680,8 @@ export function App() {
       if (workflowCommand && auth?.access_token && activeProject) {
         if (workflowState?.pending_approval_ref) {
           if (workflowTimeline?.workflow_state.last_route_decision?.selected_route === "mentor_planning") {
-            const mentorReport = buildWorkflowConversation(workflowTimeline).find((item) => item.kind === "workflow-report" && item.agentId === "mentor_planning");
-            if (mentorReport?.kind === "workflow-report") {
+            const mentorReport = findLatestWorkflowReport(workflowTimeline, "mentor_planning");
+            if (mentorReport) {
               const status = getPlanningClarificationStatus(mentorReport.artifacts);
               if (!status.complete) {
                 setMessages((current) => [...current, { id: `assistant-planning-required-${Date.now()}`, role: "assistant", content: `请先补充导师规划信息：${status.missing.join("、")}。填写下方澄清卡并点击“提交并重新规划”，完成后才能通过候选方案。` }]);
@@ -1450,6 +1452,7 @@ export function App() {
                     <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedbackAndContinue(item.agentId)}>保存意见并继续</button>
                     <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedback(item.agentId, "rerun")}>{item.agentId === "mentor_planning" ? "提交并重新规划" : "基于意见重新执行当前 Agent"}</button>
                   </div>}
+                  {workflowError && <p className="workflow-control-error" role="alert">{workflowError}</p>}
                 </div>
               </article>
             )
@@ -1933,7 +1936,7 @@ export function App() {
                     </div>
                   ) : workflow.pending_approval_ref ? (
                     <div className="workflow-control-actions">
-                      <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("approved")}>通过候选方案</button>
+                      <button className="primary-inline-button" disabled={workflowBusy || mentorApprovalBlocked} type="button" onClick={() => void decideWorkflow("approved")}>通过候选方案</button>
                       <button className="secondary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("rejected")}>退回</button>
                     </div>
                   ) : workflow.current_stage !== "VERIFIED" && workflow.current_stage !== "BLOCKED" && workflow.current_stage !== "REWORK" ? (

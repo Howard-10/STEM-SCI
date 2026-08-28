@@ -231,3 +231,14 @@ export function buildWorkflowConversation(timeline: TimelineInput): WorkflowConv
     })),
   ];
 }
+
+export function findLatestWorkflowReport(
+  timeline: TimelineInput,
+  agentId: string,
+): Extract<WorkflowConversationItem, { kind: "workflow-report" }> | null {
+  const reports = buildWorkflowConversation(timeline).filter(
+    (item): item is Extract<WorkflowConversationItem, { kind: "workflow-report" }> =>
+      item.kind === "workflow-report" && item.agentId === agentId,
+  );
+  return reports.at(-1) ?? null;
+}

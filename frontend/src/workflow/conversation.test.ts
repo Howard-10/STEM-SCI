@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { answerWorkflowQuestion, buildWorkflowConversation, formatMentorPlanningReport, formatWorkflowArtifact, getPlanningClarificationStatus, isPlanningClarification, planningClarificationsComplete } from "./conversation";
+import { answerWorkflowQuestion, buildWorkflowConversation, findLatestWorkflowReport, formatMentorPlanningReport, formatWorkflowArtifact, getPlanningClarificationStatus, isPlanningClarification, planningClarificationsComplete } from "./conversation";
 
 describe("buildWorkflowConversation", () => {
   it("builds the six-agent route and mentor report from persisted records", () => {
@@ -98,5 +98,20 @@ describe("buildWorkflowConversation", () => {
   it("requires all four structured planning answers before resubmission", () => {
     expect(planningClarificationsComplete({ population: "物理师范生", context: "力学实验课", intervention: "AI 支架", comparator: "常规提示", outcome: "迁移得分" })).toBe(true);
     expect(planningClarificationsComplete({ population: "物理师范生", context: "", intervention: "AI 支架", comparator: "常规提示", outcome: "迁移得分" })).toBe(false);
+  });
+
+  it("uses the latest mentor report when planning has been rerun", () => {
+    const timeline = {
+      workflow_state: { pending_approval_ref: "approval-2" }, pending_approval: null,
+      agent_runs: [
+        { agent_run_id: "planning-1", agent_id: "mentor_planning", started_at: "2026-08-27T00:00:00Z", output_artifact_refs: [] },
+        { agent_run_id: "planning-2", agent_id: "mentor_planning", started_at: "2026-08-27T01:00:00Z", output_artifact_refs: [] },
+      ],
+      artifact_contents: [
+        { artifact_id: "planning-1:artifact:0", artifact_type: "ResearchContractCandidate", body: { population: "目标研究人群（待确认）" } },
+        { artifact_id: "planning-2:artifact:0", artifact_type: "ResearchContractCandidate", body: { population: "物理师范生", context: "实验课", intervention: "AI 支架", comparator: "常规提示", outcomes: ["迁移得分"] } },
+      ],
+    };
+    expect(getPlanningClarificationStatus(findLatestWorkflowReport(timeline, "mentor_planning")?.artifacts ?? []).complete).toBe(true);
   });
 });
