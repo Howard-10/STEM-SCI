@@ -75,6 +75,18 @@ export function getPlanningClarificationStatus(
   return { complete: missing.length === 0, missing };
 }
 
+export type PlanningClarificationAnswers = {
+  population: string;
+  context: string;
+  intervention: string;
+  comparator: string;
+  outcome: string;
+};
+
+export function planningClarificationsComplete(answers: PlanningClarificationAnswers): boolean {
+  return Object.values(answers).every((value) => value.trim().length > 0);
+}
+
 export function isPlanningClarification(question: string): boolean {
   const text = question.trim();
   if (/(?:研究对象|研究人群|研究场景|应用场景|干预与对照|主要指标|结果指标)\s*[:：]/u.test(text)) return true;

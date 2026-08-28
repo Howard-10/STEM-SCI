@@ -19,7 +19,7 @@ import {
   type RuntimeStatus,
   type WorkflowTimeline,
 } from "./api/workflow";
-import { answerWorkflowQuestion, artifactLabels, buildWorkflowConversation, formatMentorPlanningReport, formatWorkflowArtifact, getPlanningClarificationStatus, isPlanningClarification } from "./workflow/conversation";
+import { answerWorkflowQuestion, artifactLabels, buildWorkflowConversation, formatMentorPlanningReport, formatWorkflowArtifact, getPlanningClarificationStatus, isPlanningClarification, planningClarificationsComplete, type PlanningClarificationAnswers } from "./workflow/conversation";
 import { api } from "./api/client";
 import type { SearchResult, SharedCorpusSummary } from "./types/context";
 import { demoBundle, demoQAResponse, demoRuntime } from "./demo/data";
@@ -229,6 +229,7 @@ export function App() {
   const [workflowError, setWorkflowError] = useState("");
   const [workflowTimeline, setWorkflowTimeline] = useState<WorkflowTimeline | null>(null);
   const [workflowFeedback, setWorkflowFeedback] = useState("");
+  const [planningAnswers, setPlanningAnswers] = useState<PlanningClarificationAnswers>({ population: "", context: "", intervention: "", comparator: "", outcome: "" });
   const [evidenceRows, setEvidenceRows] = useState<SearchResult[]>([]);
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [evidenceError, setEvidenceError] = useState("");
@@ -350,6 +351,39 @@ export function App() {
       await reloadWorkflowTimeline();
     } catch (error) {
       setWorkflowError(error instanceof Error ? error.message : "无法保存阶段反馈");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  const submitPlanningClarifications = async () => {
+    if (!planningClarificationsComplete(planningAnswers)) return;
+    setWorkflowFeedback([
+      `研究对象：${planningAnswers.population}`,
+      `研究场景：${planningAnswers.context}`,
+      `干预与对照：${planningAnswers.intervention} vs ${planningAnswers.comparator}`,
+      `主要指标：${planningAnswers.outcome}`,
+    ].join("；"));
+    setWorkflowBusy(true);
+    setWorkflowError("");
+    try {
+      const result = await workflowApi.submitFeedback(projectId, {
+        agent_id: "mentor_planning",
+        stage: workflowTimeline?.workflow_state.current_stage ?? "WAITING_HUMAN",
+        action: "rerun",
+        feedback: [
+          `研究对象：${planningAnswers.population}`,
+          `研究场景：${planningAnswers.context}`,
+          `干预与对照：${planningAnswers.intervention} vs ${planningAnswers.comparator}`,
+          `主要指标：${planningAnswers.outcome}`,
+        ].join("；"),
+      });
+      setWorkflow(result.workflow_state);
+      setPlanningAnswers({ population: "", context: "", intervention: "", comparator: "", outcome: "" });
+      setWorkflowFeedback("");
+      await reloadWorkflowTimeline();
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : "无法提交导师规划补充信息");
     } finally {
       setWorkflowBusy(false);
     }
@@ -1401,7 +1435,16 @@ export function App() {
                   {item.isLatest && !item.pendingApproval && (workflow ?? workflowTimeline?.workflow_state) && !["VERIFIED", "RELEASED", "BLOCKED", "REWORK"].includes((workflow ?? workflowTimeline?.workflow_state)?.current_stage ?? "") && <div className="workflow-control-actions">
                     <button className="primary-inline-button" disabled={workflowBusy} type="button" onClick={() => void runNextWorkflowStage()}>{workflowBusy ? "调度中..." : "继续下一 Agent"}</button>
                   </div>}
-                  {item.pendingApproval && <div className="workflow-feedback-actions">
+                  {item.pendingApproval && item.agentId === "mentor_planning" ? <section className="planning-clarification-form">
+                    <div className="planning-form-grid">
+                      <label><span>研究对象</span><input value={planningAnswers.population} onChange={(event) => setPlanningAnswers((current) => ({ ...current, population: event.target.value }))} placeholder="例如：大一物理师范生" /></label>
+                      <label><span>研究场景</span><input value={planningAnswers.context} onChange={(event) => setPlanningAnswers((current) => ({ ...current, context: event.target.value }))} placeholder="例如：大学物理力学实验课" /></label>
+                      <label><span>干预方法</span><input value={planningAnswers.intervention} onChange={(event) => setPlanningAnswers((current) => ({ ...current, intervention: event.target.value }))} placeholder="例如：分层 AI 支架" /></label>
+                      <label><span>对照条件</span><input value={planningAnswers.comparator} onChange={(event) => setPlanningAnswers((current) => ({ ...current, comparator: event.target.value }))} placeholder="例如：常规提示" /></label>
+                      <label className="planning-form-wide"><span>主要指标</span><input value={planningAnswers.outcome} onChange={(event) => setPlanningAnswers((current) => ({ ...current, outcome: event.target.value }))} placeholder="例如：物理建模迁移得分" /></label>
+                    </div>
+                    <div className="planning-form-footer"><span>四项填写完整后将重新生成导师规划。</span><button type="button" disabled={workflowBusy || !planningClarificationsComplete(planningAnswers)} onClick={() => void submitPlanningClarifications()}>提交并重新规划</button></div>
+                  </section> : item.pendingApproval && <div className="workflow-feedback-actions">
                     <textarea value={workflowFeedback} onChange={(event) => setWorkflowFeedback(event.target.value)} placeholder={item.agentId === "mentor_planning" ? "请填写：研究对象、研究场景、干预与对照、主要指标..." : "补充你的研究思路或修改意见..."} rows={3} />
                     <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedback(item.agentId, "pause")}>保存意见并暂停</button>
                     <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedbackAndContinue(item.agentId)}>保存意见并继续</button>

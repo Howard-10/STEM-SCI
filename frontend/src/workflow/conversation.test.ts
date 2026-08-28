@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { answerWorkflowQuestion, buildWorkflowConversation, formatMentorPlanningReport, formatWorkflowArtifact, getPlanningClarificationStatus, isPlanningClarification } from "./conversation";
+import { answerWorkflowQuestion, buildWorkflowConversation, formatMentorPlanningReport, formatWorkflowArtifact, getPlanningClarificationStatus, isPlanningClarification, planningClarificationsComplete } from "./conversation";
 
 describe("buildWorkflowConversation", () => {
   it("builds the six-agent route and mentor report from persisted records", () => {
@@ -93,5 +93,10 @@ describe("buildWorkflowConversation", () => {
     ]);
     expect(status.complete).toBe(false);
     expect(status.missing).toEqual(["研究对象"]);
+  });
+
+  it("requires all four structured planning answers before resubmission", () => {
+    expect(planningClarificationsComplete({ population: "物理师范生", context: "力学实验课", intervention: "AI 支架", comparator: "常规提示", outcome: "迁移得分" })).toBe(true);
+    expect(planningClarificationsComplete({ population: "物理师范生", context: "", intervention: "AI 支架", comparator: "常规提示", outcome: "迁移得分" })).toBe(false);
   });
 });
