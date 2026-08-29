@@ -75,6 +75,7 @@ export const artifactLabels: Record<string, string> = {
   BilingualConsistencyReport: "中英文一致性",
   WritingSufficiencyReport: "写作充分性",
   WritingInstructionSummary: "写作任务摘要",
+  ReviewInstructionSummary: "独立审查任务摘要",
   AtomicClaimGraph: "原子主张与证据映射",
   ClaimEvidenceMap: "主张证据映射",
   ReproducibilityStatement: "可复现性声明",
@@ -365,6 +366,8 @@ export function formatWorkflowArtifact(artifactType: string, body: Record<string
     add("写作充分性", body.status); add("待补要求", body.missing_requirements);
   } else if (artifactType === "WritingInstructionSummary") {
     add("写作范围", body.requested_scope); add("语言版本", body.requested_languages); add("目标格式", body.target_format); add("主张边界", body.claim_boundary);
+  } else if (artifactType === "ReviewInstructionSummary") {
+    add("审查范围", body.scope); add("审查重点", body.focus); add("发布门槛", body.threshold);
   } else if (artifactType === "AtomicClaimGraph") {
     const nodes = Array.isArray(body.nodes) ? body.nodes : [];
     lines.push(`已建立 ${nodes.length} 条原子主张及其证据映射。`);

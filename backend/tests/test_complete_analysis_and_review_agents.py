@@ -282,6 +282,50 @@ def test_reviewer_adapts_read_only_outcome_to_candidate_artifacts() -> None:
     assert validate_agent_result(result, reviewer.capability()) is result
 
 
+def test_reviewer_exposes_requested_review_instructions_as_a_candidate() -> None:
+    reviewer = IndependentReviewAgent()
+    outcome = reviewer.review_method(
+        MethodReviewInput(
+            project_id="physics-demo",
+            protocol_ref="protocol://physics-demo/v1",
+            criteria=[
+                ReviewCriterion(
+                    criterion_id="protocol-present",
+                    artifact_ref="protocol://physics-demo/v1",
+                    category="method",
+                    description="The approved protocol is present.",
+                    passed=True,
+                )
+            ],
+        )
+    )
+
+    result = reviewer.as_agent_result(
+        AgentInput(
+            agent_run_id="review-instructions-1",
+            task_ref="physics-demo:review",
+            context_bundle_ref="context://physics-demo/review",
+            allowed_tool_capabilities=[],
+            allowed_output_types=list(reviewer.allowed_output_types),
+            policy_version="policy-v1",
+            prompt_template_version="review-v1",
+        ),
+        outcome,
+        instructions={
+            "scope": "完整发布前审查",
+            "focus": "引用、方法和可复现性",
+            "threshold": "发现重大问题则退回",
+        },
+    )
+
+    summary = next(
+        item.body for item in result.candidate_artifacts
+        if item.artifact_type == "ReviewInstructionSummary"
+    )
+    assert summary["focus"] == "引用、方法和可复现性"
+    assert result.approval_requests == []
+
+
 def test_reviewer_attaches_model_reasoning_without_gaining_control_authority() -> None:
     reviewer = IndependentReviewAgent(
         reasoning_generator=StructuredGenerator(

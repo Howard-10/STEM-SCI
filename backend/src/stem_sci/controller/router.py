@@ -1267,20 +1267,39 @@ class ResearchController:
             if not isinstance(agent, IndependentReviewAgent):
                 raise ValueError("independent_review registry entry has an invalid implementation")
             review_state = self._require_research_state(state)
+            review_instructions = {
+                "scope": self._extract_field(self._project_intents.get(project_id, ""), "审查范围")
+                or "完整发布前审查",
+                "focus": self._extract_field(self._project_intents.get(project_id, ""), "审查重点")
+                or "引用、方法、可复现性和主张边界",
+                "threshold": self._extract_field(self._project_intents.get(project_id, ""), "发布门槛")
+                or "发现重大问题则退回，全部通过后允许申请发布",
+            }
+            review_context = (
+                f"Review scope: {review_instructions['scope']}; "
+                f"focus: {review_instructions['focus']}; "
+                f"release threshold: {review_instructions['threshold']}"
+            )
             protocol_ref = review_state.protocol_refs[0] if review_state.protocol_refs else f"protocol://{project_id}/missing"
             criteria = [
                 ReviewCriterion(
                     criterion_id="approved-study-protocol",
                     artifact_ref=protocol_ref,
                     category="method",
-                    description="An approved study protocol reference is required for release review.",
+                    description=(
+                        "An approved study protocol reference is required for release review. "
+                        + review_context
+                    ),
                     passed=bool(review_state.protocol_refs),
                 ),
                 ReviewCriterion(
                     criterion_id="evidence-traceability",
                     artifact_ref=protocol_ref,
                     category="citation",
-                    description="The manuscript review package must retain project-scoped evidence references.",
+                    description=(
+                        "The manuscript review package must retain project-scoped evidence references. "
+                        + review_context
+                    ),
                     passed=bool(review_state.evidence_refs),
                     evidence_refs=list(review_state.evidence_refs),
                 ),
@@ -1290,7 +1309,7 @@ class ResearchController:
                 protocol_ref=protocol_ref,
                 criteria=criteria,
             ))
-            result = agent.as_agent_result(agent_input, outcome)
+            result = agent.as_agent_result(agent_input, outcome, instructions=review_instructions)
         else:
             result = self.dispatcher.dispatch(agent_id, agent_input, context_bundle)
         if not result.candidate_artifact_refs:

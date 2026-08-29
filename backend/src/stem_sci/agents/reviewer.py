@@ -33,7 +33,13 @@ class IndependentReviewAgent(BaseAgent):
         "review_arbitration",
     )
     allowed_tool_capabilities = ()
-    allowed_output_types = ("ReviewFinding", "RevisionRequest", "ReviewReport", "AgentReasoningCandidate")
+    allowed_output_types = (
+        "ReviewInstructionSummary",
+        "ReviewFinding",
+        "RevisionRequest",
+        "ReviewReport",
+        "AgentReasoningCandidate",
+    )
 
     def __init__(self, *, reasoning_generator=None, reasoning_model: str | None = None) -> None:
         super().__init__(reasoning_generator=reasoning_generator, reasoning_model=reasoning_model)
@@ -42,6 +48,8 @@ class IndependentReviewAgent(BaseAgent):
         self,
         agent_input: AgentInput,
         outcome: GeneralReviewOutcome | ReproducibilityReviewOutcome,
+        *,
+        instructions: dict[str, str] | None = None,
     ) -> AgentResult:
         """Adapt read-only review output into Controller-persistable candidates.
 
@@ -51,6 +59,15 @@ class IndependentReviewAgent(BaseAgent):
 
         allowed = set(agent_input.allowed_output_types)
         artifacts: list[CandidateArtifact] = []
+        if instructions is not None and "ReviewInstructionSummary" in allowed:
+            artifacts.append(
+                self._artifact(
+                    agent_input.task_ref,
+                    "ReviewInstructionSummary",
+                    "review-instructions",
+                    instructions,
+                )
+            )
         for finding in outcome.findings:
             if "ReviewFinding" in allowed:
                 artifacts.append(self._artifact(agent_input.task_ref, "ReviewFinding", finding.finding_id, finding))
@@ -406,12 +423,12 @@ class IndependentReviewAgent(BaseAgent):
         task_ref: str,
         artifact_type: str,
         artifact_id: str,
-        body: ReviewFinding | RevisionRequest | ReviewReport,
+        body: ReviewFinding | RevisionRequest | ReviewReport | dict[str, str],
     ) -> CandidateArtifact:
         safe_id = artifact_id.replace("://", "-").replace("/", "-")
         return CandidateArtifact(
             candidate_ref=f"candidate://independent_review/{task_ref}/{safe_id}/{artifact_type}",
             artifact_type=artifact_type,
             schema_version="v1",
-            body=body.model_dump(mode="json"),
+            body=body if isinstance(body, dict) else body.model_dump(mode="json"),
         )
