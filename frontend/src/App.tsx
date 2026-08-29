@@ -206,6 +206,7 @@ export function App() {
   const rawCsvInputRef = useRef<HTMLInputElement>(null);
   const evidenceInputRef = useRef<HTMLInputElement>(null);
   const analysisInputRef = useRef<HTMLInputElement>(null);
+  const dataAnalysisFileInputRef = useRef<HTMLInputElement>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>(demoRuntime);
   const [workflowSnapshot, setWorkflowSnapshot] = useState<ControllerWorkflowState | null>(null);
   const [analysisState, setAnalysisState] = useState<DataPipelineState | null>(null);
@@ -233,7 +234,8 @@ export function App() {
   const [evidenceAnswers, setEvidenceAnswers] = useState<EvidenceClarificationAnswers>({ goal: "", timeRange: "", sources: "", preferences: "", outputs: "" });
   const [designAnswers, setDesignAnswers] = useState<DesignClarificationAnswers>({ designType: "", samplePlan: "", timepoints: "", analysisModel: "", ethics: "" });
   const [designClarificationsSubmitted, setDesignClarificationsSubmitted] = useState(false);
-  const [dataAnalysisAnswers, setDataAnalysisAnswers] = useState<DataAnalysisClarificationAnswers>({ dataSource: "", variables: "", missingData: "", mode: "", privacy: "" });
+  const [dataAnalysisAnswers, setDataAnalysisAnswers] = useState<DataAnalysisClarificationAnswers>({ variables: "", missingData: "", mode: "", privacy: "" });
+  const [dataAnalysisFile, setDataAnalysisFile] = useState<File | null>(null);
   const [dataAnalysisClarificationsSubmitted, setDataAnalysisClarificationsSubmitted] = useState(false);
   const [writingAnswers, setWritingAnswers] = useState<WritingClarificationAnswers>({ scope: "", languages: "", format: "", boundary: "" });
   const [writingClarificationsSubmitted, setWritingClarificationsSubmitted] = useState(false);
@@ -454,7 +456,11 @@ export function App() {
   };
 
   const submitDataAnalysisClarifications = async () => {
-    if (!workflowTimeline || !dataAnalysisClarificationsComplete(dataAnalysisAnswers) || !workflowProjectIdValid(projectId)) return;
+    if (!workflowTimeline || !dataAnalysisClarificationsComplete(dataAnalysisAnswers) || !dataAnalysisFile || !workflowProjectIdValid(projectId)) return;
+    if (!dataAnalysisFile.name.toLowerCase().endsWith(".csv")) {
+      setWorkflowError("数据分析仅接受 CSV 原始数据文件。");
+      return;
+    }
     const feedback = formatDataAnalysisClarificationFeedback(dataAnalysisAnswers);
     setWorkflowBusy(true);
     setWorkflowError("");
@@ -467,7 +473,7 @@ export function App() {
       });
       setWorkflow(result.workflow_state);
       setDataAnalysisClarificationsSubmitted(true);
-      setDataAnalysisAnswers({ dataSource: "", variables: "", missingData: "", mode: "", privacy: "" });
+      setDataAnalysisAnswers({ variables: "", missingData: "", mode: "", privacy: "" });
       await reloadWorkflowTimeline();
     } catch (error) {
       setWorkflowError(error instanceof Error ? error.message : "无法提交数据分析条件");
@@ -758,10 +764,20 @@ export function App() {
       setWorkflowError("请先填写独立审查范围、重点和发布门槛，再通过候选方案。");
       return;
     }
+    const isDataAnalysisApproval = workflowTimeline?.workflow_state.last_route_decision?.selected_route === "data_analysis";
+    if (decision === "approved" && isDataAnalysisApproval && !dataAnalysisFile) {
+      setWorkflowError("请先选择原始实验数据 CSV，系统会在分析规格审批后立即进行数据审查。");
+      return;
+    }
     setWorkflowBusy(true);
     setWorkflowError("");
     try {
       await workflowApi.approve(projectId, decision, auth?.user.username ?? "researcher");
+      if (decision === "approved" && isDataAnalysisApproval && dataAnalysisFile) {
+        await workflowApi.uploadRawCsv(projectId, dataAnalysisFile);
+        setDataAnalysisFile(null);
+        if (dataAnalysisFileInputRef.current) dataAnalysisFileInputRef.current.value = "";
+      }
       await refreshWorkflow();
       await reloadWorkflowTimeline();
     } catch (error) {
@@ -822,6 +838,7 @@ export function App() {
       const workflowState = workflow ?? workflowTimeline?.workflow_state;
       if (workflowCommand && auth?.access_token && activeProject) {
         if (workflowState?.pending_approval_ref) {
+          const selectedRoute = workflowTimeline?.workflow_state.last_route_decision?.selected_route;
           if (workflowTimeline?.workflow_state.last_route_decision?.selected_route === "mentor_planning") {
             const mentorReport = findLatestWorkflowReport(workflowTimeline, "mentor_planning");
             if (mentorReport) {
@@ -832,7 +849,16 @@ export function App() {
               }
             }
           }
+          if (selectedRoute === "data_analysis" && !dataAnalysisFile) {
+            setMessages((current) => [...current, { id: `assistant-data-required-${Date.now()}`, role: "assistant", content: "请先在数据分析确认卡中选择原始实验数据 CSV。确认分析规格后，系统会自动进行数据审查。" }]);
+            return;
+          }
           await workflowApi.approve(projectId, "approved", auth.user.username);
+          if (selectedRoute === "data_analysis" && dataAnalysisFile) {
+            await workflowApi.uploadRawCsv(projectId, dataAnalysisFile);
+            setDataAnalysisFile(null);
+            if (dataAnalysisFileInputRef.current) dataAnalysisFileInputRef.current.value = "";
+          }
           await refreshWorkflow();
           await reloadWorkflowTimeline();
           setMessages((current) => [...current, {
@@ -998,6 +1024,8 @@ export function App() {
 
   const switchProject = (nextProjectId: string) => {
     setProjectId(nextProjectId);
+    setDataAnalysisFile(null);
+    if (dataAnalysisFileInputRef.current) dataAnalysisFileInputRef.current.value = "";
     setProjectMenuOpen(false);
     setConversationId(undefined);
     setConversations([]);
@@ -1574,7 +1602,7 @@ export function App() {
                     </section>;
                   })()}
                   {item.pendingApproval && <div className="workflow-control-actions">
-                    <button className="primary-inline-button" disabled={workflowBusy || (item.agentId === "mentor_planning" && !getPlanningClarificationStatus(item.artifacts).complete) || (item.agentId === "research_design" && !designClarificationsSubmitted) || (item.agentId === "data_analysis" && !dataAnalysisClarificationsSubmitted) || (item.agentId === "paper_writing" && !writingClarificationsSubmitted) || (item.agentId === "independent_review" && !reviewClarificationsSubmitted)} type="button" onClick={() => void decideWorkflow("approved")}>通过候选方案</button>
+                    <button className="primary-inline-button" disabled={workflowBusy || (item.agentId === "mentor_planning" && !getPlanningClarificationStatus(item.artifacts).complete) || (item.agentId === "research_design" && !designClarificationsSubmitted) || (item.agentId === "data_analysis" && (!dataAnalysisClarificationsSubmitted || !dataAnalysisFile)) || (item.agentId === "paper_writing" && !writingClarificationsSubmitted) || (item.agentId === "independent_review" && !reviewClarificationsSubmitted)} type="button" onClick={() => void decideWorkflow("approved")}>通过候选方案</button>
                     <button className="secondary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("rejected")}>退回</button>
                   </div>}
                   {item.isLatest && !item.pendingApproval && (workflow ?? workflowTimeline?.workflow_state) && !["VERIFIED", "RELEASED", "BLOCKED", "REWORK"].includes((workflow ?? workflowTimeline?.workflow_state)?.current_stage ?? "") && <div className="workflow-control-actions">
@@ -1613,15 +1641,15 @@ export function App() {
                     <div className="planning-form-footer"><span>五项填写完整后，才会重新生成研究设计。</span><button type="button" disabled={workflowBusy || !designClarificationsComplete(designAnswers)} onClick={() => void submitDesignClarifications()}>确认并重新生成</button></div>
                   </section> : item.pendingApproval && item.agentId === "data_analysis" ? <section className="planning-clarification-form analysis-clarification-form">
                     <div className="planning-clarification-heading"><strong>数据分析确认</strong><span className="clarification-pending">确认后建立数据管道</span></div>
-                    <p>研究方案、预注册分析计划和结果指标已自动继承。请确认数据文件、变量、缺失值、分析模式和隐私规则；确认后才能上传 CSV 并开始数据审查。</p>
+                    <p>研究方案、预注册分析计划和结果指标已自动继承。请提供原始 CSV 与字段规则；通过分析规格后，系统会立即用该文件进行数据审查。</p>
                     <div className="planning-form-grid">
-                      <label className="planning-form-wide"><span>数据来源 <em>必填</em></span><input value={dataAnalysisAnswers.dataSource} onChange={(event) => setDataAnalysisAnswers((current) => ({ ...current, dataSource: event.target.value }))} placeholder="例如：大学物理实验课程 CSV" /></label>
+                      <label className="planning-form-wide"><span>原始数据 CSV <em>必填</em></span><input ref={dataAnalysisFileInputRef} type="file" accept=".csv,text/csv" onChange={(event) => setDataAnalysisFile(event.target.files?.[0] ?? null)} /><small>{dataAnalysisFile ? `已选择：${dataAnalysisFile.name}` : "上传后将先检查字段、类型、缺失和隐私风险。"}</small></label>
                       <label><span>必需变量 <em>必填</em></span><input value={dataAnalysisAnswers.variables} onChange={(event) => setDataAnalysisAnswers((current) => ({ ...current, variables: event.target.value }))} placeholder="例如：group, transfer_score" /></label>
                       <label><span>缺失值处理 <em>必填</em></span><input value={dataAnalysisAnswers.missingData} onChange={(event) => setDataAnalysisAnswers((current) => ({ ...current, missingData: event.target.value }))} placeholder="例如：按预注册规则处理" /></label>
                       <label><span>分析模式 <em>必填</em></span><input value={dataAnalysisAnswers.mode} onChange={(event) => setDataAnalysisAnswers((current) => ({ ...current, mode: event.target.value }))} placeholder="例如：Python 单引擎" /></label>
                       <label><span>隐私规则 <em>必填</em></span><input value={dataAnalysisAnswers.privacy} onChange={(event) => setDataAnalysisAnswers((current) => ({ ...current, privacy: event.target.value }))} placeholder="例如：去标识化，不含直接身份信息" /></label>
                     </div>
-                    <div className="planning-form-footer"><span>五项填写完整后，才会生成分析规格并开放审批。</span><button type="button" disabled={workflowBusy || !dataAnalysisClarificationsComplete(dataAnalysisAnswers)} onClick={() => void submitDataAnalysisClarifications()}>确认并生成分析规格</button></div>
+                    <div className="planning-form-footer"><span>选择 CSV 并填写四项分析规则后，才会生成分析规格并开放审批。</span><button type="button" disabled={workflowBusy || !dataAnalysisFile || !dataAnalysisClarificationsComplete(dataAnalysisAnswers)} onClick={() => void submitDataAnalysisClarifications()}>确认并生成分析规格</button></div>
                   </section> : item.pendingApproval && item.agentId === "paper_writing" ? <section className="planning-clarification-form writing-clarification-form">
                     <div className="planning-clarification-heading"><strong>论文写作确认</strong><span className="clarification-pending">确认后生成双语稿</span></div>
                     <p>研究方案、证据矩阵和已验证结果会自动继承。请确认写作范围、语言、目标格式和主张边界；系统将生成论文大纲、双语草稿和引用映射。</p>

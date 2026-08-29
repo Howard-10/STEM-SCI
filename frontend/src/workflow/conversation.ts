@@ -127,7 +127,6 @@ export type DesignClarificationAnswers = {
 };
 
 export type DataAnalysisClarificationAnswers = {
-  dataSource: string;
   variables: string;
   missingData: string;
   mode: string;
@@ -178,7 +177,6 @@ export function dataAnalysisClarificationsComplete(answers: DataAnalysisClarific
 
 export function formatDataAnalysisClarificationFeedback(answers: DataAnalysisClarificationAnswers): string {
   return [
-    `数据来源：${answers.dataSource.trim()}`,
     `必需变量：${answers.variables.trim()}`,
     `缺失值处理：${answers.missingData.trim()}`,
     `分析模式：${answers.mode.trim()}`,

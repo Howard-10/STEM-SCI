@@ -197,14 +197,14 @@ describe("buildWorkflowConversation", () => {
     expect(feedback).not.toContain("[object Object]");
   });
 
-  it("requires data source, variables, missing-data rule, mode, and privacy before analysis", () => {
-    expect(dataAnalysisClarificationsComplete({ dataSource: "", variables: "group, transfer_score", missingData: "完整案例分析", mode: "Python", privacy: "去标识化" })).toBe(false);
-    expect(dataAnalysisClarificationsComplete({ dataSource: "实验课程 CSV", variables: "group, transfer_score", missingData: "完整案例分析", mode: "Python", privacy: "去标识化" })).toBe(true);
+  it("requires analysis rules rather than a duplicate textual data source", () => {
+    expect(dataAnalysisClarificationsComplete({ variables: "group, transfer_score", missingData: "完整案例分析", mode: "Python", privacy: "去标识化" })).toBe(true);
+    expect(dataAnalysisClarificationsComplete({ variables: "", missingData: "完整案例分析", mode: "Python", privacy: "去标识化" })).toBe(false);
   });
 
   it("serializes data analysis clarification answers", () => {
-    const feedback = formatDataAnalysisClarificationFeedback({ dataSource: "实验课程 CSV", variables: "group, transfer_score", missingData: "按预注册规则处理", mode: "Python", privacy: "去标识化且拒绝直接身份信息" });
-    expect(feedback).toContain("数据来源：实验课程 CSV");
+    const feedback = formatDataAnalysisClarificationFeedback({ variables: "group, transfer_score", missingData: "按预注册规则处理", mode: "Python", privacy: "去标识化且拒绝直接身份信息" });
+    expect(feedback).not.toContain("数据来源：");
     expect(feedback).toContain("必需变量：group, transfer_score");
     expect(feedback).toContain("分析模式：Python");
   });

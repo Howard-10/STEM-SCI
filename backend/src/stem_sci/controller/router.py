@@ -464,6 +464,26 @@ class ResearchController:
             else f"protocol://{project_id}/v1"
         )
         preregistered_plan_ref = f"prereg-plan://{project_id}/v1"
+        intent = self._project_intents.get(project_id, "")
+        variable_text = self._extract_field(intent, "必需变量")
+        required_variables = list(
+            dict.fromkeys(
+                item.strip()
+                for item in (variable_text or "group, transfer_score").replace("，", ",").split(",")
+                if item.strip()
+            )
+        )
+        if len(required_variables) < 2:
+            required_variables = ["group", "transfer_score"]
+        predictor, outcome, *_ = required_variables
+        analysis_mode_text = self._extract_field(intent, "分析模式") or ""
+        analysis_mode = (
+            AnalysisMode.SPSS_PYTHON_DUAL
+            if "spss" in analysis_mode_text.casefold() or "双" in analysis_mode_text
+            else AnalysisMode.PYTHON_ONLY
+        )
+        missing_data_rule = self._extract_field(intent, "缺失值处理") or "report missingness"
+        privacy_rule = self._extract_field(intent, "隐私规则") or "reject direct identifiers"
         request = DataAnalysisPreAnalysisInput(
             agent_run_id=run_id,
             project_id=project_id,
@@ -474,12 +494,12 @@ class ResearchController:
             preregistration_approval_ref=f"approval://{project_id}/prereg-v1",
             data_collection_schema_ref=f"schema://{project_id}/collection-v1",
             variable_dictionary_ref=f"dictionary://{project_id}/v1",
-            analysis_mode=AnalysisMode.PYTHON_ONLY,
+            analysis_mode=analysis_mode,
             model_specification_refs=[f"model-spec://{project_id}/main-v1"],
-            required_variables=["group", "transfer_score"],
-            missingness_checks=["report missingness"],
-            range_and_type_checks=["numeric transfer score"],
-            privacy_checks=["reject direct identifiers"],
+            required_variables=required_variables,
+            missingness_checks=[missing_data_rule],
+            range_and_type_checks=[f"numeric {outcome}"],
+            privacy_checks=[privacy_rule],
             proposed_processing_steps=["approved lossless processing"],
             missing_data_strategy_ref=f"prereg-plan://{project_id}/missingness",
             diagnostic_checks=["residual check"],
@@ -489,10 +509,10 @@ class ResearchController:
             model_spec_id="main-v1",
             project_id=project_id,
             model_family="group_mean_difference",
-            outcome_variables=["transfer_score"],
-            predictor_variables=["group"],
-            formula_or_design="mean(transfer_score) by group",
-            rationale="Narrow CSV MVP configuration; replace with the approved model compiler output.",
+            outcome_variables=[outcome],
+            predictor_variables=[predictor],
+            formula_or_design=f"mean({outcome}) by {predictor}",
+            rationale="Configured from the researcher-approved analysis fields.",
         )
         return request, model_specification
 
@@ -1189,7 +1209,7 @@ class ResearchController:
         if (
             self._strict_data_pipeline
             and agent_id == "data_analysis"
-            and state.current_stage is ProjectStage.STUDY_PROTOCOL_APPROVED
+            and approval_type == "analysis_specification"
         ):
             if not isinstance(agent, DataAnalysisAgent):
                 raise ValueError("data_analysis registry entry has an invalid implementation")
@@ -1396,8 +1416,8 @@ class ResearchController:
     @staticmethod
     def _extract_field(text: str, label: str) -> str | None:
         import re
-        match = re.search(rf"{re.escape(label)}\s*[:：]\s*([^；;\n]+)", text)
-        return match.group(1).strip() if match else None
+        matches = re.findall(rf"{re.escape(label)}\s*[:：]\s*([^；;\n]+)", text)
+        return matches[-1].strip() if matches else None
 
     def resume_approval(
         self,

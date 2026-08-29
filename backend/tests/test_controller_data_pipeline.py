@@ -151,6 +151,54 @@ def test_analysis_specification_approval_starts_waiting_raw_data_pipeline(tmp_pa
     assert writing.approval_request.approval_type == "manuscript"
 
 
+def test_data_analysis_feedback_configures_the_csv_audit_and_model(tmp_path: Path) -> None:
+    project_id = "controller-analysis-feedback"
+    controller = _ready_controller(tmp_path, project_id)
+    controller._project_intents[project_id] += (
+        "\n\n[User feedback for data_analysis]: "
+        "数据来源：大学物理实验课程 CSV；"
+        "必需变量：condition, transfer_score, baseline_score；"
+        "缺失值处理：按预注册规则处理；"
+        "分析模式：Python 单引擎；"
+        "隐私规则：去标识化且拒绝直接身份信息"
+    )
+    controller._project_intents[project_id] += (
+        "\n\n[User feedback for data_analysis]: "
+        "必需变量：treatment, final_score；"
+        "缺失值处理：删除未完成问卷；"
+        "分析模式：Python 单引擎；"
+        "隐私规则：去标识化"
+    )
+
+    request, specification = controller._build_pre_analysis_input(
+        project_id,
+        "analysis-feedback-run",
+        "draft_analysis_specification",
+        controller.get_state(project_id),
+    )
+
+    assert request.required_variables == ["treatment", "final_score"]
+    assert specification.predictor_variables == ["treatment"]
+    assert specification.outcome_variables == ["final_score"]
+
+
+def test_data_analysis_rerun_rebuilds_pipeline_package_before_approval(tmp_path: Path) -> None:
+    project_id = "controller-analysis-rerun"
+    controller = _ready_controller(tmp_path, project_id)
+    analysis = controller.run_next(project_id)
+    controller.resume_approval(project_id, analysis.approval_request, decision="rejected", decided_by="r")
+    controller._project_intents[project_id] += (
+        "\n\n[User feedback for data_analysis]: 必需变量：condition, transfer_score；"
+        "缺失值处理：按预注册规则处理；分析模式：Python 单引擎；隐私规则：去标识化"
+    )
+    rerun = controller.run_next(project_id)
+    assert rerun.approval_request.approval_type == "analysis_specification"
+    controller.resume_approval(project_id, rerun.approval_request, decision="approved", decided_by="r")
+    state = controller.get_state(project_id)
+    assert state.data_pipeline is not None
+    assert state.data_pipeline.pre_analysis.agent_result.agent_run_id == rerun.agent_result.agent_run_id
+
+
 def test_workflow_does_not_route_writing_before_data_pipeline_is_analyzed(tmp_path: Path) -> None:
     project_id = "controller-analysis-gate"
     controller = _ready_controller(tmp_path, project_id)
