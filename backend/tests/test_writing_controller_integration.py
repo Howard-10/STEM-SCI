@@ -187,3 +187,26 @@ def test_controller_marks_writing_incomplete_when_results_are_missing(tmp_path: 
     contents = controller.artifact_content_store.list_project(project_id)
     graph = next(item for item in contents if item.artifact_type == "AtomicClaimGraph")
     assert all(node["claim_type"] != "RESULT" for node in graph.body["nodes"])
+
+
+def test_writing_feedback_becomes_structured_generation_instructions(tmp_path: Path) -> None:
+    project_id = "writing-controller-instructions"
+    controller = _make_controller(tmp_path, project_id, with_results=True)
+    controller._project_intents[project_id] += (
+        "\n\n[User feedback for paper_writing]: "
+        "写作范围：完整实证研究论文；"
+        "语言版本：中文和英文；"
+        "目标格式：教育技术类期刊 IMRaD；"
+        "主张边界：仅陈述已核验证据和已验证结果卡支持的结论"
+    )
+
+    context = controller._build_writing_context(
+        project_id,
+        "draft_manuscript",
+        controller.get_state(project_id),
+    )
+
+    assert context.requested_scope == "完整实证研究论文"
+    assert context.requested_languages == "中文和英文"
+    assert context.target_format == "教育技术类期刊 IMRaD"
+    assert context.claim_boundary == "仅陈述已核验证据和已验证结果卡支持的结论"

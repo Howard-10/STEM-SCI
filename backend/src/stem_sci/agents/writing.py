@@ -33,6 +33,7 @@ class PaperWritingAgent(BaseAgent):
     allowed_tool_capabilities = ()
     allowed_output_types = (
         "AgentReasoningCandidate",
+        "WritingInstructionSummary",
         "AtomicClaimCandidate",
         "ClaimEvidenceMap",
         "ManuscriptOutline",
@@ -60,6 +61,15 @@ class PaperWritingAgent(BaseAgent):
         package = self.pipeline.run(context, agent_input)
         allowed = set(agent_input.allowed_output_types)
         payloads: list[tuple[str, dict[str, object]]] = [
+            (
+                "WritingInstructionSummary",
+                {
+                    "requested_scope": context.requested_scope,
+                    "requested_languages": context.requested_languages,
+                    "target_format": context.target_format,
+                    "claim_boundary": context.claim_boundary,
+                },
+            ),
             ("AtomicClaimGraph", package.claim_graph.model_dump(mode="json")),
             ("ManuscriptOutline", package.outline.model_dump(mode="json") if package.outline else {}),
             ("ManuscriptDraftZh", package.chinese.model_dump(mode="json")),
@@ -207,6 +217,15 @@ class PaperWritingAgent(BaseAgent):
             findings=["Both drafts are intentionally incomplete deterministic skeletons."],
         )
         payloads: list[tuple[str, dict[str, object]]] = [
+            (
+                "WritingInstructionSummary",
+                {
+                    "requested_scope": context.requested_scope,
+                    "requested_languages": context.requested_languages,
+                    "target_format": context.target_format,
+                    "claim_boundary": context.claim_boundary,
+                },
+            ),
             ("AtomicClaimGraph", graph.model_dump(mode="json")),
             ("ManuscriptOutline", outline.model_dump(mode="json")),
             ("ManuscriptDraftZh", drafts[0].model_dump(mode="json")),

@@ -747,6 +747,10 @@ class ResearchController:
                                 evidence_matrix.append(parsed_row.model_dump(mode="json"))
 
         approved_research_scope = self._project_intents.get(project_id, "writing context")
+        requested_scope = self._extract_field(approved_research_scope, "写作范围")
+        requested_languages = self._extract_field(approved_research_scope, "语言版本")
+        target_format = self._extract_field(approved_research_scope, "目标格式")
+        claim_boundary = self._extract_field(approved_research_scope, "主张边界")
         protocol_refs = list(research_state.protocol_refs)
         result_refs = list(research_state.research_test_result_refs)
         protocol_output_types = {
@@ -783,6 +787,10 @@ class ResearchController:
         payload: dict[str, object] = {
             "project_id": project_id,
             "approved_research_scope": approved_research_scope,
+            "requested_scope": requested_scope,
+            "requested_languages": requested_languages,
+            "target_format": target_format,
+            "claim_boundary": claim_boundary,
             "evidence_refs": [item.model_dump(mode="json") for item in evidence_refs],
             "paper_cards": [item.model_dump(mode="json") for item in paper_cards],
             "evidence_matrix": evidence_matrix,
@@ -800,6 +808,10 @@ class ResearchController:
         return WritingContextBundle(
             project_id=project_id,
             approved_research_scope=approved_research_scope,
+            requested_scope=requested_scope,
+            requested_languages=requested_languages,
+            target_format=target_format,
+            claim_boundary=claim_boundary,
             evidence_refs=evidence_refs,
             paper_cards=paper_cards,
             evidence_matrix=evidence_matrix,

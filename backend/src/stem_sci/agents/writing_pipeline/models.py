@@ -69,6 +69,10 @@ class AtomicClaimGraph(WritingModel):
 class WritingContextBundle(WritingModel):
     project_id: str = Field(min_length=1)
     approved_research_scope: str = Field(min_length=1)
+    requested_scope: str | None = None
+    requested_languages: str | None = None
+    target_format: str | None = None
+    claim_boundary: str | None = None
     evidence_refs: list[EvidenceRef] = Field(default_factory=list)
     paper_cards: list[PaperCard] = Field(default_factory=list)
     evidence_matrix: list[dict[str, object]] = Field(default_factory=list)

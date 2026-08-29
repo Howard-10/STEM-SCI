@@ -59,6 +59,12 @@ def build_claim_graph(
     payload = {
         "project_id": context.project_id,
         "scope": context.approved_research_scope,
+        "writing_instructions": {
+            "requested_scope": context.requested_scope,
+            "requested_languages": context.requested_languages,
+            "target_format": context.target_format,
+            "claim_boundary": context.claim_boundary,
+        },
         "evidence": [item.model_dump(mode="json") for item in context.evidence_refs],
         "validated_result_cards": context.validated_result_cards,
         "approved_protocols": context.approved_study_protocol_refs,
@@ -87,7 +93,15 @@ def build_manuscript_outline(
     system, user = registry.render(
         "outline",
         "paper-writing-v1",
-        payload=_json(graph.model_dump(mode="json")),
+        payload=_json({
+            "graph": graph.model_dump(mode="json"),
+            "writing_instructions": {
+                "requested_scope": context.requested_scope,
+                "requested_languages": context.requested_languages,
+                "target_format": context.target_format,
+                "claim_boundary": context.claim_boundary,
+            },
+        }),
     )
     result = generator.generate(
         system_prompt=system,
@@ -111,7 +125,17 @@ def render_manuscript(
     model: str,
 ) -> StageOutput[ManuscriptDraft]:
     prompt_name = "draft_zh" if language == "zh-CN" else "draft_en"
-    payload = {"language": language, "graph": graph.model_dump(mode="json"), "outline": outline.model_dump(mode="json")}
+    payload = {
+        "language": language,
+        "graph": graph.model_dump(mode="json"),
+        "outline": outline.model_dump(mode="json"),
+        "writing_instructions": {
+            "requested_scope": context.requested_scope,
+            "requested_languages": context.requested_languages,
+            "target_format": context.target_format,
+            "claim_boundary": context.claim_boundary,
+        },
+    }
     system, user = registry.render(prompt_name, "paper-writing-v1", payload=_json(payload))
     result = generator.generate(
         system_prompt=system,

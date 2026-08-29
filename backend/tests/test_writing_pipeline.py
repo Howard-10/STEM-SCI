@@ -138,6 +138,22 @@ def pipeline(fake_responses: list[dict[str, object]]) -> tuple[PaperWritingPipel
     return PaperWritingPipeline(generator=StructuredGenerator(provider), model="gpt-test"), provider
 
 
+class RecordingFakeLLMProvider(FakeLLMProvider):
+    def __init__(self, responses: list[dict[str, object]]) -> None:
+        super().__init__(responses)
+        self.user_prompts: list[str] = []
+
+    def generate_structured(self, *, system_prompt, user_prompt, response_model, model, prompt_version):
+        self.user_prompts.append(user_prompt)
+        return super().generate_structured(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            response_model=response_model,
+            model=model,
+            prompt_version=prompt_version,
+        )
+
+
 def test_writing_pipeline_uses_one_claim_graph_for_both_languages() -> None:
     writing, provider = pipeline(responses())
 
@@ -150,6 +166,25 @@ def test_writing_pipeline_uses_one_claim_graph_for_both_languages() -> None:
     assert package.sufficiency.status is WritingSufficiencyStatus.READY
     assert len(package.generation_metadata_refs) == 4
     assert provider.call_count == 4
+
+
+def test_writing_pipeline_sends_researcher_writing_instructions_to_every_stage() -> None:
+    provider = RecordingFakeLLMProvider(responses())
+    writing = PaperWritingPipeline(generator=StructuredGenerator(provider), model="gpt-test")
+    instructions = context().model_copy(
+        update={
+            "requested_scope": "完整实证研究论文",
+            "requested_languages": "中文和英文",
+            "target_format": "教育技术类期刊 IMRaD",
+            "claim_boundary": "仅陈述已核验证据和已验证结果卡支持的结论",
+        }
+    )
+
+    writing.run(instructions, agent_input())
+
+    assert len(provider.user_prompts) == 4
+    assert all("教育技术类期刊 IMRaD" in prompt for prompt in provider.user_prompts)
+    assert all("仅陈述已核验证据" in prompt for prompt in provider.user_prompts)
 
 
 def test_writing_pipeline_never_invents_results() -> None:
@@ -263,6 +298,7 @@ def test_writing_agent_adapts_package_to_candidate_artifacts() -> None:
 
     assert result.agent_id == "paper_writing"
     assert len(result.llm_metadata_refs) == 4
+    assert any("WritingInstructionSummary" in ref for ref in result.candidate_artifact_refs)
     assert any("ManuscriptDraftZh" in ref for ref in result.candidate_artifact_refs)
     assert any("ManuscriptDraftEn" in ref for ref in result.candidate_artifact_refs)
 
