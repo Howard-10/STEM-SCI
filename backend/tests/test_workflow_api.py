@@ -1,11 +1,33 @@
 from fastapi.testclient import TestClient
 
-from stem_sci.api import app
+from stem_sci.api import app, workflow_controller
+from stem_sci.context.models import ContextBundle
 
 client = TestClient(app)
 
 
-def test_workflow_api_exposes_planning_and_next_route() -> None:
+def test_workflow_api_exposes_planning_and_next_route(monkeypatch) -> None:
+    class EmptyContextProvider:
+        def build_context(
+            self, project_id: str, task_ref: str, query: str, token_budget: int
+        ) -> ContextBundle:
+            return ContextBundle(
+                context_id=f"empty-{project_id}",
+                project_id=project_id,
+                task_ref=task_ref,
+                query=query,
+                evidence_refs=[],
+                source_refs=[],
+                risk_flags=["INSUFFICIENT_CORPUS_COVERAGE"],
+                verification_summary={},
+                token_budget=token_budget,
+                estimated_tokens=0,
+                context_hash="e" * 64,
+                generated_at="2026-08-21T00:00:00Z",
+            )
+
+    monkeypatch.setattr(workflow_controller, "context_provider", EmptyContextProvider())
+
     response = client.post(
         "/api/v1/workflow/projects",
         json={

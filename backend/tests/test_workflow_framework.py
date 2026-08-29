@@ -113,6 +113,50 @@ def test_controller_routes_from_scope_to_evidence_and_pauses_again() -> None:
     assert next_run.approval_request.approval_type == "evidence_protocol"
 
 
+def test_controller_builds_real_research_design_candidates_after_evidence_approval() -> None:
+    from stem_sci.context.models import ContextBundle, EvidenceRef, SourceLocation, VerificationStatus
+
+    class VerifiedProvider:
+        def build_context(self, project_id: str, task_ref: str, query: str, token_budget: int) -> ContextBundle:
+            evidence = EvidenceRef(
+                evidence_id=f"{project_id}-evidence-1",
+                project_id=project_id,
+                source_id="source-1",
+                chunk_id="chunk-1",
+                excerpt="Verified evidence for computational physics education.",
+                location=SourceLocation(chunk_index=0, char_start=0, char_end=55, page_start=1, page_end=1),
+                verification_status=VerificationStatus.SOURCE_VERIFIED,
+            )
+            return ContextBundle(
+                context_id=f"context-{task_ref}", project_id=project_id, task_ref=task_ref, query=query,
+                evidence_refs=[evidence], source_refs=["source-1"], verification_summary={
+                    VerificationStatus.SOURCE_VERIFIED.value: 1
+                }, token_budget=token_budget, estimated_tokens=20, context_hash="d" * 64,
+                generated_at="2026-08-21T00:00:00Z",
+            )
+
+    controller = ResearchController(context_provider=VerifiedProvider())
+    project_id = "design-route-demo"
+    planning = controller.start_planning(PlanningRequest(
+        project_id=project_id,
+        research_intent=(
+            "设计师范生 Python 物理建模实验；研究对象：大一物理师范生；"
+            "研究场景：大学物理实验室；干预与对照：分层AI支架 vs 常规提示；"
+            "主要指标：迁移得分"
+        ),
+    ))
+    controller.resume_approval(project_id, planning.approval_request, decision="approved", decided_by="researcher")
+    evidence = controller.run_next(project_id)
+    controller.resume_approval(project_id, evidence.approval_request, decision="approved", decided_by="researcher")
+
+    design = controller.run_next(project_id)
+
+    assert design.route_decision.selected_route == "research_design"
+    assert any(ref.endswith("/StudyProtocolCandidate") for ref in design.agent_result.candidate_artifact_refs)
+    contents = controller.workflow_timeline(project_id).artifact_contents
+    assert any(item.artifact_type == "StudyProtocolCandidate" for item in contents)
+
+
 def test_planning_brief_extracts_clarifications_from_human_feedback() -> None:
     agent_input = AgentInput(
         agent_run_id="planning-clarified",

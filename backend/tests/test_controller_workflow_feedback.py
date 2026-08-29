@@ -53,3 +53,25 @@ def test_feedback_continue_stops_at_pending_approval() -> None:
                 created_by="researcher",
             )
         )
+
+
+def test_repeated_identical_feedback_is_not_appended_to_research_intent() -> None:
+    controller = ResearchController(feedback_store=InMemoryWorkflowFeedbackStore())
+    controller.start_planning(PlanningRequest(project_id="feedback-dedupe", research_intent="scope"))
+    feedback = "检索目标：验证干预效果；文献范围：2020-2026；证据来源：平台知识库"
+
+    for index in range(2):
+        controller.apply_workflow_feedback(
+            WorkflowFeedback(
+                feedback_id=f"feedback-dedupe-{index}",
+                project_id="feedback-dedupe",
+                agent_id="mentor_planning",
+                stage="WAITING_HUMAN",
+                action=WorkflowFeedbackAction.RERUN,
+                feedback=feedback,
+                created_by="researcher",
+            )
+        )
+
+    intent = controller.workflow_timeline("feedback-dedupe").research_intent
+    assert intent.count(f"[User feedback for mentor_planning]: {feedback}") == 1

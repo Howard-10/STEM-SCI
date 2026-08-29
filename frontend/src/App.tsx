@@ -19,7 +19,7 @@ import {
   type RuntimeStatus,
   type WorkflowTimeline,
 } from "./api/workflow";
-import { answerWorkflowQuestion, artifactLabels, buildWorkflowConversation, findLatestWorkflowReport, formatMentorPlanningReport, formatWorkflowArtifact, getPlanningClarificationStatus, isPlanningClarification, planningClarificationsComplete, type PlanningClarificationAnswers } from "./workflow/conversation";
+import { answerWorkflowQuestion, artifactLabels, buildWorkflowConversation, dataAnalysisClarificationsComplete, designClarificationsComplete, evidenceClarificationsComplete, findLatestWorkflowReport, formatDataAnalysisClarificationFeedback, formatDesignClarificationFeedback, formatEvidenceClarificationFeedback, formatMentorPlanningReport, formatWorkflowArtifact, formatReviewClarificationFeedback, getDataAnalysisClarificationStatus, getPlanningClarificationStatus, isPlanningClarification, planningClarificationsComplete, reviewClarificationsComplete, workflowProjectIdValid, writingClarificationsComplete, formatWritingClarificationFeedback, type DataAnalysisClarificationAnswers, type DesignClarificationAnswers, type EvidenceClarificationAnswers, type PlanningClarificationAnswers, type ReviewClarificationAnswers, type WritingClarificationAnswers } from "./workflow/conversation";
 import { api } from "./api/client";
 import type { SearchResult, SharedCorpusSummary } from "./types/context";
 import { demoBundle, demoQAResponse, demoRuntime } from "./demo/data";
@@ -230,6 +230,15 @@ export function App() {
   const [workflowTimeline, setWorkflowTimeline] = useState<WorkflowTimeline | null>(null);
   const [workflowFeedback, setWorkflowFeedback] = useState("");
   const [planningAnswers, setPlanningAnswers] = useState<PlanningClarificationAnswers>({ population: "", context: "", intervention: "", comparator: "", outcome: "" });
+  const [evidenceAnswers, setEvidenceAnswers] = useState<EvidenceClarificationAnswers>({ goal: "", timeRange: "", sources: "", preferences: "", outputs: "" });
+  const [designAnswers, setDesignAnswers] = useState<DesignClarificationAnswers>({ designType: "", samplePlan: "", timepoints: "", analysisModel: "", ethics: "" });
+  const [designClarificationsSubmitted, setDesignClarificationsSubmitted] = useState(false);
+  const [dataAnalysisAnswers, setDataAnalysisAnswers] = useState<DataAnalysisClarificationAnswers>({ dataSource: "", variables: "", missingData: "", mode: "", privacy: "" });
+  const [dataAnalysisClarificationsSubmitted, setDataAnalysisClarificationsSubmitted] = useState(false);
+  const [writingAnswers, setWritingAnswers] = useState<WritingClarificationAnswers>({ scope: "", languages: "", format: "", boundary: "" });
+  const [writingClarificationsSubmitted, setWritingClarificationsSubmitted] = useState(false);
+  const [reviewAnswers, setReviewAnswers] = useState<ReviewClarificationAnswers>({ scope: "", focus: "", threshold: "" });
+  const [reviewClarificationsSubmitted, setReviewClarificationsSubmitted] = useState(false);
   const [evidenceRows, setEvidenceRows] = useState<SearchResult[]>([]);
   const [evidenceBusy, setEvidenceBusy] = useState(false);
   const [evidenceError, setEvidenceError] = useState("");
@@ -339,6 +348,10 @@ export function App() {
 
   const submitWorkflowFeedback = async (agentId: string, action: "rerun" | "pause") => {
     if (!workflowTimeline || !workflowFeedback.trim()) return;
+    if (!workflowProjectIdValid(projectId)) {
+      setWorkflowError("当前未选择研究项目，请先在项目列表中选择项目。");
+      return;
+    }
     setWorkflowBusy(true);
     setWorkflowError("");
     try {
@@ -386,6 +399,124 @@ export function App() {
       await reloadWorkflowTimeline();
     } catch (error) {
       setWorkflowError(error instanceof Error ? error.message : "无法提交导师规划补充信息");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  const submitEvidenceClarifications = async () => {
+    if (!workflowTimeline || !evidenceClarificationsComplete(evidenceAnswers)) return;
+    if (!workflowProjectIdValid(projectId)) {
+      setWorkflowError("当前未选择研究项目，请先在项目列表中选择项目。");
+      return;
+    }
+    const feedback = formatEvidenceClarificationFeedback(evidenceAnswers);
+    setWorkflowBusy(true);
+    setWorkflowError("");
+    try {
+      const result = await workflowApi.submitFeedback(projectId, {
+        agent_id: "evidence_review",
+        stage: workflowTimeline.workflow_state.current_stage,
+        action: "rerun",
+        feedback,
+      });
+      setWorkflow(result.workflow_state);
+      setEvidenceAnswers({ goal: "", timeRange: "", sources: "", preferences: "", outputs: "" });
+      await reloadWorkflowTimeline();
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : "无法提交证据检索条件");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  const submitDesignClarifications = async () => {
+    if (!workflowTimeline || !designClarificationsComplete(designAnswers) || !workflowProjectIdValid(projectId)) return;
+    const feedback = formatDesignClarificationFeedback(designAnswers);
+    setWorkflowBusy(true);
+    setWorkflowError("");
+    try {
+      const result = await workflowApi.submitFeedback(projectId, {
+        agent_id: "research_design",
+        stage: workflowTimeline.workflow_state.current_stage,
+        action: "rerun",
+        feedback,
+      });
+      setWorkflow(result.workflow_state);
+      setDesignAnswers({ designType: "", samplePlan: "", timepoints: "", analysisModel: "", ethics: "" });
+      setDesignClarificationsSubmitted(true);
+      await reloadWorkflowTimeline();
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : "无法提交研究设计条件");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  const submitDataAnalysisClarifications = async () => {
+    if (!workflowTimeline || !dataAnalysisClarificationsComplete(dataAnalysisAnswers) || !workflowProjectIdValid(projectId)) return;
+    const feedback = formatDataAnalysisClarificationFeedback(dataAnalysisAnswers);
+    setWorkflowBusy(true);
+    setWorkflowError("");
+    try {
+      const result = await workflowApi.submitFeedback(projectId, {
+        agent_id: "data_analysis",
+        stage: workflowTimeline.workflow_state.current_stage,
+        action: "rerun",
+        feedback,
+      });
+      setWorkflow(result.workflow_state);
+      setDataAnalysisClarificationsSubmitted(true);
+      setDataAnalysisAnswers({ dataSource: "", variables: "", missingData: "", mode: "", privacy: "" });
+      await reloadWorkflowTimeline();
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : "无法提交数据分析条件");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  const submitWritingClarifications = async () => {
+    if (!workflowTimeline || !writingClarificationsComplete(writingAnswers) || !workflowProjectIdValid(projectId)) return;
+    const feedback = formatWritingClarificationFeedback(writingAnswers);
+    setWorkflowBusy(true);
+    setWorkflowError("");
+    try {
+      const result = await workflowApi.submitFeedback(projectId, {
+        agent_id: "paper_writing",
+        stage: workflowTimeline.workflow_state.current_stage,
+        action: "rerun",
+        feedback,
+      });
+      setWorkflow(result.workflow_state);
+      setWritingClarificationsSubmitted(true);
+      setWritingAnswers({ scope: "", languages: "", format: "", boundary: "" });
+      await reloadWorkflowTimeline();
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : "无法提交论文写作条件");
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
+  const submitReviewClarifications = async () => {
+    if (!workflowTimeline || !reviewClarificationsComplete(reviewAnswers) || !workflowProjectIdValid(projectId)) return;
+    const feedback = formatReviewClarificationFeedback(reviewAnswers);
+    setWorkflowBusy(true);
+    setWorkflowError("");
+    try {
+      const result = await workflowApi.submitFeedback(projectId, {
+        agent_id: "independent_review",
+        stage: workflowTimeline.workflow_state.current_stage,
+        action: "rerun",
+        feedback,
+      });
+      setWorkflow(result.workflow_state);
+      setReviewClarificationsSubmitted(true);
+      setReviewAnswers({ scope: "", focus: "", threshold: "" });
+      await reloadWorkflowTimeline();
+    } catch (error) {
+      setWorkflowError(error instanceof Error ? error.message : "无法提交独立审查条件");
     } finally {
       setWorkflowBusy(false);
     }
@@ -591,6 +722,10 @@ export function App() {
   };
 
   const runNextWorkflowStage = async () => {
+    if (!workflowProjectIdValid(projectId)) {
+      setWorkflowError("当前未选择研究项目，请先在项目列表中选择项目。");
+      return;
+    }
     setWorkflowBusy(true);
     setWorkflowError("");
     try {
@@ -605,6 +740,10 @@ export function App() {
   };
 
   const decideWorkflow = async (decision: "approved" | "rejected") => {
+    if (!workflowProjectIdValid(projectId)) {
+      setWorkflowError("当前未选择研究项目，请先在项目列表中选择项目。");
+      return;
+    }
     if (decision === "approved" && workflowTimeline?.workflow_state.last_route_decision?.selected_route === "mentor_planning") {
       const mentorReport = findLatestWorkflowReport(workflowTimeline, "mentor_planning");
       if (mentorReport) {
@@ -614,6 +753,10 @@ export function App() {
           return;
         }
       }
+    }
+    if (decision === "approved" && workflowTimeline?.workflow_state.last_route_decision?.selected_route === "independent_review" && !reviewClarificationsSubmitted) {
+      setWorkflowError("请先填写独立审查范围、重点和发布门槛，再通过候选方案。");
+      return;
     }
     setWorkflowBusy(true);
     setWorkflowError("");
@@ -1431,7 +1574,7 @@ export function App() {
                     </section>;
                   })()}
                   {item.pendingApproval && <div className="workflow-control-actions">
-                    <button className="primary-inline-button" disabled={workflowBusy || (item.agentId === "mentor_planning" && !getPlanningClarificationStatus(item.artifacts).complete)} type="button" onClick={() => void decideWorkflow("approved")}>通过候选方案</button>
+                    <button className="primary-inline-button" disabled={workflowBusy || (item.agentId === "mentor_planning" && !getPlanningClarificationStatus(item.artifacts).complete) || (item.agentId === "research_design" && !designClarificationsSubmitted) || (item.agentId === "data_analysis" && !dataAnalysisClarificationsSubmitted) || (item.agentId === "paper_writing" && !writingClarificationsSubmitted) || (item.agentId === "independent_review" && !reviewClarificationsSubmitted)} type="button" onClick={() => void decideWorkflow("approved")}>通过候选方案</button>
                     <button className="secondary-inline-button" disabled={workflowBusy} type="button" onClick={() => void decideWorkflow("rejected")}>退回</button>
                   </div>}
                   {item.isLatest && !item.pendingApproval && (workflow ?? workflowTimeline?.workflow_state) && !["VERIFIED", "RELEASED", "BLOCKED", "REWORK"].includes((workflow ?? workflowTimeline?.workflow_state)?.current_stage ?? "") && <div className="workflow-control-actions">
@@ -1446,6 +1589,58 @@ export function App() {
                       <label className="planning-form-wide"><span>主要指标</span><input value={planningAnswers.outcome} onChange={(event) => setPlanningAnswers((current) => ({ ...current, outcome: event.target.value }))} placeholder="例如：物理建模迁移得分" /></label>
                     </div>
                     <div className="planning-form-footer"><span>四项填写完整后将重新生成导师规划。</span><button type="button" disabled={workflowBusy || !planningClarificationsComplete(planningAnswers)} onClick={() => void submitPlanningClarifications()}>提交并重新规划</button></div>
+                  </section> : item.pendingApproval && item.agentId === "evidence_review" ? <section className="planning-clarification-form evidence-clarification-form">
+                    <div className="planning-clarification-heading"><strong>证据检索确认</strong><span className="clarification-pending">确认后重新检索</span></div>
+                    <p>导师规划中的研究对象、场景、干预和指标已自动带入。请补充本轮检索范围，系统会据此筛选、核验并整理证据。</p>
+                    <div className="planning-form-grid">
+                      <label className="planning-form-wide"><span>检索目标 <em>必填</em></span><input value={evidenceAnswers.goal} onChange={(event) => setEvidenceAnswers((current) => ({ ...current, goal: event.target.value }))} placeholder="例如：验证分层 AI 支架是否改善迁移得分" /></label>
+                      <label><span>文献范围 <em>必填</em></span><input value={evidenceAnswers.timeRange} onChange={(event) => setEvidenceAnswers((current) => ({ ...current, timeRange: event.target.value }))} placeholder="例如：2020-2026，中英文期刊" /></label>
+                      <label><span>证据来源 <em>必填</em></span><input value={evidenceAnswers.sources} onChange={(event) => setEvidenceAnswers((current) => ({ ...current, sources: event.target.value }))} placeholder="例如：平台知识库与已上传 PDF" /></label>
+                      <label><span>筛选偏好 <small>可选</small></span><input value={evidenceAnswers.preferences} onChange={(event) => setEvidenceAnswers((current) => ({ ...current, preferences: event.target.value }))} placeholder="例如：优先物理教育实证研究" /></label>
+                      <label><span>期望产出 <small>可选</small></span><input value={evidenceAnswers.outputs ?? ""} onChange={(event) => setEvidenceAnswers((current) => ({ ...current, outputs: event.target.value }))} placeholder="例如：证据矩阵、研究空白" /></label>
+                    </div>
+                    <div className="planning-form-footer"><span>填写三项必填信息后，才会重新执行证据检索。</span><button type="button" disabled={workflowBusy || !evidenceClarificationsComplete(evidenceAnswers)} onClick={() => void submitEvidenceClarifications()}>确认并重新检索</button></div>
+                  </section> : item.pendingApproval && item.agentId === "research_design" ? <section className="planning-clarification-form design-clarification-form">
+                    <div className="planning-clarification-heading"><strong>研究设计确认</strong><span className="clarification-pending">确认后生成方案</span></div>
+                    <p>研究对象、场景、干预、对照、指标和证据已自动继承。请确认研究设计的实施条件，系统将生成研究协议、测量方案和预注册分析计划。</p>
+                    <div className="planning-form-grid">
+                      <label><span>研究设计 <em>必填</em></span><input value={designAnswers.designType} onChange={(event) => setDesignAnswers((current) => ({ ...current, designType: event.target.value }))} placeholder="例如：平行随机对照" /></label>
+                      <label><span>样本与招募 <em>必填</em></span><input value={designAnswers.samplePlan} onChange={(event) => setDesignAnswers((current) => ({ ...current, samplePlan: event.target.value }))} placeholder="例如：招募大一物理师范生" /></label>
+                      <label><span>测量时间点 <em>必填</em></span><input value={designAnswers.timepoints} onChange={(event) => setDesignAnswers((current) => ({ ...current, timepoints: event.target.value }))} placeholder="例如：基线、干预后、迁移任务" /></label>
+                      <label><span>统计模型 <em>必填</em></span><input value={designAnswers.analysisModel} onChange={(event) => setDesignAnswers((current) => ({ ...current, analysisModel: event.target.value }))} placeholder="例如：线性混合模型" /></label>
+                      <label className="planning-form-wide"><span>伦理与排除规则 <em>必填</em></span><input value={designAnswers.ethics} onChange={(event) => setDesignAnswers((current) => ({ ...current, ethics: event.target.value }))} placeholder="例如：已确认课程伦理要求，并采用预注册技术失败排除规则" /></label>
+                    </div>
+                    <div className="planning-form-footer"><span>五项填写完整后，才会重新生成研究设计。</span><button type="button" disabled={workflowBusy || !designClarificationsComplete(designAnswers)} onClick={() => void submitDesignClarifications()}>确认并重新生成</button></div>
+                  </section> : item.pendingApproval && item.agentId === "data_analysis" ? <section className="planning-clarification-form analysis-clarification-form">
+                    <div className="planning-clarification-heading"><strong>数据分析确认</strong><span className="clarification-pending">确认后建立数据管道</span></div>
+                    <p>研究方案、预注册分析计划和结果指标已自动继承。请确认数据文件、变量、缺失值、分析模式和隐私规则；确认后才能上传 CSV 并开始数据审查。</p>
+                    <div className="planning-form-grid">
+                      <label className="planning-form-wide"><span>数据来源 <em>必填</em></span><input value={dataAnalysisAnswers.dataSource} onChange={(event) => setDataAnalysisAnswers((current) => ({ ...current, dataSource: event.target.value }))} placeholder="例如：大学物理实验课程 CSV" /></label>
+                      <label><span>必需变量 <em>必填</em></span><input value={dataAnalysisAnswers.variables} onChange={(event) => setDataAnalysisAnswers((current) => ({ ...current, variables: event.target.value }))} placeholder="例如：group, transfer_score" /></label>
+                      <label><span>缺失值处理 <em>必填</em></span><input value={dataAnalysisAnswers.missingData} onChange={(event) => setDataAnalysisAnswers((current) => ({ ...current, missingData: event.target.value }))} placeholder="例如：按预注册规则处理" /></label>
+                      <label><span>分析模式 <em>必填</em></span><input value={dataAnalysisAnswers.mode} onChange={(event) => setDataAnalysisAnswers((current) => ({ ...current, mode: event.target.value }))} placeholder="例如：Python 单引擎" /></label>
+                      <label><span>隐私规则 <em>必填</em></span><input value={dataAnalysisAnswers.privacy} onChange={(event) => setDataAnalysisAnswers((current) => ({ ...current, privacy: event.target.value }))} placeholder="例如：去标识化，不含直接身份信息" /></label>
+                    </div>
+                    <div className="planning-form-footer"><span>五项填写完整后，才会生成分析规格并开放审批。</span><button type="button" disabled={workflowBusy || !dataAnalysisClarificationsComplete(dataAnalysisAnswers)} onClick={() => void submitDataAnalysisClarifications()}>确认并生成分析规格</button></div>
+                  </section> : item.pendingApproval && item.agentId === "paper_writing" ? <section className="planning-clarification-form writing-clarification-form">
+                    <div className="planning-clarification-heading"><strong>论文写作确认</strong><span className="clarification-pending">确认后生成双语稿</span></div>
+                    <p>研究方案、证据矩阵和已验证结果会自动继承。请确认写作范围、语言、目标格式和主张边界；系统将生成论文大纲、双语草稿和引用映射。</p>
+                    <div className="planning-form-grid">
+                      <label><span>写作范围 <em>必填</em></span><input value={writingAnswers.scope} onChange={(event) => setWritingAnswers((current) => ({ ...current, scope: event.target.value }))} placeholder="例如：完整研究论文" /></label>
+                      <label><span>语言版本 <em>必填</em></span><input value={writingAnswers.languages} onChange={(event) => setWritingAnswers((current) => ({ ...current, languages: event.target.value }))} placeholder="例如：中文和英文" /></label>
+                      <label><span>目标格式 <em>必填</em></span><input value={writingAnswers.format} onChange={(event) => setWritingAnswers((current) => ({ ...current, format: event.target.value }))} placeholder="例如：教育技术类期刊" /></label>
+                      <label><span>主张边界 <em>必填</em></span><input value={writingAnswers.boundary} onChange={(event) => setWritingAnswers((current) => ({ ...current, boundary: event.target.value }))} placeholder="例如：结果只引用已验证结果卡" /></label>
+                    </div>
+                    <div className="planning-form-footer"><span>四项填写完整后，才会生成论文候选稿。</span><button type="button" disabled={workflowBusy || !writingClarificationsComplete(writingAnswers)} onClick={() => void submitWritingClarifications()}>确认并生成论文稿</button></div>
+                  </section> : item.pendingApproval && item.agentId === "independent_review" ? <section className="planning-clarification-form review-clarification-form">
+                    <div className="planning-clarification-heading"><strong>独立审查确认</strong><span className="clarification-pending">确认后形成发布建议</span></div>
+                    <p>研究协议、证据引用和论文草稿将以只读方式交给审查 Agent。请明确本轮审查边界，系统会生成问题、修改请求和总体建议。</p>
+                    <div className="planning-form-grid">
+                      <label className="planning-form-wide"><span>审查范围 <em>必填</em></span><input value={reviewAnswers.scope} onChange={(event) => setReviewAnswers((current) => ({ ...current, scope: event.target.value }))} placeholder="例如：完整发布前审查" /></label>
+                      <label className="planning-form-wide"><span>审查重点 <em>必填</em></span><input value={reviewAnswers.focus} onChange={(event) => setReviewAnswers((current) => ({ ...current, focus: event.target.value }))} placeholder="例如：引用、方法、可复现性和主张边界" /></label>
+                      <label className="planning-form-wide"><span>发布门槛 <em>必填</em></span><input value={reviewAnswers.threshold} onChange={(event) => setReviewAnswers((current) => ({ ...current, threshold: event.target.value }))} placeholder="例如：发现重大问题则退回，全部通过后允许申请发布" /></label>
+                    </div>
+                    <div className="planning-form-footer"><span>三项填写完整后，才会生成独立审查报告。</span><button type="button" disabled={workflowBusy || !reviewClarificationsComplete(reviewAnswers)} onClick={() => void submitReviewClarifications()}>确认并执行审查</button></div>
                   </section> : item.pendingApproval && <div className="workflow-feedback-actions">
                     <textarea value={workflowFeedback} onChange={(event) => setWorkflowFeedback(event.target.value)} placeholder={item.agentId === "mentor_planning" ? "请填写：研究对象、研究场景、干预与对照、主要指标..." : "补充你的研究思路或修改意见..."} rows={3} />
                     <button type="button" disabled={workflowBusy || !workflowFeedback.trim()} onClick={() => void submitWorkflowFeedback(item.agentId, "pause")}>保存意见并暂停</button>

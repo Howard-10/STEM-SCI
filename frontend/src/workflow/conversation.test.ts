@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { answerWorkflowQuestion, buildWorkflowConversation, findLatestWorkflowReport, formatMentorPlanningReport, formatWorkflowArtifact, getPlanningClarificationStatus, isPlanningClarification, planningClarificationsComplete } from "./conversation";
+import { answerWorkflowQuestion, buildWorkflowConversation, dataAnalysisClarificationsComplete, designClarificationsComplete, evidenceClarificationsComplete, findLatestWorkflowReport, formatDataAnalysisClarificationFeedback, formatDesignClarificationFeedback, formatEvidenceClarificationFeedback, formatMentorPlanningReport, formatReviewClarificationFeedback, formatWritingClarificationFeedback, formatWorkflowArtifact, getDataAnalysisClarificationStatus, getPlanningClarificationStatus, isPlanningClarification, planningClarificationsComplete, reviewClarificationsComplete, writingClarificationsComplete, workflowProjectIdValid } from "./conversation";
 
 describe("buildWorkflowConversation", () => {
   it("builds the six-agent route and mentor report from persisted records", () => {
@@ -113,5 +113,150 @@ describe("buildWorkflowConversation", () => {
       ],
     };
     expect(getPlanningClarificationStatus(findLatestWorkflowReport(timeline, "mentor_planning")?.artifacts ?? []).complete).toBe(true);
+  });
+
+  it("requires an evidence search goal, scope, and source before rerunning", () => {
+    expect(evidenceClarificationsComplete({ goal: "", timeRange: "2020-2026", sources: "平台知识库", preferences: "" })).toBe(false);
+    expect(evidenceClarificationsComplete({ goal: "验证干预效果", timeRange: "2020-2026", sources: "平台知识库", preferences: "优先实证研究" })).toBe(true);
+  });
+
+  it("serializes evidence clarification answers into readable workflow feedback", () => {
+    const feedback = formatEvidenceClarificationFeedback({
+      goal: "验证分层 AI 支架是否改善迁移得分",
+      timeRange: "2020-2026",
+      sources: "平台知识库与已上传 PDF",
+      preferences: "优先物理教育实证研究",
+      outputs: "证据矩阵、研究空白",
+    });
+    expect(feedback).toContain("检索目标：验证分层 AI 支架是否改善迁移得分");
+    expect(feedback).toContain("文献范围：2020-2026");
+    expect(feedback).toContain("证据来源：平台知识库与已上传 PDF");
+    expect(feedback).not.toContain("[object Object]");
+  });
+
+  it("hides internal evidence references from the user-facing report", () => {
+    const text = formatWorkflowArtifact("VerifiedEvidenceRef", {
+      verification_status: "model_generated_unverified",
+      verified: false,
+      risk_flags: ["formal_locator_index_unavailable", "SOURCE_REVIEW_REQUIRED"],
+    });
+    expect(text).toContain("待人工核验");
+    expect(text).toContain("当前仅支持探索性检索");
+    expect(text).not.toContain("formal_locator_index_unavailable");
+    expect(text).not.toContain("verification_status");
+  });
+
+  it("formats evidence coverage and paper cards without internal field names", () => {
+    const coverage = formatWorkflowArtifact("CorpusCoverageReport", {
+      source_count: 3,
+      evidence_count: 12,
+      covered_topics: ["Python 物理建模"],
+      missing_topics: [],
+    });
+    const card = formatWorkflowArtifact("PaperCard", {
+      title: "Python modeling in physics education",
+      main_findings: ["建模任务提升了迁移表现"],
+      limitations: ["样本来自单一课程"],
+    });
+    expect(coverage).toContain("已找到 3 个来源、12 条证据");
+    expect(coverage).not.toContain("source_count");
+    expect(card).toContain("Python modeling in physics education");
+    expect(card).toContain("建模任务提升了迁移表现");
+    expect(card).not.toContain("main_findings");
+  });
+
+  it("uses the operator shapes for screened papers and extracted paper cards", () => {
+    const screened = formatWorkflowArtifact("ScreenedPaperSet", {
+      decision: "INCLUDE",
+      source_refs: ["source-a", "source-b"],
+      evidence_refs: ["evidence-1", "evidence-2", "evidence-3"],
+    });
+    const extracted = formatWorkflowArtifact("PaperCard", {
+      cards: [{ title: "A physics modeling study", main_findings: ["Finding one"] }],
+    });
+    expect(screened).toContain("已完成初筛，涉及 2 个来源、3 条证据");
+    expect(extracted).toContain("已整理 1 篇文献卡片");
+    expect(extracted).toContain("A physics modeling study");
+    expect(extracted).not.toContain("verification_status");
+  });
+
+  it("rejects empty project ids before building workflow URLs", () => {
+    expect(workflowProjectIdValid("")).toBe(false);
+    expect(workflowProjectIdValid("project-53f8045541c4466b")).toBe(true);
+  });
+
+  it("requires core design decisions before rerunning research design", () => {
+    expect(designClarificationsComplete({ designType: "", samplePlan: "课程学生", timepoints: "前测、后测", analysisModel: "线性混合模型", ethics: "已确认" })).toBe(false);
+    expect(designClarificationsComplete({ designType: "平行随机对照", samplePlan: "课程学生", timepoints: "前测、后测", analysisModel: "线性混合模型", ethics: "已确认" })).toBe(true);
+  });
+
+  it("serializes design clarification answers", () => {
+    const feedback = formatDesignClarificationFeedback({ designType: "平行随机对照", samplePlan: "招募大一物理师范生", timepoints: "基线、干预后、迁移任务", analysisModel: "线性混合模型", ethics: "已确认课程伦理要求" });
+    expect(feedback).toContain("研究设计：平行随机对照");
+    expect(feedback).toContain("样本与招募：招募大一物理师范生");
+    expect(feedback).not.toContain("[object Object]");
+  });
+
+  it("requires data source, variables, missing-data rule, mode, and privacy before analysis", () => {
+    expect(dataAnalysisClarificationsComplete({ dataSource: "", variables: "group, transfer_score", missingData: "完整案例分析", mode: "Python", privacy: "去标识化" })).toBe(false);
+    expect(dataAnalysisClarificationsComplete({ dataSource: "实验课程 CSV", variables: "group, transfer_score", missingData: "完整案例分析", mode: "Python", privacy: "去标识化" })).toBe(true);
+  });
+
+  it("serializes data analysis clarification answers", () => {
+    const feedback = formatDataAnalysisClarificationFeedback({ dataSource: "实验课程 CSV", variables: "group, transfer_score", missingData: "按预注册规则处理", mode: "Python", privacy: "去标识化且拒绝直接身份信息" });
+    expect(feedback).toContain("数据来源：实验课程 CSV");
+    expect(feedback).toContain("必需变量：group, transfer_score");
+    expect(feedback).toContain("分析模式：Python");
+  });
+
+  it("detects whether an analysis specification has been confirmed", () => {
+    expect(getDataAnalysisClarificationStatus([
+      { artifactType: "DataAuditSpecification", body: { required_variables: ["group", "transfer_score"] } },
+      { artifactType: "AnalysisReadinessReport", body: { status: "READY" } },
+    ]).complete).toBe(false);
+    expect(getDataAnalysisClarificationStatus([
+      { artifactType: "DataAnalysisPreAnalysisPackage", body: { source: "controller-narrow-csv-mvp" } },
+    ]).complete).toBe(true);
+  });
+
+  it("requires writing scope, language, format, and claim boundary", () => {
+    expect(writingClarificationsComplete({ scope: "", languages: "中英文", format: "期刊论文", boundary: "仅使用已核验证据" })).toBe(false);
+    expect(writingClarificationsComplete({ scope: "完整研究论文", languages: "中英文", format: "期刊论文", boundary: "仅使用已核验证据" })).toBe(true);
+  });
+
+  it("serializes writing clarification answers", () => {
+    const feedback = formatWritingClarificationFeedback({ scope: "完整研究论文", languages: "中文和英文", format: "教育技术类期刊", boundary: "结果只引用已验证结果卡" });
+    expect(feedback).toContain("写作范围：完整研究论文");
+    expect(feedback).toContain("语言版本：中文和英文");
+    expect(feedback).toContain("主张边界：结果只引用已验证结果卡");
+  });
+
+  it("requires review scope and release threshold before rerunning independent review", () => {
+    expect(reviewClarificationsComplete({ scope: "", focus: "引用、方法和可复现性", threshold: "发现重大问题则退回" })).toBe(false);
+    expect(reviewClarificationsComplete({ scope: "完整发布前审查", focus: "引用、方法和可复现性", threshold: "发现重大问题则退回" })).toBe(true);
+  });
+
+  it("serializes review clarification answers", () => {
+    const feedback = formatReviewClarificationFeedback({ scope: "完整发布前审查", focus: "引用、方法和可复现性", threshold: "发现重大问题则退回" });
+    expect(feedback).toContain("审查范围：完整发布前审查");
+    expect(feedback).toContain("审查重点：引用、方法和可复现性");
+  });
+
+  it("formats independent review findings and report artifacts", () => {
+    expect(formatWorkflowArtifact("ReviewFinding", {
+      severity: "major",
+      category: "citation",
+      description: "引用缺少原文定位",
+      suggested_action: "补充页码或段落",
+    })).toContain("严重程度：major");
+    expect(formatWorkflowArtifact("RevisionRequest", {
+      required_changes: ["补充原文定位"],
+      blocking: true,
+    })).toContain("必须修改内容");
+    expect(formatWorkflowArtifact("ReviewReport", {
+      overall_recommendation: "MAJOR_REVISION",
+      finding_refs: ["finding://1"],
+      revision_request_refs: ["revision://1"],
+    })).toContain("总体建议：MAJOR_REVISION");
   });
 });

@@ -71,7 +71,7 @@ class IndependentReviewAgent(BaseAgent):
         risk_flags = []
         if outcome.report.overall_recommendation != "PASS":
             risk_flags.append("REVIEW_REQUIRES_CONTROLLER_ROUTE")
-        return AgentResult(
+        result = AgentResult(
             agent_run_id=agent_input.agent_run_id,
             agent_id=self.agent_id,
             agent_version="phase1-structured-review-v1",
@@ -92,6 +92,7 @@ class IndependentReviewAgent(BaseAgent):
             confidence=1.0 if outcome.report.overall_recommendation == "PASS" else 0.5,
             created_at=datetime.now(UTC),
         )
+        return self._attach_reasoning(agent_input, result)
 
     def review_reproducibility(
         self, review_input: ReproducibilityReviewInput

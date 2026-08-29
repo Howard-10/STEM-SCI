@@ -1,7 +1,7 @@
 import pytest
 
 from stem_sci.agents.contracts import ReviewFinding
-from stem_sci.context.models import ContextBundle
+from stem_sci.context.models import ContextBundle, EvidenceRef, SourceLocation, VerificationStatus
 from stem_sci.controller import PlanningRequest, ResearchController
 from stem_sci.core.enums import DecisionScope, ProjectStage
 
@@ -114,6 +114,42 @@ def test_incomplete_evidence_cannot_be_approved() -> None:
     )
     assert rejected.current_stage is ProjectStage.REWORK
     assert rejected.rework_target_agent == "evidence_review"
+
+
+def test_verified_evidence_clears_stale_incomplete_evidence_risk() -> None:
+    class SwitchingContextProvider:
+        calls = 0
+
+        def build_context(self, project_id: str, task_ref: str, query: str, token_budget: int) -> ContextBundle:
+            self.calls += 1
+            refs = [] if self.calls == 1 else [
+                EvidenceRef(
+                    evidence_id="verified-evidence-1",
+                    project_id=project_id,
+                    source_id="source-1",
+                    chunk_id="chunk-1",
+                    excerpt="A verified physics modeling result.",
+                    location=SourceLocation(chunk_index=0, char_start=0, char_end=34, page_start=1, page_end=1),
+                    verification_status=VerificationStatus.SOURCE_VERIFIED,
+                )
+            ]
+            return ContextBundle(
+                context_id=f"context-{self.calls}", project_id=project_id, task_ref=task_ref, query=query,
+                evidence_refs=refs, source_refs=["source-1"] if refs else [], verification_summary={},
+                token_budget=token_budget, estimated_tokens=1 if refs else 0, context_hash="f" * 64,
+                generated_at="2026-08-21T00:00:00Z", risk_flags=["insufficient_verified_evidence"] if not refs else [],
+            )
+
+    provider = SwitchingContextProvider()
+    controller = ResearchController(context_provider=provider)
+    project_id = "stale-evidence-risk"
+    planning = controller.start_planning(PlanningRequest(project_id=project_id, research_intent="scope", run_id="stale-1"))
+    controller.resume_approval(project_id, planning.approval_request, decision="approved", decided_by="r")
+    first = controller.run_next(project_id)
+    controller.resume_approval(project_id, first.approval_request, decision="rejected", decided_by="r")
+    second = controller.run_next(project_id)
+
+    assert "insufficient_verified_evidence" not in second.workflow_state.research_state.risk_flags
 
 
 def test_full_six_agent_path_routes_review_rework_to_paper_writing() -> None:

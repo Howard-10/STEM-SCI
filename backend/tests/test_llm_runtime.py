@@ -119,7 +119,10 @@ def test_fake_provider_hashes_valid_pydantic_datetime_output() -> None:
     assert len(result.response_hash) == 64
 
 
-def test_gpt_provider_requests_json_schema_and_parses_chat_completion() -> None:
+def test_gpt_provider_requests_json_schema_and_parses_chat_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("STEM_SCI_LLM_RESPONSE_FORMAT", raising=False)
     request_body: dict[str, Any] = {}
 
     def handle(request: httpx.Request) -> httpx.Response:

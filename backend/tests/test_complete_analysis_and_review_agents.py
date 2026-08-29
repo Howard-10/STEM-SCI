@@ -21,6 +21,7 @@ from stem_sci.agents import (
 )
 from stem_sci.core.enums import DecisionScope
 from stem_sci.controller.merger import validate_agent_result
+from stem_sci.agents.runtime import FakeLLMProvider, StructuredGenerator
 from stem_sci.statistics.mode_policy import AnalysisMode
 from stem_sci.statistics.models import ExecutionStatus, InterpretationStatus, StatisticalResultCard
 from stem_sci.agents.writing_pipeline import AtomicClaimGraph, AtomicClaimNode
@@ -279,6 +280,55 @@ def test_reviewer_adapts_read_only_outcome_to_candidate_artifacts() -> None:
     assert result.approval_requests == []
     assert "REVIEW_REQUIRES_CONTROLLER_ROUTE" in result.risk_flags
     assert validate_agent_result(result, reviewer.capability()) is result
+
+
+def test_reviewer_attaches_model_reasoning_without_gaining_control_authority() -> None:
+    reviewer = IndependentReviewAgent(
+        reasoning_generator=StructuredGenerator(
+            FakeLLMProvider(
+                [
+                    {
+                        "summary": "The protocol evidence traceability needs review.",
+                        "key_decisions": ["Keep the release gate human-controlled."],
+                        "open_questions": ["Confirm the approved protocol reference."],
+                        "risk_flags": ["REVIEW_REQUIRES_CONTROLLER_ROUTE"],
+                    }
+                ]
+            )
+        ),
+        reasoning_model="gpt-test",
+    )
+    agent_input = AgentInput(
+        agent_run_id="review-model-1",
+        task_ref="physics-demo:review",
+        context_bundle_ref="context://physics-demo/review",
+        allowed_tool_capabilities=[],
+        allowed_output_types=list(reviewer.allowed_output_types),
+        policy_version="policy-v1",
+        prompt_template_version="review-v1",
+    )
+    outcome = reviewer.review_method(
+        MethodReviewInput(
+            project_id="physics-demo",
+            protocol_ref="protocol://physics-demo/v1",
+            criteria=[
+                ReviewCriterion(
+                    criterion_id="protocol-present",
+                    artifact_ref="protocol://physics-demo/v1",
+                    category="method",
+                    description="The approved protocol reference is present.",
+                    passed=True,
+                )
+            ],
+        )
+    )
+
+    result = reviewer.as_agent_result(agent_input, outcome)
+
+    assert result.candidate_artifacts[-1].artifact_type == "AgentReasoningCandidate"
+    assert len(result.llm_metadata_refs) == 1
+    assert result.approval_requests == []
+    assert result.agent_id == "independent_review"
 
 
 def test_traceability_reviewer_derives_a_revision_from_claim_material() -> None:

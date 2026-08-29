@@ -1,4 +1,7 @@
 .env
+.env.local
+.vite-*.log
+.vite-*.err
 .venv/
 __pycache__/
 .pytest_cache/

@@ -27,12 +27,14 @@ from stem_sci.agents import (
     ResearchDesignPipeline,
 )
 from stem_sci.agents.planning_contracts import PlanningBrief
+from stem_sci.agents.design_contracts import ResearchDesignBrief
 from stem_sci.agents.analysis_contracts import (
     DataAnalysisPreAnalysisInput,
     DataAnalysisPreAnalysisOutcome,
 )
 from stem_sci.agents.base import BaseAgent
 from stem_sci.agents.contracts import ApprovalRequest, ReviewFinding
+from stem_sci.agents.reviewer_contracts import MethodReviewInput, ReviewCriterion
 from stem_sci.agents.evidence_pipeline import (
     EvidenceMatrixRow,
     EvidenceReviewPipeline,
@@ -57,7 +59,7 @@ from stem_sci.artifacts.content_store import (
 )
 from stem_sci.artifacts.decision_store import DecisionStore, InMemoryDecisionStore
 from stem_sci.artifacts.models import ArtifactRef
-from stem_sci.context.models import ContextBundle
+from stem_sci.context.models import ContextBundle, VerificationStatus
 from stem_sci.context.provider import ContextProvider
 from stem_sci.controller.data_pipeline import (
     DataPipelineBeginRequest,
@@ -414,6 +416,7 @@ class ResearchController:
         self._routes: dict[str, RouteDecision] = {}
         self._approvals: dict[str, ApprovalRequest] = {}
         self._project_intents: dict[str, str] = {}
+        self._last_context_bundles: dict[str, ContextBundle] = {}
 
     def _persist(self, project_id: str) -> None:
         if self.workflow_store is None:
@@ -1071,10 +1074,12 @@ class ResearchController:
             raise ValueError("rerun requires a pending candidate approval")
 
         self.feedback_store.put(feedback)
-        self._project_intents[feedback.project_id] = (
-            f"{self._project_intents[feedback.project_id]}\n\n"
-            f"[User feedback for {feedback.agent_id}]: {feedback.feedback}"
-        )
+        current_intent = self._project_intents[feedback.project_id]
+        feedback_marker = f"[User feedback for {feedback.agent_id}]: {feedback.feedback}"
+        if feedback_marker not in current_intent:
+            self._project_intents[feedback.project_id] = (
+                f"{current_intent}\n\n{feedback_marker}"
+            )
         self._persist(feedback.project_id)
 
         if feedback.action is WorkflowFeedbackAction.PAUSE:
@@ -1136,6 +1141,7 @@ class ResearchController:
                 query=self._project_intents.get(project_id, ""),
                 token_budget=2_000,
             )
+            self._last_context_bundles[project_id] = context_bundle
         elif agent_id == "paper_writing":
             writing_context = self._build_writing_context(project_id, task_type, state)
             context_bundle = writing_context
@@ -1218,6 +1224,41 @@ class ResearchController:
             result = agent.propose_for(
                 agent_input, planning_brief, model_assisted=agent.pipeline is not None
             ).agent_result
+        elif agent_id == "research_design":
+            if not isinstance(agent, ResearchDesignAgent):
+                raise ValueError("research_design registry entry has an invalid implementation")
+            design_brief = self._build_research_design_brief(project_id, agent_input, state)
+            result = agent.propose_for(
+                agent_input, design_brief, model_assisted=agent.pipeline is not None
+            ).agent_result
+        elif agent_id == "independent_review":
+            if not isinstance(agent, IndependentReviewAgent):
+                raise ValueError("independent_review registry entry has an invalid implementation")
+            review_state = self._require_research_state(state)
+            protocol_ref = review_state.protocol_refs[0] if review_state.protocol_refs else f"protocol://{project_id}/missing"
+            criteria = [
+                ReviewCriterion(
+                    criterion_id="approved-study-protocol",
+                    artifact_ref=protocol_ref,
+                    category="method",
+                    description="An approved study protocol reference is required for release review.",
+                    passed=bool(review_state.protocol_refs),
+                ),
+                ReviewCriterion(
+                    criterion_id="evidence-traceability",
+                    artifact_ref=protocol_ref,
+                    category="citation",
+                    description="The manuscript review package must retain project-scoped evidence references.",
+                    passed=bool(review_state.evidence_refs),
+                    evidence_refs=list(review_state.evidence_refs),
+                ),
+            ]
+            outcome = agent.review_method(MethodReviewInput(
+                project_id=project_id,
+                protocol_ref=protocol_ref,
+                criteria=criteria,
+            ))
+            result = agent.as_agent_result(agent_input, outcome)
         else:
             result = self.dispatcher.dispatch(agent_id, agent_input, context_bundle)
         if not result.candidate_artifact_refs:
@@ -1243,8 +1284,21 @@ class ResearchController:
             risk_summary="Candidate output is not an approved research artifact.",
         )
         current = self._states[project_id]
+        prior_risk_flags = list(current.risk_flags)
+        if (
+            agent_id == "evidence_review"
+            and bool(result.evidence_refs)
+        ):
+            # A successful formal rerun supersedes stale blocking flags from an
+            # earlier empty-corpus attempt; retain non-blocking audit warnings.
+            prior_risk_flags = [
+                flag
+                for flag in prior_risk_flags
+                if flag.strip().lower() not in self._EVIDENCE_APPROVAL_BLOCKING_RISKS
+            ]
+        merge_base = current.model_copy(update={"risk_flags": prior_risk_flags})
         updated_research = merge_references(
-            current,
+            merge_base,
             task_status={task_type: TaskStatus.WAITING_HUMAN},
             task_ledger=[f"task://{project_id}/{task_type}"],
             agent_run_refs=[run_id],
@@ -1257,6 +1311,15 @@ class ResearchController:
             risk_flags=[*result.risk_flags, *operator_risk_flags],
             unresolved_questions=result.unresolved_questions,
         ).model_copy(update={"current_stage": ProjectStage.WAITING_HUMAN})
+        if agent_id == "evidence_review" and result.evidence_refs:
+            updated_research = updated_research.model_copy(
+                update={
+                    "risk_flags": [
+                        flag for flag in updated_research.risk_flags
+                        if flag.strip().lower() not in self._EVIDENCE_APPROVAL_BLOCKING_RISKS
+                    ]
+                }
+            )
         workflow_state = ControllerWorkflowState(
             project_id=project_id,
             current_stage=ProjectStage.WAITING_HUMAN,
@@ -1278,6 +1341,63 @@ class ResearchController:
             approval_request=approval,
             route_decision=route,
         )
+
+    def _build_research_design_brief(
+        self, project_id: str, agent_input: AgentInput, state: ControllerWorkflowState
+    ) -> ResearchDesignBrief:
+        """Compile approved planning/evidence references into a design brief."""
+        intent = self._project_intents.get(project_id, "")
+        planning = self._latest_artifact_body(project_id, "mentor_planning", "ResearchContractCandidate")
+        population = str(planning.get("population") or self._extract_field(intent, "研究对象") or "目标研究人群")
+        context = str(planning.get("context") or self._extract_field(intent, "研究场景") or "大学物理实验课程")
+        intervention = str(planning.get("intervention") or self._extract_field(intent, "干预") or "分层AI支架")
+        comparator = str(planning.get("comparator") or self._extract_field(intent, "对照") or "常规提示")
+        design_type = self._extract_field(intent, "研究设计") or "平行随机对照"
+        sample_plan = self._extract_field(intent, "样本与招募") or "招募符合条件的课程学生并记录纳入流程"
+        timepoints_text = self._extract_field(intent, "测量时间点") or "基线、干预后、迁移任务"
+        analysis_model = self._extract_field(intent, "统计模型") or "linear_mixed_effects_model"
+        ethics_text = self._extract_field(intent, "伦理与排除规则") or "预注册技术失败排除规则，伦理要求待确认"
+        outcomes = planning.get("outcomes") or [self._extract_field(intent, "主要指标") or "迁移得分"]
+        primary = outcomes[0] if isinstance(outcomes, list) and outcomes else str(outcomes)
+        evidence_refs = list(state.research_state.evidence_refs if state.research_state else [])
+        return ResearchDesignBrief(
+            agent_run_id=agent_input.agent_run_id,
+            project_id=project_id,
+            task_ref=agent_input.task_ref,
+            research_contract_ref="artifact://%s/ResearchContractCandidate" % project_id,
+            evidence_refs=evidence_refs,
+            population=population,
+            context=context,
+            intervention=intervention,
+            comparator=comparator,
+            primary_outcome=primary,
+            secondary_outcomes=["编程建模表现", "学习信心"],
+            design_type=("candidate_crossover" if "交叉" in design_type else "randomized_parallel_repeated_measures"),
+            measurement_timepoints=[item.strip() for item in timepoints_text.replace("，", ",").split(",") if item.strip()] or ["baseline", "post_intervention", "transfer_task"],
+            sampling_approach=sample_plan,
+            ethics_ref=f"ethics://pending-human-confirmation/{ethics_text[:80]}",
+            confirmatory_model=analysis_model,
+            covariates=["baseline_score"],
+            exclusion_rules=["预注册的技术失败排除规则"],
+            missing_data_strategy="报告缺失模式并按预注册方案处理",
+            outlier_strategy="保留主分析并报告敏感性分析",
+        )
+
+    def _latest_artifact_body(self, project_id: str, agent_id: str, artifact_type: str) -> dict[str, object]:
+        runs = [run for run in self.agent_run_store.list_project(project_id) if run.agent_id == agent_id]
+        if not runs:
+            return {}
+        latest = max(runs, key=lambda run: run.started_at)
+        for content in reversed(self.artifact_content_store.list_project(project_id)):
+            if content.artifact_id.startswith(f"{latest.agent_run_id}:") and content.artifact_type == artifact_type:
+                return dict(content.body)
+        return {}
+
+    @staticmethod
+    def _extract_field(text: str, label: str) -> str | None:
+        import re
+        match = re.search(rf"{re.escape(label)}\s*[:：]\s*([^；;\n]+)", text)
+        return match.group(1).strip() if match else None
 
     def resume_approval(
         self,
@@ -1426,6 +1546,22 @@ class ResearchController:
             workflow_state.last_route_decision is not None
             and workflow_state.last_route_decision.selected_route == "evidence_review"
         )
+        if has_formal_context:
+            context_bundle = self._last_context_bundles.get(workflow_state.project_id)
+            if context_bundle is None or not context_bundle.evidence_refs:
+                return (
+                    "evidence_protocol approval blocked: verified evidence is required "
+                    "before progression"
+                )
+            if any(
+                evidence.verification_status
+                not in {VerificationStatus.SOURCE_VERIFIED, VerificationStatus.HUMAN_VERIFIED}
+                for evidence in context_bundle.evidence_refs
+            ):
+                return (
+                    "evidence_protocol approval blocked: verified evidence is required "
+                    "before progression"
+                )
         if has_formal_context and not state.evidence_refs:
             return (
                 "evidence_protocol approval blocked: verified evidence is required "
