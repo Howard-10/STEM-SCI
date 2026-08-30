@@ -1,0 +1,60 @@
+journal:
+  name: STEM Education
+  publisher: AIMS Press
+  field: STEM Education
+aliases:
+  - AIMS STEM Education
+  - AIMS_STEM_Education
+source:
+  url: https://www.aimspress.com/journal/steme
+  publisher: AIMS Press
+  verified_date: '2026-08-26'
+article_types:
+  - Research Article
+  - Review Article
+submission_rules:
+  manuscript_language: English
+  original_research_required: true
+  peer_review_required: true
+structure:
+  recommended_sections:
+    - Title
+    - Abstract
+    - Keywords
+    - Introduction
+    - Literature Review
+    - Methods
+    - Results
+    - Discussion
+    - Conclusions
+    - References
+writing_style:
+  introduction:
+    emphasis:
+      - STEM_education_problem
+      - previous_research_review
+      - research_gap
+      - research_objectives
+  methods:
+    emphasis:
+      - research_design
+      - participants
+      - instruments
+      - data_collection
+      - analysis_method
+  discussion:
+    emphasis:
+      - interpretation_of_findings
+      - connection_with_previous_studies
+      - educational_implications
+      - limitations
+format:
+  abstract_required: true
+  keywords_required: true
+  reference_style: APA
+  figures_tables_required_description: true
+ethics:
+  statement_required_when_applicable: true
+data:
+  availability_statement: recommended
+

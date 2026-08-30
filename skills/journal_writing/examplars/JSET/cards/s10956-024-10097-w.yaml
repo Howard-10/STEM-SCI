@@ -1,0 +1,68 @@
+paper:
+  title: 'Integrating Making with Authentic Science Classes: An Approach and Evidence'
+  journal: JSET
+  year: null
+  doi: 10.1007/s10956-024-10097-w
+  article_type: null
+  methodology: experiment
+structure:
+  section_order: &id001
+  - introduction
+  - literature_review
+  - methods
+  - results
+  - discussion
+  - conclusion
+introduction:
+  opening_strategy: null
+  problem_context: null
+  literature_review_strategy: null
+  research_gap:
+    explicit: null
+    position: null
+    description: null
+  theoretical_framework:
+    present: null
+    position: null
+    separate_section: null
+  research_questions:
+    present: null
+    position: null
+  contribution_statement:
+    present: null
+    position: null
+methods:
+  research_design: experiment
+  participants_or_data: human_participants
+  sampling: null
+  instruments: null
+  procedure: intervention_or_training_procedure
+  validity_reliability_or_trustworthiness: null
+  analysis_method: null
+  reproducibility_detail: null
+results:
+  organization: null
+  organized_by_research_questions: null
+  evidence_types:
+  - inferential_statistics
+  tables_usage: present
+  figures_usage: null
+  interpretation_level: null
+discussion:
+  opening_strategy: null
+  answers_research_questions: null
+  comparison_with_prior_research: null
+  theoretical_interpretation: null
+  practical_implications: null
+  educational_implications: null
+  limitations: null
+  future_work: null
+  conclusion_strategy: null
+writing_features:
+  theory_emphasis: null
+  evidence_emphasis: null
+  practical_implication_emphasis: null
+  educational_implication_emphasis: null
+  typical_argument_flow: *id001
+evidence:
+  source_type: published_article

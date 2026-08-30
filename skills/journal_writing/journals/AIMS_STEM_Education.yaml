@@ -1,0 +1,93 @@
+journal:
+  id: AIMS_STEM_Education
+  name: STEM Education
+  publisher: AIMS Press
+
+source:
+  url: https://www.aimspress.com/steme/news/solo-detail/instructionsforauthors
+  publisher: AIMS Press
+  verified_date: 2026-08-26
+
+writing_patterns:
+  introduction:
+    purpose: establish_problem_and_justify_research
+    common_flow:
+      - broad_STEM_context
+      - existing_research
+      - unresolved_problem
+      - research_gap
+      - research_questions
+      - study_contribution
+    avoid:
+      - simple_literature_listing
+      - unsupported_claims
+
+  methods:
+    purpose: explain_how_evidence_is_generated
+    common_flow:
+      - research_design
+      - participants_or_data_source
+      - procedure
+      - measurement_tools
+      - analysis_method
+    avoid:
+      - missing_parameter_details
+      - unclear_analysis_process
+
+  results:
+    purpose: answer_research_questions_with_evidence
+    common_flow:
+      - research_question
+      - result
+      - statistical_or_qualitative_evidence
+      - immediate_interpretation
+    avoid:
+      - unsupported_explanations
+
+  discussion:
+    purpose: explain_meaning_and_contribution
+    common_flow:
+      - summarize_main_findings
+      - compare_previous_research
+      - explain_theoretical_contribution
+      - explain_practical_implications
+      - limitations
+      - future_work
+    avoid:
+      - claiming_causality_without_evidence
+      - overgeneralization
+
+exemplar_papers:
+  - title: "Enhancing student motivation and achievement in science classrooms through STEM education"
+    year: 2024
+    methodology: qualitative
+    doi: "10.3934/steme.2024012"
+
+  - title: "Teachers' perceptions of teaching mathematics topics based on STEM educational philosophy: A sequential explanatory design"
+    year: 2024
+    methodology: mixed_methods_sequential_explanatory
+    doi: "10.3934/steme.2024023"
+
+  - title: "Understanding Turkish students' STEM career aspirations, STEM hopes and goals, parental perception, and cultural capital: A path analysis"
+    year: 2024
+    methodology: quantitative_path_analysis
+    doi: "10.3934/steme.2024021"
+
+  - title: "Enhancing learning effectiveness in livestream teaching: Investigating the impact of teaching, social, and cognitive presences through a community of inquiry lens"
+    year: 2024
+    methodology: quantitative_structural_equation_modeling
+    doi: "10.3934/steme.2024006"
+
+  - title: "\"It feels different when blindfolded\": Developing social empathy through inclusive designs in STEM"
+    year: 2024
+    methodology: qualitative_or_design_based
+    doi: "10.3934/steme.2024002"
+
+  - title: "Solving worded real-world problems using simultaneous equations by pre-service mathematics teachers in regional Australia: Performances and implications"
+    year: 2024
+    methodology: case_study_with_statistical_analysis
+    doi: "10.3934/steme.2024003"
+
+latex:
+  template_family: generic
+  document_class: article

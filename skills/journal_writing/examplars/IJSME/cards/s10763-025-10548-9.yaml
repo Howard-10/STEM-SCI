@@ -1,0 +1,73 @@
+paper:
+  title: Exploring the Attending and Interpretation of Three Science and Engineering Practices Among Secondary
+    Science Teachers
+  journal: IJSME
+  year: null
+  doi: 10.1007/s10763-025-10548-9
+  article_type: null
+  methodology: qualitative
+structure:
+  section_order: &id001
+  - theoretical_framework
+  - methods
+  - results
+  - discussion
+introduction:
+  opening_strategy: null
+  problem_context: null
+  literature_review_strategy: null
+  research_gap:
+    explicit: null
+    position: null
+    description: null
+  theoretical_framework:
+    present: true
+    position: early_article
+    separate_section: true
+  research_questions:
+    present: null
+    position: null
+  contribution_statement:
+    present: null
+    position: null
+methods:
+  research_design: qualitative
+  participants_or_data: human_participants
+  sampling: null
+  instruments:
+  - interview
+  - observation
+  procedure: null
+  validity_reliability_or_trustworthiness:
+  - validity
+  - reliability
+  analysis_method:
+  - inferential_statistics
+  reproducibility_detail: substantial
+results:
+  organization: null
+  organized_by_research_questions: true
+  evidence_types:
+  - descriptive_statistics
+  - inferential_statistics
+  tables_usage: present
+  figures_usage: null
+  interpretation_level: null
+discussion:
+  opening_strategy: null
+  answers_research_questions: null
+  comparison_with_prior_research: null
+  theoretical_interpretation: null
+  practical_implications: null
+  educational_implications: null
+  limitations: null
+  future_work: null
+  conclusion_strategy: null
+writing_features:
+  theory_emphasis: null
+  evidence_emphasis: null
+  practical_implication_emphasis: null
+  educational_implication_emphasis: null
+  typical_argument_flow: *id001
+evidence:
+  source_type: published_article

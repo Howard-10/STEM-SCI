@@ -1,0 +1,53 @@
+journal:
+  name: Journal of Science Education and Technology
+  publisher: Springer Nature
+  field: Science Education and Educational Technology
+
+purpose:
+  role: target_journal_writing_profile
+
+article_types:
+  - Original Paper
+  - Review Paper
+
+manuscript_structure:
+  recommended_sections:
+    - Abstract
+    - Introduction
+    - Methods
+    - Results
+    - Discussion
+    - Conclusion
+    - References
+
+writing_focus:
+  introduction:
+    - technology_or_STEM_problem
+    - previous_research
+    - research_gap
+    - research_objectives
+  methods:
+    - technology_description
+    - participants
+    - procedure
+    - evaluation_method
+  discussion:
+    - interpret_results
+    - explain_learning_implications
+    - discuss_limitations
+
+format_rules:
+  abstract_required: true
+  keywords_required: true
+  reference_style: Springer_format
+  latex_supported: true
+  word_limit: article_type_dependent
+
+review:
+  double_anonymous_review: true
+
+ethics:
+  statement_required_when_applicable: true
+
+template:
+  provider: Springer_Nature

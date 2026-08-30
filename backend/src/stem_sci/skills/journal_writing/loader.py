@@ -93,7 +93,7 @@ class JournalProfileLoader:
         journal = raw.get("journal")
         if not isinstance(journal, dict):
             return None
-        journal_id = str(journal.get("id") or "").strip()
+        journal_id = str(journal.get("id") or resource.stem).strip()
         name = str(journal.get("name") or journal_id).strip()
         publisher = str(journal.get("publisher") or "Unknown publisher").strip()
         if not journal_id or not name:
@@ -101,11 +101,26 @@ class JournalProfileLoader:
         submission = raw.get("submission") if isinstance(raw.get("submission"), dict) else {}
         scholarship = submission.get("scholarship_type") if isinstance(submission, dict) else None
         options = scholarship.get("options") if isinstance(scholarship, dict) else None
-        article_types = [str(item) for item in options] if isinstance(options, list) and options else ["Research Article"]
+        top_level_types = raw.get("article_types")
+        article_types = (
+            [str(item) for item in options]
+            if isinstance(options, list) and options
+            else [str(item) for item in top_level_types]
+            if isinstance(top_level_types, list) and top_level_types
+            else ["Research Article"]
+        )
         abstract = submission.get("abstract") if isinstance(submission, dict) else None
         structured = submission.get("structured_abstract_sections") if isinstance(submission, dict) else None
         recommended = ["Abstract"]
-        if not isinstance(structured, dict):
+        manuscript_structure = raw.get("manuscript_structure")
+        configured_sections = (
+            manuscript_structure.get("recommended_sections")
+            if isinstance(manuscript_structure, dict)
+            else None
+        )
+        if isinstance(configured_sections, list) and configured_sections:
+            recommended = [str(item) for item in configured_sections]
+        elif not isinstance(structured, dict):
             recommended.extend(["Introduction", "Methods", "Results", "Discussion", "Conclusion", "References"])
         review_focus = raw.get("review_focus") if isinstance(raw.get("review_focus"), dict) else {}
         evidence_focus = review_focus.get("evidence") if isinstance(review_focus, dict) else None
@@ -114,7 +129,7 @@ class JournalProfileLoader:
         discussion_emphasis = relevance_focus.get("checks", []) if isinstance(relevance_focus, dict) else []
         source = raw.get("source") if isinstance(raw.get("source"), dict) else {}
         primary_source = next((item for item in source.values() if isinstance(item, dict)), None)
-        aliases = [journal_id, resource.stem]
+        aliases = list(dict.fromkeys([journal_id, resource.stem]))
         abbreviation = journal.get("abbreviation")
         if isinstance(abbreviation, str) and abbreviation.strip():
             aliases.append(abbreviation.strip())

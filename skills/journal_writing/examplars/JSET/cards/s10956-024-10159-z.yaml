@@ -1,0 +1,73 @@
+paper:
+  title: Pre-Service Science Teachers’ Intention to use Generative Artificial Intelligence in Inquiry-Based
+    Teaching
+  journal: JSET
+  year: null
+  doi: 10.1007/s10956-024-10159-z
+  article_type: null
+  methodology: mixed_methods
+structure:
+  section_order: &id001
+  - introduction
+  - methods
+  - results
+  - discussion
+  - limitations
+  - conclusion
+introduction:
+  opening_strategy: null
+  problem_context: null
+  literature_review_strategy: null
+  research_gap:
+    explicit: null
+    position: null
+    description: null
+  theoretical_framework:
+    present: null
+    position: null
+    separate_section: null
+  research_questions:
+    present: null
+    position: null
+  contribution_statement:
+    present: null
+    position: null
+methods:
+  research_design: mixed_methods_sequential_explanatory
+  participants_or_data: human_participants
+  sampling: null
+  instruments:
+  - questionnaire
+  - interview
+  procedure: null
+  validity_reliability_or_trustworthiness: null
+  analysis_method: null
+  reproducibility_detail: partial
+results:
+  organization: organized_by_theme_or_construct
+  organized_by_research_questions: null
+  evidence_types:
+  - descriptive_statistics
+  - inferential_statistics
+  - themes
+  tables_usage: present
+  figures_usage: null
+  interpretation_level: null
+discussion:
+  opening_strategy: null
+  answers_research_questions: null
+  comparison_with_prior_research: null
+  theoretical_interpretation: null
+  practical_implications: null
+  educational_implications: null
+  limitations: separate_section
+  future_work: null
+  conclusion_strategy: null
+writing_features:
+  theory_emphasis: null
+  evidence_emphasis: null
+  practical_implication_emphasis: null
+  educational_implication_emphasis: null
+  typical_argument_flow: *id001
+evidence:
+  source_type: published_article

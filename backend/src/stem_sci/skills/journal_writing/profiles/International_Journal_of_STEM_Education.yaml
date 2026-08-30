@@ -1,0 +1,55 @@
+journal:
+  name: International Journal of STEM Education
+  publisher: Springer Nature
+  field: STEM Education
+aliases:
+  - IJSTEM
+  - International_Journal_of_STEM_Education
+source:
+  url: https://link.springer.com/journal/40594/submission-guidelines
+  publisher: Springer Nature
+  verified_date: '2026-08-26'
+article_types:
+  - Research Article
+  - Review Article
+submission_rules:
+  online_submission: true
+  peer_review: anonymous
+structure:
+  recommended_sections:
+    - Abstract
+    - Keywords
+    - Introduction
+    - Methods
+    - Results
+    - Discussion
+    - Conclusion
+    - Declarations
+    - References
+writing_style:
+  introduction:
+    emphasis:
+      - STEM_research_context
+      - theoretical_framework
+      - literature_gap
+      - research_questions
+  methods:
+    emphasis:
+      - transparent_research_design
+      - reproducibility
+      - data_analysis_procedure
+  discussion:
+    emphasis:
+      - theoretical_contribution
+      - practical_implications
+      - limitations
+      - future_research
+format:
+  abstract_required: true
+  keywords_required: true
+  reference_style: Springer_format
+  latex_supported: true
+template:
+  provider: Springer_Nature
+  asset_path: assets/springer_nature/sn-article.tex
+

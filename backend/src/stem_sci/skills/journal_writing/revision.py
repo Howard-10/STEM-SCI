@@ -90,10 +90,12 @@ class JournalStyleRevisionReport(RevisionModel):
     layer_warnings: list[str] = Field(default_factory=list)
     change_summary: list[str] = Field(default_factory=list)
     safety_findings: list[str] = Field(default_factory=list)
+    generation_error: str | None = None
 
 
 class JournalStyleRevisionResult(RevisionModel):
     draft: ManuscriptDraft
+    candidate_draft: ManuscriptDraft | None = None
     report: JournalStyleRevisionReport
     journal_validation: DraftJournalValidation | None = None
     latex: LatexGenerateResponse | None = None
@@ -216,8 +218,8 @@ The response MUST contain exactly these top-level fields:
 Rules:
 - "sections" must be a non-empty array.
 - Every section must contain a non-empty "name" and non-empty "text".
-- Preserve the original section names.
-- Return all manuscript sections expected by the existing revision workflow.
+- Sections may be renamed, added, removed, merged, or split when this improves journal fit; preserve the manuscript facts.
+- Return the complete revised section set, including any intentional section changes.
 - "change_summary" must always be present and must be an array of strings.
 - Do not add any other top-level fields.
 - Do not put validation findings, warnings, missing-information notes, or explanations inside the JSON
@@ -320,10 +322,6 @@ def revision_safety_findings(
     revised_sections: dict[str, str],
 ) -> list[str]:
     findings: list[str] = []
-    if {_section_key(name) for name in revised_sections} != {
-        _section_key(name) for name in original.sections
-    }:
-        findings.append("SECTION_SET_CHANGED")
     original_text = _joined_sections(original.sections)
     revised_text = _joined_sections(revised_sections)
     added_numbers = sorted(set(_NUMBER.findall(revised_text)) - set(_NUMBER.findall(original_text)))
@@ -426,7 +424,7 @@ class JournalStyleRevisionService:
             requires_confirmation=True,
         )
 
-    def revise(self, request: JournalStyleRevisionRequest) -> JournalStyleRevisionResult:
+    def revise(self, request: JournalStyleRevisionRequest, _revision_feedback: str | None = None, _revision_attempt: int = 0) -> JournalStyleRevisionResult:
         from stem_sci.agents.runtime import StructuredGenerationError
 
         if request.draft.language is not LanguageCode.EN_US:
@@ -465,15 +463,17 @@ class JournalStyleRevisionService:
             sort_keys=True,
         )
         if ieee_constraint:
-            revision_prompt += f"\n\n{_IEEE_FINAL_SOURCE_POLICY}\n\n{_IEEE_TOP_LEVEL_SECTION_PRESERVATION_PROMPT}\n\n{_IEEE_OUTPUT_FORMAT_PROMPT}"
+            revision_prompt += f"\n\n{_IEEE_FINAL_SOURCE_POLICY}\n\n{_IEEE_OUTPUT_FORMAT_PROMPT}"
+        if _revision_feedback:
+            revision_prompt += f"\n\nREVISION FEEDBACK FROM PREVIOUS CHECK (attempt {_revision_attempt}):\n{_revision_feedback}\nFix only the reported issues and return the complete revised JSON."
         try:
             response = self.generator.generate(
                 system_prompt=(
                     "Professionally revise the supplied English research manuscript to follow the configured "
                     "journal style. Preserve every scientific claim, number, citation, result direction, and "
                     "causal strength. Do not invent evidence. Return each revised section as an object with "
-                    "exactly name and text fields, plus a concise change_summary. Preserve every section name."
-                    " Return JSON only.\n\n"
+                    "exactly name and text fields, plus a concise change_summary. Sections may change when needed for journal fit."
+                    " Do not add or alter numbers, percentages, sample sizes, dates, citations, statistical values, result directions, causal claims, study details, or conclusions. Do not expand missing information with plausible details. If a style rule conflicts with source fidelity, preserve the source and skip the style change. Return JSON only.\n\n"
                     + ieee_constraint
                 ),
                 user_prompt=revision_prompt,
@@ -481,7 +481,13 @@ class JournalStyleRevisionService:
                 model=self.model,
                 prompt_version="journal-style-revision-v1",
             )
-        except StructuredGenerationError:
+        except StructuredGenerationError as error:
+            if _revision_attempt < 2:
+                return self.revise(
+                    request,
+                    _revision_feedback=f"MODEL_OUTPUT_INVALID: {error.provider_error}. Return valid JSON matching the requested schema.",
+                    _revision_attempt=_revision_attempt + 1,
+                )
             print("RETURN_BRANCH: structured_generation_error")
             print("FINAL_REVISION_STATUS:", "REJECTED")
             print("FINAL_SAFETY_FINDINGS:", ["MODEL_OUTPUT_INVALID"])
@@ -495,11 +501,42 @@ class JournalStyleRevisionService:
                     applied_layers=applied_layers,
                     layer_warnings=warnings,
                     safety_findings=["MODEL_OUTPUT_INVALID"],
+                    generation_error=str(error.provider_error),
                 ),
             )
         revised = response.parsed_output
         assert isinstance(revised, RevisedSectionsResponse)
-        revised_sections = _map_revised_sections(request.draft, revised.sections)
+        raw_revised_sections = revised.section_map()
+        safety_findings = revision_safety_findings(request.draft, raw_revised_sections)
+        blocking_safety_findings = [
+            finding for finding in safety_findings
+            if _finding_code(finding) in _BLOCKING_FINDINGS
+        ]
+        if blocking_safety_findings:
+            if _revision_attempt < 2:
+                return self.revise(
+                    request,
+                    _revision_feedback="; ".join(blocking_safety_findings),
+                    _revision_attempt=_revision_attempt + 1,
+                )
+            print("RETURN_BRANCH: safety_rejection")
+            print("FINAL_REVISION_STATUS:", "REJECTED")
+            print("FINAL_SAFETY_FINDINGS:", safety_findings)
+            return JournalStyleRevisionResult(
+                draft=request.draft,
+                report=JournalStyleRevisionReport(
+                    status=RevisionStatus.REJECTED,
+                    target_journal=constraints.target_journal,
+                    article_type=constraints.article_type,
+                    methodology=request.methodology,
+                    applied_layers=applied_layers,
+                    layer_warnings=warnings,
+                    safety_findings=safety_findings,
+                ),
+                candidate_draft=request.draft.model_copy(update={"sections": raw_revised_sections}),
+            )
+
+        revised_sections = raw_revised_sections
         print("ORIGINAL:", list(request.draft.sections.keys()))
         print("LLM RAW:", [s.name for s in revised.sections])
         print("FINAL MAPPED:", list(revised_sections.keys()))
@@ -549,6 +586,7 @@ class JournalStyleRevisionService:
                     applied_layers=applied_layers,
                     layer_warnings=validation_warnings,
                     change_summary=revised.change_summary,
+                    safety_findings=safety_findings,
                 ),
                 latex=latex,
                 generation_metadata_refs=[
@@ -558,6 +596,36 @@ class JournalStyleRevisionService:
         assessment = assessment_result.parsed_output
         assert isinstance(assessment, SemanticAssessmentResponse)
         validation = validate_journal_draft(revised_draft, constraints.target_journal, constraints.article_type, assessment, loader=self.loader, methodology=request.methodology)
+        if validation.status.value != "PASS":  # noqa: SIM102
+            if _revision_attempt < 2:
+                validation_feedback = "; ".join(f.message for f in validation.findings) or "JOURNAL_VALIDATION_FAILED"
+                return self.revise(
+                    request,
+                    _revision_feedback=f"JOURNAL_VALIDATION_FAILED: {validation_feedback}",
+                    _revision_attempt=_revision_attempt + 1,
+                )
+        print("RETURN_BRANCH: journal_validation_warning")
+        print("FINAL_REVISION_STATUS:", "APPLIED")
+        validation_warnings = [*warnings, "Journal validation did not pass; review the findings below."] + [f.message for f in validation.findings]
+        title, abstract, content, keywords = _markdown_content(revised_draft)
+        template_id = str(constraints.template.get("template_id") or "generic-article")
+        latex = self.latex_service.generate(LatexGenerateRequest(template_id=template_id, title=title, abstract=abstract, content=content, keywords=keywords, compile_pdf=request.compile_pdf))
+        return JournalStyleRevisionResult(
+            draft=revised_draft,
+            report=JournalStyleRevisionReport(
+                status=RevisionStatus.APPLIED,
+                target_journal=constraints.target_journal,
+                article_type=constraints.article_type,
+                methodology=request.methodology,
+                applied_layers=applied_layers,
+                layer_warnings=validation_warnings,
+                safety_findings=safety_findings,
+                change_summary=revised.change_summary,
+            ),
+            journal_validation=validation,
+            latex=latex,
+            generation_metadata_refs=[f"llm-metadata://{request.draft.project_id}/{response.request_id}"],
+        )
         metadata_refs = [
             f"llm-metadata://{request.draft.project_id}/{response.request_id}",
             f"llm-metadata://{request.draft.project_id}/{assessment_result.request_id}",
@@ -570,7 +638,7 @@ class JournalStyleRevisionService:
         print("FINAL_SAFETY_FINDINGS:", [])
         return JournalStyleRevisionResult(
             draft=revised_draft,
-            report=JournalStyleRevisionReport(status=RevisionStatus.APPLIED, target_journal=constraints.target_journal, article_type=constraints.article_type, methodology=request.methodology, applied_layers=applied_layers, layer_warnings=warnings, change_summary=revised.change_summary),
+            report=JournalStyleRevisionReport(status=RevisionStatus.APPLIED, target_journal=constraints.target_journal, article_type=constraints.article_type, methodology=request.methodology, applied_layers=applied_layers, layer_warnings=warnings, change_summary=revised.change_summary, safety_findings=safety_findings),
             journal_validation=validation,
             latex=latex,
             generation_metadata_refs=metadata_refs,

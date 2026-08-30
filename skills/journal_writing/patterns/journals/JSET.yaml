@@ -1,0 +1,60 @@
+pattern_type: observed_pattern
+journal:
+  id: JSET
+sample:
+  article_count: 6
+introduction:
+  common_flow: []
+  research_gap:
+    common: null
+    evidence_basis: semantic_analysis
+    typical_position: null
+    evidence_count: 0
+    analyzed_count: 0
+    sample_size: 6
+    frequency: null
+  theoretical_framework:
+    common: false
+    evidence_basis: explicit_separate_section
+    typical_position: early_article
+    evidence_count: 1
+    analyzed_count: 6
+    sample_size: 6
+    frequency: 0.17
+  research_questions:
+    common: false
+    evidence_basis: explicit_heading_or_question_list
+    typical_position: methods_section
+    evidence_count: 1
+    analyzed_count: 6
+    sample_size: 6
+    frequency: 0.17
+methods:
+  common_flow:
+  - research_design
+  - participants_or_data
+  - instruments
+  - procedure
+  - validity_reliability_or_trustworthiness
+  - analysis_method
+  - reproducibility_detail
+results:
+  common_flow:
+  - organization
+  - evidence_types
+  - tables_usage
+discussion:
+  common_flow:
+  - limitations
+methodology_distribution:
+- methodology: experiment
+  evidence_count: 2
+  sample_size: 6
+  frequency: 0.33
+- methodology: mixed_methods
+  evidence_count: 2
+  sample_size: 6
+  frequency: 0.33
+journal_emphasis: []
+evidence:
+  source_type: exemplar_analysis

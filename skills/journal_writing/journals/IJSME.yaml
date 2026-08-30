@@ -1,0 +1,55 @@
+journal:
+  name: International Journal of Science and Mathematics Education
+  publisher: Springer Nature
+  field: Science and Mathematics Education
+
+purpose:
+  role: target_journal_writing_profile
+
+article_types:
+  - Original Research Article
+  - Review Article
+
+manuscript_structure:
+  recommended_sections:
+    - Introduction
+    - Literature Review
+    - Research Questions
+    - Methods
+    - Results
+    - Discussion
+    - Conclusion
+    - References
+
+writing_focus:
+  introduction:
+    - explain educational context
+    - review literature
+    - identify gap
+    - define research questions
+  methods:
+    - research design
+    - participants
+    - instruments
+    - analysis
+  discussion:
+    - answer research questions
+    - connect findings to literature
+    - explain educational significance
+
+format_rules:
+  abstract_words:
+    min: 100
+    max: 250
+  keywords_required: true
+  reference_style: APA
+  latex_supported: true
+
+review:
+  anonymous_review: true
+
+ethics:
+  human_subjects_statement: required_when_applicable
+
+template:
+  provider: Springer_Nature

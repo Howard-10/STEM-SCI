@@ -1,0 +1,64 @@
+journal:
+  name: International Journal of STEM Education
+  publisher: Springer Nature
+  field: STEM Education
+
+purpose:
+  role: target_journal_writing_profile
+
+article_types:
+  - Research Article
+  - Review Article
+
+manuscript_structure:
+  recommended_sections:
+    - Title
+    - Abstract
+    - Keywords
+    - Introduction
+    - Methods
+    - Results
+    - Discussion
+    - Conclusion
+    - Declarations
+    - References
+
+writing_focus:
+  introduction:
+    - define STEM education problem
+    - review prior research
+    - establish research gap
+    - present research questions
+    - connect theory and research design
+  methods:
+    - research design
+    - participants
+    - data collection
+    - instruments
+    - analysis procedure
+  discussion:
+    - interpret findings
+    - compare with previous studies
+    - explain theoretical implications
+    - explain practical implications
+    - discuss limitations
+
+format_rules:
+  abstract_required: true
+  keywords_required: true
+  reference_style: Springer_format
+  latex_supported: true
+  word_limit: article_type_dependent
+
+review:
+  anonymous_review: true
+
+ethics:
+  human_subjects_statement: required_when_applicable
+  consent_statement: required_when_applicable
+
+data:
+  availability_statement: supported
+
+template:
+  provider: Springer_Nature

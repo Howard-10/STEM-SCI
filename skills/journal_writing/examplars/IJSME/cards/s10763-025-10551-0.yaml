@@ -1,0 +1,72 @@
+paper:
+  title: Development of a Questionnaire on Multilingual Students’ Beliefs about Equitable and Epistemic
+    Use of Languages in Learning Science
+  journal: IJSME
+  year: null
+  doi: 10.1007/s10763-025-10551-0
+  article_type: null
+  methodology: null
+structure:
+  section_order: &id001
+  - introduction
+  - methods
+  - results
+  - discussion
+introduction:
+  opening_strategy: null
+  problem_context: null
+  literature_review_strategy: null
+  research_gap:
+    explicit: null
+    position: null
+    description: null
+  theoretical_framework:
+    present: null
+    position: null
+    separate_section: null
+  research_questions:
+    present: null
+    position: null
+  contribution_statement:
+    present: null
+    position: null
+methods:
+  research_design: null
+  participants_or_data: human_participants
+  sampling: null
+  instruments:
+  - questionnaire
+  - interview
+  procedure: null
+  validity_reliability_or_trustworthiness:
+  - validity
+  analysis_method:
+  - inferential_statistics
+  reproducibility_detail: partial
+results:
+  organization: null
+  organized_by_research_questions: null
+  evidence_types:
+  - descriptive_statistics
+  - inferential_statistics
+  tables_usage: present
+  figures_usage: null
+  interpretation_level: null
+discussion:
+  opening_strategy: null
+  answers_research_questions: null
+  comparison_with_prior_research: null
+  theoretical_interpretation: null
+  practical_implications: null
+  educational_implications: null
+  limitations: null
+  future_work: null
+  conclusion_strategy: null
+writing_features:
+  theory_emphasis: null
+  evidence_emphasis: null
+  practical_implication_emphasis: null
+  educational_implication_emphasis: null
+  typical_argument_flow: *id001
+evidence:
+  source_type: published_article

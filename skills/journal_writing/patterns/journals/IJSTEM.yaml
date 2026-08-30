@@ -1,0 +1,41 @@
+pattern_type: observed_pattern
+journal:
+  id: IJSTEM
+sample:
+  article_count: 6
+introduction:
+  common_flow: []
+  research_gap:
+    common: null
+    evidence_basis: semantic_analysis
+    typical_position: null
+    evidence_count: 0
+    analyzed_count: 0
+    sample_size: 6
+    frequency: null
+  theoretical_framework:
+    common: false
+    evidence_basis: explicit_separate_section
+    typical_position: null
+    evidence_count: 0
+    analyzed_count: 6
+    sample_size: 6
+    frequency: 0.0
+  research_questions:
+    common: false
+    evidence_basis: explicit_heading_or_question_list
+    typical_position: null
+    evidence_count: 0
+    analyzed_count: 6
+    sample_size: 6
+    frequency: 0.0
+methods:
+  common_flow: []
+results:
+  common_flow: []
+discussion:
+  common_flow: []
+methodology_distribution: []
+journal_emphasis: []
+evidence:
+  source_type: exemplar_analysis
