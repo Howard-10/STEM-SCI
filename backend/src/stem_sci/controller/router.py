@@ -959,7 +959,9 @@ class ResearchController:
             return brief
         def prefer_confirmed(current: str, proposed: str) -> str:
             pending_markers = ("待确认", "研究意图中描述", "目标研究人群", "教育或科研应用场景", "常规方法或基线条件", "主要研究目标指标")
-            return proposed if current.strip() in pending_markers and proposed.strip() not in pending_markers else current
+            current_pending = any(marker in current.strip() for marker in pending_markers)
+            proposed_pending = any(marker in proposed.strip() for marker in pending_markers)
+            return proposed if current_pending and not proposed_pending else current
 
         primary_outcome = (
             extracted.primary_outcome
