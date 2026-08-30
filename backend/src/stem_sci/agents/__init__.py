@@ -57,11 +57,25 @@ from .reviewer_contracts import (
 )
 from .writing import PaperWritingAgent
 from .runtime import AgentReasoningCandidate, AgentReasoningPipeline
+from .conversation import (
+    AgentConversationService,
+    ConversationDecision,
+    ConversationDraft,
+    ConversationState,
+    InMemoryConversationStateStore,
+    SQLiteConversationStateStore,
+)
 
 __all__ = [
     "AgentCapability",
     "AgentReasoningCandidate",
     "AgentReasoningPipeline",
+    "AgentConversationService",
+    "ConversationDecision",
+    "ConversationDraft",
+    "ConversationState",
+    "InMemoryConversationStateStore",
+    "SQLiteConversationStateStore",
     "AgentInput",
     "AgentResult",
     "ApprovalRequest",

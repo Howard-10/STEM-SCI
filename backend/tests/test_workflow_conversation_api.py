@@ -106,3 +106,23 @@ def test_feedback_rerun_returns_new_current_agent_run(client: TestClient) -> Non
 
     assert response.status_code == 200, response.text
     assert response.json()["workflow_run"]["route_decision"]["selected_route"] == "mentor_planning"
+
+
+def test_agent_conversation_returns_role_bounded_missing_questions(client: TestClient) -> None:
+    token, project_id = _project(client)
+    response = client.post(
+        f"/api/v1/projects/{project_id}/workflow/conversation",
+        headers=_auth(token),
+        json={
+            "conversation_id": "agent-chat-1",
+            "agent_id": "mentor_planning",
+            "message": "研究对象：大一物理师范生；研究场景：大学物理实验室",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["agent_id"] == "mentor_planning"
+    assert payload["missing_requirements"] == ["intervention", "comparator", "primary_outcome"]
+    assert payload["next_action"] == "ask_user"
+    assert payload["questions"]

@@ -930,6 +930,21 @@ export function App() {
         }]);
         return;
       }
+      if (workflowState && auth?.access_token && activeProject) {
+        const decision = await workflowApi.converse(projectId, {
+          message: trimmed,
+          conversation_id: conversationId,
+        });
+        const questionText = decision.questions.length
+          ? `\n\n下一步请回答：\n${decision.questions.map((item, index) => `${index + 1}. ${item}`).join("\n")}`
+          : "";
+        setMessages((current) => [...current, {
+          id: `assistant-agent-conversation-${Date.now()}`,
+          role: "assistant",
+          content: `${decision.reply}${questionText}`,
+        }]);
+        return;
+      }
       const pendingMentor = workflowTimeline?.workflow_state.pending_approval_ref
         && workflowTimeline.agent_runs.some((run) => run.agent_id === "mentor_planning");
       if (pendingMentor && isPlanningClarification(trimmed)) {

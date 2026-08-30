@@ -206,6 +206,19 @@ export interface WorkflowTimeline {
   feedback: Array<{ feedback_id: string; agent_id: string; stage: string; action: "continue" | "rerun" | "pause"; feedback: string; created_by: string; created_at: string }>;
   pending_approval: { approval_type: string; reason: string; risk_summary: string } | null;
 }
+
+export interface AgentConversationDecision {
+  agent_id: string;
+  reply: string;
+  extracted_updates: Record<string, unknown>;
+  current_state: Record<string, unknown>;
+  missing_requirements: string[];
+  questions: string[];
+  next_action: "ask_user" | "candidate_ready" | "show_progress" | "fallback";
+  confidence: number;
+  risk_flags: string[];
+  llm_metadata_ref: string | null;
+}
 const demoMode = import.meta.env.VITE_DEMO_MODE !== "false";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -368,6 +381,12 @@ export const workflowApi = {
   },
   getTimeline(projectId: string) {
     return request<WorkflowTimeline>(`/projects/${encodeURIComponent(projectId)}/workflow/timeline`);
+  },
+  converse(projectId: string, input: { message: string; conversation_id?: string; agent_id?: string }) {
+    return request<AgentConversationDecision>(
+      `/projects/${encodeURIComponent(projectId)}/workflow/conversation`,
+      { method: "POST", body: JSON.stringify(input) },
+    );
   },
   submitFeedback(projectId: string, input: { agent_id: string; stage: string; action: "continue" | "rerun" | "pause"; feedback: string }) {
     return request<{ workflow_state: WorkflowState; workflow_run: WorkflowRun | null }>(

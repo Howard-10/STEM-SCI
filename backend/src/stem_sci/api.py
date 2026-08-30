@@ -33,6 +33,7 @@ from .accounts import (
     UserProfile,
 )
 from .agents import AgentCapability, ReviewFinding
+from .agents.conversation import AgentConversationService, ConversationDecision, SQLiteConversationStateStore
 from .agents.runtime import GPTProvider, StructuredGenerator
 from .artifacts.artifact_store import SQLiteArtifactStore
 from .artifacts.content_store import ArtifactContent, SQLiteArtifactContentStore
@@ -249,6 +250,11 @@ workflow_controller = ResearchController(
     data_pipeline_root=storage_root,
 )
 qa_service = _configured_qa_service()
+agent_conversation_service = AgentConversationService(
+    state_store=SQLiteConversationStateStore(workflow_database),
+    generator=qa_service._generator,
+    model=qa_service._model,
+)
 
 
 class WorkflowProjectRequest(BaseModel):
@@ -282,6 +288,14 @@ class ProjectWorkflowFeedbackRequest(BaseModel):
     stage: str = Field(min_length=1, max_length=64)
     action: WorkflowFeedbackAction
     feedback: str = Field(min_length=1, max_length=10_000)
+
+
+class ProjectAgentConversationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(min_length=1, max_length=20_000)
+    conversation_id: str | None = Field(default=None, max_length=128)
+    agent_id: str | None = Field(default=None, max_length=64)
 
 
 def _access_token(authorization: Annotated[str | None, Header()] = None) -> str:
@@ -742,6 +756,52 @@ def project_workflow(
 def project_workflow_timeline(project_id: str, user: Annotated[UserProfile, Depends(current_user)]) -> WorkflowTimeline:
     identity_service.get_project(user, project_id)
     return workflow_controller.workflow_timeline(project_id)
+
+
+@app.post("/api/v1/projects/{project_id}/workflow/conversation", response_model=ConversationDecision)
+def project_agent_conversation(
+    project_id: str,
+    request: ProjectAgentConversationRequest,
+    user: Annotated[UserProfile, Depends(current_user)],
+) -> ConversationDecision:
+    """Let the current workflow Agent understand a natural-language turn.
+
+    The endpoint returns a candidate conversational decision only. It never
+    approves a candidate or advances the Controller-owned workflow.
+    """
+
+    identity_service.get_project(user, project_id)
+    workflow_state = workflow_controller.get_state(project_id)
+    selected = (
+        workflow_state.last_route_decision.selected_route
+        if workflow_state.last_route_decision is not None
+        else None
+    )
+    stage_agent = {
+        "INTAKE": "mentor_planning",
+        "SCOPED": "evidence_review",
+        "SEARCH_PROTOCOL_APPROVED": "evidence_review",
+        "EVIDENCE_READY": "research_design",
+        "RESEARCH_QUESTION_APPROVED": "research_design",
+        "STUDY_PROTOCOL_APPROVED": "data_analysis",
+        "DATA_READY": "data_analysis",
+        "ANALYZED": "paper_writing",
+        "DRAFTED": "independent_review",
+        "REWORK": "mentor_planning",
+        "WAITING_HUMAN": "mentor_planning",
+    }
+    agent_id = request.agent_id or selected or stage_agent.get(str(workflow_state.current_stage), "mentor_planning")
+    return agent_conversation_service.respond(
+        project_id=project_id,
+        conversation_id=request.conversation_id or f"workflow-{project_id}",
+        agent_id=agent_id,
+        user_message=request.message,
+        project_context={
+            "current_stage": str(workflow_state.current_stage),
+            "pending_approval": bool(workflow_state.pending_approval_ref),
+            "research_state": workflow_state.research_state.model_dump(mode="json") if workflow_state.research_state else {},
+        },
+    )
 
 
 @app.post("/api/v1/projects/{project_id}/workflow/feedback", response_model=WorkflowFeedbackResult)
