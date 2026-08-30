@@ -126,3 +126,37 @@ def test_agent_conversation_returns_role_bounded_missing_questions(client: TestC
     assert payload["missing_requirements"] == ["intervention", "comparator", "primary_outcome"]
     assert payload["next_action"] == "ask_user"
     assert payload["questions"]
+
+
+def test_complete_conversation_updates_formal_planning_candidate(client: TestClient) -> None:
+    token, project_id = _project(client)
+    started = client.post(
+        f"/api/v1/projects/{project_id}/workflow",
+        headers=_auth(token),
+        json={"research_intent": "设计 Python 物理建模实验"},
+    )
+    assert started.status_code == 200, started.text
+    response = client.post(
+        f"/api/v1/projects/{project_id}/workflow/conversation",
+        headers=_auth(token),
+        json={
+            "conversation_id": "complete-agent-chat",
+            "agent_id": "mentor_planning",
+            "message": "研究对象：大一物理师范生；研究场景：大学物理实验室；干预：分层AI支架；对照：常规提示；主要指标：迁移得分",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["next_action"] == "candidate_ready"
+
+    timeline = client.get(
+        f"/api/v1/projects/{project_id}/workflow/timeline", headers=_auth(token)
+    ).json()
+    contract = next(
+        item for item in timeline["artifact_contents"]
+        if item["artifact_type"] == "ResearchContractCandidate"
+    )
+    assert contract["body"]["population"] == "大一物理师范生"
+    assert contract["body"]["context"] == "大学物理实验室"
+    assert contract["body"]["intervention"] == "分层AI支架"
+    assert contract["body"]["comparator"] == "常规提示"
+    assert contract["body"]["outcomes"] == ["迁移得分"]

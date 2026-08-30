@@ -927,8 +927,8 @@ class ResearchController:
 
         outcomes = field("主要指标", "结果指标", fallback="主要研究目标指标（待确认）")
         intervention_and_comparator = field("干预与对照", fallback="")
-        intervention = "研究意图中描述的干预、方法或技术"
-        comparator = "常规方法或基线条件（待确认）"
+        intervention = field("干预", "干预方法", fallback="研究意图中描述的干预、方法或技术")
+        comparator = field("对照", "对照条件", fallback="常规方法或基线条件（待确认）")
         if intervention_and_comparator and re.search(r"\s*(?:vs|VS|对照|比较)\s*", intervention_and_comparator):
             parts = re.split(r"\s*(?:vs|VS|对照|比较)\s*", intervention_and_comparator, maxsplit=1)
             intervention, comparator = [part.strip() for part in parts]
@@ -957,13 +957,25 @@ class ResearchController:
             extracted = pipeline.extract_brief(research_intent, brief).parsed_output
         except StructuredGenerationError:
             return brief
+        def prefer_confirmed(current: str, proposed: str) -> str:
+            pending_markers = ("待确认", "研究意图中描述", "目标研究人群", "教育或科研应用场景", "常规方法或基线条件", "主要研究目标指标")
+            return proposed if current.strip() in pending_markers and proposed.strip() not in pending_markers else current
+
+        primary_outcome = (
+            extracted.primary_outcome
+            if brief.candidate_outcomes and brief.candidate_outcomes[0].strip() in {
+                "主要研究目标指标（待确认）",
+                "主要研究目标指标",
+            }
+            else brief.candidate_outcomes[0]
+        )
         return brief.model_copy(
             update={
-                "population": extracted.population,
-                "context": extracted.context,
-                "intervention": extracted.intervention,
-                "comparator": extracted.comparator,
-                "candidate_outcomes": [extracted.primary_outcome],
+                "population": prefer_confirmed(brief.population, extracted.population),
+                "context": prefer_confirmed(brief.context, extracted.context),
+                "intervention": prefer_confirmed(brief.intervention, extracted.intervention),
+                "comparator": prefer_confirmed(brief.comparator, extracted.comparator),
+                "candidate_outcomes": [primary_outcome],
                 "constraints": [*brief.constraints, *extracted.clarifying_questions],
             }
         )
@@ -1627,6 +1639,41 @@ class ResearchController:
             return self._approvals[project_id]
         except KeyError as exc:
             raise ValueError(f"project has no pending approval: {project_id}") from exc
+
+    def update_conversation_context(
+        self,
+        project_id: str,
+        agent_id: str,
+        updates: Mapping[str, object],
+    ) -> None:
+        """Persist validated conversational fields for the next candidate run."""
+
+        state = self.get_state(project_id)
+        selected = state.last_route_decision.selected_route if state.last_route_decision else None
+        if selected is not None and selected != agent_id:
+            raise ValueError("conversation agent does not match the current workflow agent")
+        labels = {
+            "population": "研究对象", "context": "研究场景", "intervention": "干预",
+            "comparator": "对照", "primary_outcome": "主要指标", "search_goal": "检索目标",
+            "date_range": "文献范围", "sources": "证据来源", "evidence_types": "证据类型",
+            "sample": "样本与招募", "variables": "变量", "measurement": "测量指标",
+            "design": "研究设计", "ethics": "伦理与排除规则", "dataset": "数据文件",
+            "missing_data": "缺失值处理", "analysis_mode": "分析模式", "privacy": "隐私规则",
+            "scope": "写作范围", "languages": "语言版本", "target_format": "目标格式",
+            "claim_boundary": "主张边界", "focus": "审查重点", "release_threshold": "发布门槛",
+        }
+        fragments = [
+            f"{labels[key]}：{str(value).strip()}"
+            for key, value in updates.items()
+            if key in labels and isinstance(value, (str, int, float, bool)) and str(value).strip()
+        ]
+        if not fragments:
+            return
+        marker = f"[Agent conversation context for {agent_id}]: " + "；".join(fragments)
+        current = self._project_intents.get(project_id, "")
+        if marker not in current:
+            self._project_intents[project_id] = f"{current}\n\n{marker}".strip()
+            self._persist(project_id)
 
     def begin_data_pipeline(self, request: DataPipelineBeginRequest) -> DataPipelineState:
         """Controller-only entry to the approved CSV/PYTHON_ONLY data pipeline."""

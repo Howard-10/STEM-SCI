@@ -231,7 +231,7 @@ class AgentConversationService:
         if draft is not None:
             questions = [question for question in draft.questions if question.strip()][:5] or questions
             reply = draft.reply or self._fallback_reply(agent_id, merged, missing)
-            next_action = draft.next_action if not missing else "ask_user"
+            next_action = "candidate_ready" if not missing else "ask_user"
             confidence = draft.confidence
             risk_flags = list(draft.risk_flags)
         else:

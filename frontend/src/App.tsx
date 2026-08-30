@@ -943,6 +943,10 @@ export function App() {
           role: "assistant",
           content: `${decision.reply}${questionText}`,
         }]);
+        if (decision.next_action === "candidate_ready") {
+          await refreshWorkflow();
+          await reloadWorkflowTimeline();
+        }
         return;
       }
       const pendingMentor = workflowTimeline?.workflow_state.pending_approval_ref

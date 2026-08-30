@@ -791,7 +791,7 @@ def project_agent_conversation(
         "WAITING_HUMAN": "mentor_planning",
     }
     agent_id = request.agent_id or selected or stage_agent.get(str(workflow_state.current_stage), "mentor_planning")
-    return agent_conversation_service.respond(
+    decision = agent_conversation_service.respond(
         project_id=project_id,
         conversation_id=request.conversation_id or f"workflow-{project_id}",
         agent_id=agent_id,
@@ -802,6 +802,29 @@ def project_agent_conversation(
             "research_state": workflow_state.research_state.model_dump(mode="json") if workflow_state.research_state else {},
         },
     )
+    workflow_controller.update_conversation_context(
+        project_id,
+        agent_id,
+        decision.current_state,
+    )
+    if (
+        decision.next_action == "candidate_ready"
+        and workflow_state.pending_approval_ref is not None
+        and workflow_state.last_route_decision is not None
+        and workflow_state.last_route_decision.selected_route == agent_id
+    ):
+        workflow_controller.apply_workflow_feedback(
+            WorkflowFeedback(
+                feedback_id=f"conversation-rerun-{uuid4().hex}",
+                project_id=project_id,
+                agent_id=agent_id,
+                stage=workflow_state.current_stage.value,
+                action=WorkflowFeedbackAction.RERUN,
+                feedback="候选信息已由会话补充，自动重新生成当前 Agent 候选。",
+                created_by=user.username,
+            )
+        )
+    return decision
 
 
 @app.post("/api/v1/projects/{project_id}/workflow/feedback", response_model=WorkflowFeedbackResult)
