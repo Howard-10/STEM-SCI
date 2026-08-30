@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .runtime import StructuredGenerationError, StructuredGenerator
 
@@ -36,13 +36,47 @@ class ConversationDraft(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    reply: str = Field(min_length=1)
+    reply: str = Field(default="", min_length=0)
     extracted_updates: dict[str, Any] = Field(default_factory=dict)
     missing_requirements: list[str] = Field(default_factory=list)
-    questions: list[str] = Field(default_factory=list)
+    questions: list[str | dict[str, Any]] = Field(default_factory=list)
     next_action: Literal["ask_user", "candidate_ready", "show_progress"] = "ask_user"
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     risk_flags: list[str] = Field(default_factory=list)
+
+    @field_validator("next_action", mode="before")
+    @classmethod
+    def normalize_next_action(cls, value: object) -> str:
+        """Normalize provider-specific labels without granting control actions."""
+
+        if not isinstance(value, str):
+            return "ask_user"
+        normalized = value.strip().casefold()
+        if normalized in {"candidate_ready", "ready", "candidate", "proposal_ready"}:
+            return "candidate_ready"
+        if normalized in {"show_progress", "progress", "status"}:
+            return "show_progress"
+        return "ask_user"
+
+    @field_validator("questions", mode="before")
+    @classmethod
+    def normalize_questions(cls, value: object) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        normalized: list[str] = []
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                normalized.append(item.strip())
+            elif isinstance(item, Mapping):
+                question = item.get("question") or item.get("text")
+                if isinstance(question, str) and question.strip():
+                    normalized.append(question.strip())
+        return normalized
+
+    @field_validator("reply", mode="after")
+    @classmethod
+    def default_reply(cls, value: str) -> str:
+        return value.strip() or "我已分析你的研究信息，请补充下面列出的缺失内容。"
 
 
 class ConversationState(BaseModel):
@@ -196,7 +230,7 @@ class AgentConversationService:
         questions = [label + "是什么？" for _, label in ROLE_REQUIREMENTS[agent_id] if _ in missing]
         if draft is not None:
             questions = [question for question in draft.questions if question.strip()][:5] or questions
-            reply = draft.reply
+            reply = draft.reply or self._fallback_reply(agent_id, merged, missing)
             next_action = draft.next_action if not missing else "ask_user"
             confidence = draft.confidence
             risk_flags = list(draft.risk_flags)
